@@ -1,0 +1,2097 @@
+<!doctype html>
+<html lang="es" data-theme="marine">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Friosur Admin · Consola de gestión</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<!-- SheetJS para export/import Excel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Chart.js para dashboards -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Supabase JS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<style>
+:root{
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --bg:#eceff4;--surface:#ffffff;--surface-alt:#f8fafc;
+  --text:#0f172a;--text-2:#334155;--text-3:#64748b;
+  --border:#dbe1eb;--border-strong:#cbd5e1;
+  --brand:#1e3a66;--brand-dark:#15294a;
+  --accent:#3b6fb8;
+  --ok:#16a34a;--warn:#f59e0b;--err:#dc2626;--info:#2563eb;
+  --radius:14px;--radius-sm:10px;
+  --topbar-h:64px;--sidebar-w:240px;
+  --shadow-sm:0 1px 3px rgba(15,23,42,.06);
+  --shadow-md:0 4px 10px -2px rgba(15,23,42,.08),0 2px 4px rgba(15,23,42,.04);
+  --shadow-lg:0 12px 32px -6px rgba(15,23,42,.12);
+}
+body[data-theme="dark"]{--bg:#0f172a;--surface:#1e293b;--surface-alt:#0f172a;--text:#f1f5f9;--text-2:#cbd5e1;--text-3:#94a3b8;--border:#334155;--border-strong:#475569;--brand:#60a5fa;}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;}
+body{min-height:100vh;}
+.hidden{display:none!important;}
+button,input,select,textarea{font-family:inherit;color:inherit;}
+
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr;min-height:100vh;}
+.topbar{grid-column:1 / -1;background:linear-gradient(180deg,#0a1628 0%,#1e3a66 100%);color:#fff;display:flex;align-items:center;padding:0 22px;gap:20px;box-shadow:var(--shadow-sm);}
+.topbar .brand{display:flex;align-items:center;gap:12px;}
+.topbar .brand-logo{width:38px;height:38px;border-radius:10px;background:#3b6fb8;display:grid;place-items:center;}
+.topbar .brand-logo svg{width:22px;height:22px;color:#fff;}
+.topbar .brand-name{font-weight:800;letter-spacing:-.01em;font-size:15px;line-height:1;}
+.topbar .brand-sub{font-size:11px;color:#9fb4d4;font-weight:500;margin-top:2px;}
+.topbar-ctx{display:flex;gap:14px;margin-left:22px;font-size:12px;color:#c8d7ee;flex:1;}
+.topbar-ctx .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(255,255,255,.08);border-radius:999px;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.top-btn{background:transparent;border:1px solid rgba(255,255,255,.14);color:#fff;padding:8px 14px;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+.top-btn:hover{background:rgba(255,255,255,.08);}
+.top-btn.primary{background:#3b6fb8;border-color:#3b6fb8;}
+
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:16px 10px;overflow-y:auto;}
+.nav-sec{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);padding:14px 10px 6px;font-weight:700;}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text-2);font-weight:600;font-size:13px;margin-bottom:2px;border:1px solid transparent;user-select:none;}
+.nav-item:hover{background:var(--surface-alt);color:var(--text);}
+.nav-item.active{background:var(--brand);color:#fff;box-shadow:var(--shadow-sm);}
+.nav-item svg{width:18px;height:18px;flex-shrink:0;}
+.nav-badge{margin-left:auto;background:var(--accent);color:#fff;font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700;}
+
+.content{padding:22px 28px;overflow-y:auto;}
+.page{display:none;animation:fadeIn .2s ease;}
+.page.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:20px;flex-wrap:wrap;}
+.page-title{font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0;}
+.page-sub{color:var(--text-3);font-size:13px;margin-top:4px;}
+
+.btn{background:var(--brand);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s;}
+.btn:hover{background:var(--brand-dark);}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-2);}
+.btn.ghost:hover{background:var(--surface-alt);color:var(--text);}
+.btn.success{background:var(--ok);}.btn.warn{background:var(--warn);}.btn.danger{background:var(--err);}
+.btn.sm{padding:6px 12px;font-size:12px;}
+.btn svg{width:16px;height:16px;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
+.card-title{font-size:14px;font-weight:700;margin:0;}
+.card-sub{color:var(--text-3);font-size:12px;}
+
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+@media (max-width:1024px){.grid-3,.grid-4{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:680px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}.app{grid-template-columns:1fr;}.sidebar{display:none;}}
+
+.input,.select,textarea.input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:14px;min-height:42px;}
+.input:focus,.select:focus,textarea.input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent);}
+.form-label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em;}
+.form-field{margin-bottom:12px;}
+
+table{width:100%;border-collapse:collapse;}
+thead th{text-align:left;padding:12px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);background:var(--surface-alt);border-bottom:1px solid var(--border);font-weight:700;}
+tbody td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+tbody tr:hover{background:var(--surface-alt);}
+.tbl-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);}
+
+.stat{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);}
+.stat-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);font-weight:700;}
+.stat-val{font-size:24px;font-weight:800;font-family:var(--mono);}
+.stat-trend{font-size:11px;color:var(--ok);font-weight:600;}
+.stat-trend.down{color:var(--err);}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--surface-alt);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;}
+.badge.ok{background:#dcfce7;color:#15803d;}
+.badge.warn{background:#fef3c7;color:#92400e;}
+.badge.err{background:#fee2e2;color:#991b1b;}
+.badge.info{background:#dbeafe;color:#1e40af;}
+
+/* Modals */
+.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.55);display:grid;place-items:center;z-index:1000;padding:20px;animation:fadeIn .15s ease;}
+.modal{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-lg);width:100%;max-width:520px;max-height:90vh;overflow:auto;}
+.modal-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:15px;font-weight:700;}
+.modal-x{background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--text-3);width:32px;height:32px;display:grid;place-items:center;border-radius:8px;}
+.modal-x:hover{background:var(--surface-alt);}
+.modal-body{padding:20px;}
+.modal-ftr{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;}
+
+/* Dashboard Drag & Drop */
+.dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;min-height:400px;}
+.widget{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow-sm);cursor:grab;position:relative;transition:.15s;display:flex;flex-direction:column;gap:10px;min-height:220px;}
+.widget.size-sm{grid-column:span 3;}
+.widget.size-md{grid-column:span 6;}
+.widget.size-lg{grid-column:span 12;}
+.widget:hover{border-color:var(--accent);box-shadow:var(--shadow-md);}
+.widget.dragging{opacity:.4;cursor:grabbing;}
+.widget.drop-target{border-style:dashed;border-color:var(--accent);background:var(--surface-alt);}
+.widget-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.widget-title{font-weight:700;font-size:13px;letter-spacing:-.01em;}
+.widget-actions{display:flex;gap:4px;}
+.widget-actions button{background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:4px;border-radius:4px;}
+.widget-actions button:hover{background:var(--surface-alt);color:var(--text);}
+.widget-body{flex:1;min-height:0;position:relative;overflow:auto;}
+.widget-body canvas{max-height:100%;}
+.widget-body table{width:100%;border-collapse:collapse;font-size:11px;}
+.widget-body table th,.widget-body table td{padding:4px 6px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+.widget-body table th{background:var(--surface-alt);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;}
+.widget-body table td.num,.widget-body table th.num{text-align:right;font-family:var(--mono);}
+.widget-body table tfoot td{background:var(--brand);color:#fff;font-weight:700;}
+.dash-grid.drop-hot{outline:2px dashed var(--accent);outline-offset:4px;border-radius:12px;}
+
+/* Widget palette (drag source) */
+.wp-bar{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;box-shadow:var(--shadow-sm);}
+.wp-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.wp-title{font-weight:700;font-size:13px;}
+.wp-sub{font-size:11px;color:var(--text-3);}
+.wp-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.wp-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;background:var(--surface-alt);border:1.5px solid var(--border);border-radius:999px;font-size:12px;font-weight:600;cursor:grab;user-select:none;transition:.12s;}
+.wp-chip:hover{border-color:var(--accent);background:var(--surface);transform:translateY(-1px);box-shadow:var(--shadow-sm);}
+.wp-chip:active{cursor:grabbing;}
+.wp-chip .wp-icon{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;background:var(--brand);color:#fff;border-radius:4px;font-size:10px;font-weight:800;}
+.wp-chip .wp-add{background:transparent;border:none;cursor:pointer;color:var(--text-3);padding:0;font-size:14px;line-height:1;}
+.wp-chip .wp-add:hover{color:var(--brand);}
+.wp-group{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-right:4px;}
+
+/* Slicers */
+.slicer-bar{display:flex;flex-wrap:wrap;gap:10px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;align-items:flex-end;}
+.slicer{min-width:140px;}
+.slicer-multi{display:flex;flex-wrap:wrap;gap:4px;padding:6px;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;min-height:40px;}
+.slicer-chip{padding:3px 10px;background:var(--surface);border:1px solid var(--border);border-radius:999px;font-size:11px;cursor:pointer;user-select:none;}
+.slicer-chip.on{background:var(--brand);color:#fff;border-color:var(--brand);}
+
+/* Drill-down breadcrumb */
+.drill-crumbs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--surface-alt);border-radius:10px;border:1px solid var(--border);font-size:12px;}
+.drill-crumbs .crumb{padding:4px 10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);cursor:pointer;font-weight:600;}
+.drill-crumbs .crumb:hover{border-color:var(--accent);color:var(--accent);}
+.drill-crumbs .crumb.current{background:var(--brand);color:#fff;border-color:var(--brand);cursor:default;}
+
+/* Toast */
+.toast-container{position:fixed;bottom:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--text);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);min-width:240px;animation:slideIn .2s ease;}
+.toast.success{background:var(--ok);}.toast.err{background:var(--err);}.toast.info{background:var(--info);}.toast.warn{background:var(--warn);}
+@keyframes slideIn{from{transform:translateX(40px);opacity:0;}to{transform:none;opacity:1;}}
+
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+.status-dot.online{background:var(--ok);}.status-dot.offline{background:var(--err);}.status-dot.syncing{background:var(--warn);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+.tabs-inline{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto;}
+.tabs-inline button{background:transparent;border:none;padding:10px 18px;font-weight:600;font-size:13px;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+.tabs-inline button.active{color:var(--brand);border-bottom-color:var(--brand);}
+
+pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius);overflow-x:auto;font:500 12px var(--mono);line-height:1.5;max-height:480px;}
+.kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z"/><path d="M3 7l9 5 9-5M12 22V12"/></svg></div>
+    <div><div class="brand-name">FRIOSUR SpA</div><div class="brand-sub">Consola Admin</div></div>
+  </div>
+  <div class="topbar-ctx">
+    <div class="chip"><span class="status-dot offline" id="sbDot"></span><span id="sbStatus">Supabase: no conectado</span></div>
+    <div class="chip" id="dbSizeChip">DB local: —</div>
+    <div class="chip" id="dateChip">—</div>
+  </div>
+  <div class="topbar-right">
+    <button class="top-btn" onclick="openSupabaseModal()">Conectar Supabase</button>
+    <button class="top-btn primary" onclick="tabletLink()">Abrir Tablet</button>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="nav-sec">General</div>
+  <div class="nav-item active" data-page="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Dashboard<span class="nav-badge" id="nbDash">Live</span></div>
+  <div class="nav-item" data-page="reportes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Reportes</div>
+  <div class="nav-item" data-page="tuneles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>Túneles y Placas</div>
+  <div class="nav-item" data-page="analisis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Análisis</div>
+
+  <div class="nav-sec">Catálogos</div>
+  <div class="nav-item" data-page="presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Productos / Presets</div>
+  <div class="nav-item" data-page="trabajadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Trabajadores</div>
+  <div class="nav-item" data-page="turnos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Turnos y horarios</div>
+  <div class="nav-item" data-page="equipos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Equipos</div>
+
+  <div class="nav-sec">Sistema</div>
+  <div class="nav-item" data-page="roles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Permisos y roles</div>
+  <div class="nav-item" data-page="import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Importar / Exportar</div>
+  <div class="nav-item" data-page="supabase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>Supabase</div>
+  <div class="nav-item" data-page="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m11-11h-6M7 12H1m16.95-7.05l-4.24 4.24M9.29 14.71l-4.24 4.24m0-14.14l4.24 4.24m5.42 5.42l4.24 4.24"/></svg>Ajustes generales</div>
+</aside>
+
+<main class="content">
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="page active" id="page-dashboard">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Dashboard</h1><div class="page-sub">KPIs operacionales en tiempo real · arrastra widgets para reordenar</div></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn ghost sm" onclick="reloadDashboard()">↻ Actualizar</button>
+      <button class="btn sm" onclick="addWidget()">+ Widget</button>
+    </div>
+  </div>
+
+  <div class="slicer-bar">
+    <div class="slicer">
+      <label class="form-label">Fecha desde</label>
+      <input type="date" class="input" id="slFechaDesde" onchange="applyFilters()">
+    </div>
+    <div class="slicer">
+      <label class="form-label">Fecha hasta</label>
+      <input type="date" class="input" id="slFechaHasta" onchange="applyFilters()">
+    </div>
+    <div class="slicer">
+      <label class="form-label">Preset rápido</label>
+      <select class="select" id="slFechaPreset" onchange="applyFechaPreset()">
+        <option value="todo">Todo</option><option value="hoy">Hoy</option><option value="ayer">Ayer</option><option value="semana">Últimos 7 días</option><option value="mes">Este mes</option><option value="turno">Turno actual</option>
+      </select>
+    </div>
+    <div class="slicer">
+      <label class="form-label">Turno</label>
+      <select class="select" id="slTurno" onchange="applyFilters()">
+        <option value="">Todos</option><option value="dia">Día</option><option value="noche">Noche</option>
+      </select>
+    </div>
+    <div class="slicer" style="flex:1;min-width:200px;">
+      <label class="form-label">Especies (multi)</label>
+      <div class="slicer-multi" id="slEspecies"></div>
+    </div>
+    <div class="slicer" style="flex:1;min-width:200px;">
+      <label class="form-label">Líneas (multi)</label>
+      <div class="slicer-multi" id="slLineas"></div>
+    </div>
+    <button class="btn ghost sm" onclick="clearFilters()">Limpiar</button>
+  </div>
+
+  <div class="grid-4" id="kpiRow" style="margin-bottom:16px;"></div>
+
+  <!-- Paleta de widgets (arrastra al dashboard) -->
+  <div class="wp-bar">
+    <div class="wp-hdr">
+      <div>
+        <div class="wp-title">📊 Paleta de Widgets</div>
+        <div class="wp-sub">Arrastra al dashboard o pulsa el <strong>+</strong> para agregar · cambia tamaño ⇔ y color 🎨</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select class="select" id="layoutPicker" onchange="loadLayout(this.value)" style="min-width:160px;">
+          <option value="">— Cargar layout —</option>
+        </select>
+        <button class="btn ghost sm" onclick="saveLayoutAs()" title="Guardar layout actual con un nombre">💾 Guardar como…</button>
+        <button class="btn ghost sm" onclick="deleteCurrentLayout()" title="Eliminar layout seleccionado">🗑</button>
+        <button class="btn ghost sm" onclick="resetDashLayout()">↺ Default</button>
+      </div>
+    </div>
+    <div class="wp-chips" id="wpChips"></div>
+  </div>
+
+  <div class="dash-grid" id="dashGrid"></div>
+</div>
+
+<!-- ═══ REPORTES ═══ -->
+<div class="page" id="page-reportes">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Reportes</h1><div class="page-sub">Genera reportes a partir del análisis con drill-down por especie → operario → hora</div></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn ghost sm" onclick="exportReport('pdf')">Exportar PDF</button>
+      <button class="btn sm" onclick="exportReport('xlsx')">Exportar Excel</button>
+    </div>
+  </div>
+
+  <div class="slicer-bar">
+    <div class="slicer"><label class="form-label">Tipo de reporte</label>
+      <select class="select" id="repTipo" onchange="renderReport()">
+        <option value="produccion">Producción diaria</option>
+        <option value="operario">Productividad por operario</option>
+        <option value="especie">Consolidado por especie</option>
+        <option value="linea">Rendimiento por línea</option>
+        <option value="turno">Comparativa turno</option>
+      </select>
+    </div>
+    <div class="slicer"><label class="form-label">Período</label>
+      <select class="select" id="repPeriodo" onchange="renderReport()">
+        <option value="hoy">Hoy</option><option value="semana" selected>7 días</option><option value="mes">Mes</option>
+      </select>
+    </div>
+    <button class="btn sm" onclick="renderReport()">Generar</button>
+  </div>
+
+  <div class="drill-crumbs" id="drillCrumbs"><span class="crumb current" onclick="drillReset()">Todos</span></div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-hdr"><div class="card-title" id="repTitle">—</div><div class="card-sub" id="repSub">—</div></div>
+    <div style="height:320px;"><canvas id="repChart"></canvas></div>
+  </div>
+
+  <div class="tbl-wrap"><table id="repTable"><thead></thead><tbody></tbody></table></div>
+</div>
+
+<!-- ═══ TÚNELES Y PLACAS ═══ -->
+<div class="page" id="page-tuneles">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Túneles y Placas</h1><div class="page-sub">Cargas con hora de inicio/término, por turno · pendientes por cargar</div></div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn ghost sm" onclick="renderTunReport()">↻ Actualizar</button>
+      <button class="btn ghost sm" onclick="exportTunReport()">📤 Exportar Excel</button>
+    </div>
+  </div>
+  <div class="slicer-bar">
+    <div class="slicer"><label class="form-label">Tipo</label>
+      <select class="select" id="tunTipo" onchange="renderTunReport()">
+        <option value="">Todos</option><option value="tunel">Solo túneles</option><option value="placa">Solo placas</option>
+      </select>
+    </div>
+    <div class="slicer"><label class="form-label">Estado</label>
+      <select class="select" id="tunEstado" onchange="renderTunReport()">
+        <option value="">Todos</option><option value="libre">Libre</option><option value="cargando">Cargando</option><option value="congelando">Congelando</option><option value="listo">Listo</option>
+      </select>
+    </div>
+    <div class="slicer"><label class="form-label">Turno</label>
+      <select class="select" id="tunTurno" onchange="renderTunReport()">
+        <option value="">Todos</option><option value="dia">Día</option><option value="noche">Noche</option>
+      </select>
+    </div>
+    <div class="slicer"><label class="form-label">Incluir histórico</label>
+      <select class="select" id="tunHist" onchange="renderTunReport()">
+        <option value="1">Sí (ciclos descargados)</option><option value="0">No (solo estado actual)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid-4" id="tunKpis" style="margin-bottom:16px;"></div>
+
+  <!-- Pendientes por cargar (desde moldes + generales RT) -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">⚠ Pendiente por cargar</div><div class="card-sub" id="tunPendSub">—</div></div>
+    <div class="tbl-wrap" id="tunPendWrap"></div>
+  </div>
+
+  <!-- Estado actual -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">📦 Estado actual de equipos</div></div>
+    <div class="tbl-wrap" id="tunEstadoWrap"></div>
+  </div>
+
+  <!-- Histórico de cargas -->
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">📜 Histórico de cargas del turno</div><div class="card-sub" id="tunHistSub">—</div></div>
+    <div class="tbl-wrap" id="tunHistWrap"></div>
+  </div>
+</div>
+
+<!-- ═══ ANÁLISIS ═══ -->
+<div class="page" id="page-analisis">
+  <div class="page-hdr"><div><h1 class="page-title">Análisis</h1><div class="page-sub">Vista detallada: pivots, agregados y drilldowns</div></div></div>
+  <div class="tabs-inline">
+    <button class="active" onclick="setAnalTab(this,'anPivotHora')">Pivot por hora</button>
+    <button onclick="setAnalTab(this,'anPivotOp')">Pivot por operario</button>
+    <button onclick="setAnalTab(this,'anPivotEsp')">Pivot por especie</button>
+    <button onclick="setAnalTab(this,'anHist')">Histórico equipos</button>
+  </div>
+  <div id="anPivotHora" class="anal-tab"><div class="tbl-wrap"><table id="anTblHora"></table></div></div>
+  <div id="anPivotOp" class="anal-tab hidden"><div class="tbl-wrap"><table id="anTblOp"></table></div></div>
+  <div id="anPivotEsp" class="anal-tab hidden"><div class="tbl-wrap"><table id="anTblEsp"></table></div></div>
+  <div id="anHist" class="anal-tab hidden"><div class="tbl-wrap"><table id="anTblHist"></table></div></div>
+</div>
+
+<!-- ═══ PRESETS ═══ -->
+<div class="page" id="page-presets">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Productos / Presets</h1><div class="page-sub">Define productos, kg de referencia, tiempos de túnel/placa y temperatura objetivo</div></div>
+    <button class="btn" onclick="openPresetModal()">+ Nuevo preset</button>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
+    <tbody id="tbPresets"></tbody>
+  </table></div>
+</div>
+
+<!-- ═══ TRABAJADORES ═══ -->
+<div class="page" id="page-trabajadores">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Trabajadores</h1><div class="page-sub">Datos maestros, fichas, áreas, roles y turnos</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn ghost sm" onclick="exportExcel('trabajadores')" title="Descargar Excel">📤 Exportar Excel</button>
+      <button class="btn ghost sm" onclick="document.getElementById('trabImportFile').click()" title="Cargar Excel">📥 Importar Excel</button>
+      <input type="file" id="trabImportFile" accept=".xlsx,.xls" style="display:none;" onchange="importTrabsExcel(this.files[0]);this.value=''">
+      <button class="btn ghost sm" onclick="exportTrabsTemplate()" title="Descargar plantilla">📄 Plantilla</button>
+      <button class="btn" onclick="openTrabModal()">+ Nuevo trabajador</button>
+    </div>
+  </div>
+  <div class="slicer-bar">
+    <div class="slicer"><label class="form-label">Buscar</label><input class="input" id="trabSearch" placeholder="Nombre, ficha, código..." oninput="renderTrabs()"></div>
+    <div class="slicer"><label class="form-label">Área</label>
+      <select class="select" id="trabArea" onchange="renderTrabs()">
+        <option value="">Todas</option><option value="moldes">Moldes</option><option value="pesaje">Pesaje</option><option value="otro">Otro</option>
+      </select>
+    </div>
+    <div class="slicer"><label class="form-label">Turno</label>
+      <select class="select" id="trabTurno" onchange="renderTrabs()">
+        <option value="">Todos</option><option value="dia">Día</option><option value="noche">Noche</option>
+      </select>
+    </div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Ficha</th><th>Área</th><th>Rol</th><th>Turno</th><th>Línea</th><th>Estado</th><th></th></tr></thead>
+    <tbody id="tbTrabajadores"></tbody>
+  </table></div>
+</div>
+
+<!-- ═══ TURNOS ═══ -->
+<div class="page" id="page-turnos">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Turnos y horarios</h1><div class="page-sub">Define turnos, horas de inicio/fin y si están activos</div></div>
+    <button class="btn" onclick="openTurnoModal()">+ Nuevo turno</button>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Inicio</th><th>Fin</th><th>Estado</th><th></th></tr></thead>
+    <tbody id="tbTurnos"></tbody>
+  </table></div>
+</div>
+
+<!-- ═══ EQUIPOS ═══ -->
+<div class="page" id="page-equipos">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Equipos</h1><div class="page-sub">Túneles y placas — capacidad, tipo, código</div></div>
+    <button class="btn" onclick="openEqModal()">+ Nuevo equipo</button>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th class="num">Capacidad</th><th>Estado</th><th></th></tr></thead>
+    <tbody id="tbEquipos"></tbody>
+  </table></div>
+</div>
+
+<!-- ═══ ROLES ═══ -->
+<div class="page" id="page-roles">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Permisos y roles</h1><div class="page-sub">Matriz de permisos · quién puede ver o editar cada módulo</div></div>
+    <button class="btn" onclick="openRolModal()">+ Nuevo rol</button>
+  </div>
+  <div class="tbl-wrap"><table id="tbRoles"></table></div>
+</div>
+
+<!-- ═══ IMPORT / EXPORT ═══ -->
+<div class="page" id="page-import">
+  <div class="page-hdr"><div><h1 class="page-title">Exportar / Importar Excel</h1><div class="page-sub">Exporta e importa por rango de fecha, turno y línea · horarios predefinidos según turnos</div></div></div>
+
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-title">🎯 Filtros</div>
+      <div class="card-sub">Selecciona qué quieres exportar o importar</div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <div class="form-field"><label class="form-label">Módulo</label>
+          <select class="select" id="ieModulo" onchange="previewFiltered()">
+            <option value="moldes">Moldes</option>
+            <option value="pesajes">Pesajes</option>
+            <option value="presets">Presets (catálogo)</option>
+            <option value="trabajadores">Trabajadores (catálogo)</option>
+            <option value="turnos">Turnos (catálogo)</option>
+            <option value="equipos">Equipos (catálogo)</option>
+          </select>
+        </div>
+        <div class="grid-2">
+          <div class="form-field"><label class="form-label">Fecha desde</label><input class="input" type="date" id="ieDesde" onchange="previewFiltered()"></div>
+          <div class="form-field"><label class="form-label">Fecha hasta</label><input class="input" type="date" id="ieHasta" onchange="previewFiltered()"></div>
+        </div>
+        <div class="grid-2">
+          <div class="form-field"><label class="form-label">Turno</label><select class="select" id="ieTurno" onchange="previewFiltered()"><option value="">Todos</option></select></div>
+          <div class="form-field"><label class="form-label">Rango hora</label><select class="select" id="ieRangoHora" onchange="previewFiltered()"><option value="">Libre</option><option value="turno">Auto del turno</option><option value="custom">Personalizado</option></select></div>
+        </div>
+        <div class="grid-2" id="ieHoraCustom" style="display:none;">
+          <div class="form-field"><label class="form-label">Hora inicio</label><input class="input" type="time" id="ieHoraIni" onchange="previewFiltered()"></div>
+          <div class="form-field"><label class="form-label">Hora fin</label><input class="input" type="time" id="ieHoraFin" onchange="previewFiltered()"></div>
+        </div>
+        <div class="form-field"><label class="form-label">Línea</label><input class="input" id="ieLinea" placeholder="L1, L2, L3 (vacío = todas)" oninput="previewFiltered()"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;">
+        <div id="iePreview" style="padding:14px;background:var(--surface-alt);border-radius:10px;font-size:13px;color:var(--text-2);text-align:center;font-weight:600;">— Ajusta filtros para ver la previsualización —</div>
+        <button class="btn" onclick="exportFiltered()" style="padding:14px;font-size:14px;">📤 Exportar a Excel</button>
+        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+          <label class="form-label">📥 Importar Excel</label>
+          <input type="file" accept=".xlsx,.xls" class="input" onchange="importFiltered(event)">
+          <div style="font-size:11px;color:var(--text-3);margin-top:6px;">Los datos se cargan al <strong>módulo</strong> seleccionado arriba. Se pide confirmación entre reemplazar o añadir.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;background:var(--surface-alt);">
+    <div style="padding:14px 16px;font-size:12px;color:var(--text-2);line-height:1.6;">
+      <strong>📋 Formato del Excel:</strong><br>
+      · Una hoja con el nombre del módulo (<span class="kbd">moldes</span>, <span class="kbd">pesajes</span>, <span class="kbd">trabajadores</span>, etc.)<br>
+      · Primera fila = encabezados exactos del export (úsalo como plantilla).<br>
+      · <strong>Recomendado:</strong> exporta primero los datos actuales para ver la estructura esperada.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SUPABASE ═══ -->
+<div class="page" id="page-supabase">
+  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta backend para sincronizar datos y habilitar multi-usuario</div></div></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">🔌 Conexión</div><span class="badge info" id="sbBadge">No conectado</span></div>
+      <div class="form-field"><label class="form-label">URL del proyecto</label><input class="input" id="sbUrl" placeholder="https://xxx.supabase.co"></div>
+      <div class="form-field"><label class="form-label">Anon key</label><input class="input" id="sbKey" placeholder="eyJ..."></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="connectSupabase()">Conectar</button>
+        <button class="btn ghost" onclick="testSupabase()">Probar</button>
+        <button class="btn ghost" onclick="pushAll()">⬆ Subir datos</button>
+        <button class="btn ghost" onclick="pullAll()">⬇ Descargar</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:12px;">
+        Las credenciales se guardan en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>). Para producción usa RLS y una función serverless que proteja la anon key.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr"><div class="card-title">📋 Schema SQL</div><button class="btn sm ghost" onclick="copySQL()">Copiar</button></div>
+      <div style="font-size:12px;color:var(--text-3);margin-bottom:10px;">Ejecuta este SQL en <strong>SQL Editor</strong> de Supabase antes de sincronizar. Descarga también <span class="kbd">supabase_schema.sql</span>.</div>
+      <pre class="sql" id="sqlBlock"></pre>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="card-hdr"><div class="card-title">🧪 Log de sincronización</div><button class="btn sm ghost" onclick="document.getElementById('sbLog').innerHTML='';">Limpiar</button></div>
+    <div id="sbLog" style="font-family:var(--mono);font-size:11px;background:var(--surface-alt);padding:12px;border-radius:8px;max-height:260px;overflow:auto;"></div>
+  </div>
+</div>
+
+<!-- ═══ AJUSTES GENERALES ═══ -->
+<div class="page" id="page-ajustes">
+  <div class="page-hdr"><div><h1 class="page-title">Ajustes generales</h1><div class="page-sub">Configuración global de la aplicación</div></div></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px;">🎨 Apariencia</div>
+      <div class="form-field"><label class="form-label">Tema</label>
+        <select class="select" onchange="setTheme(this.value)">
+          <option value="marine">Marine (default)</option><option value="dark">Dark</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px;">⚙️ Datos</div>
+      <button class="btn ghost" onclick="if(confirm('¿Resetear toda la base de datos local? Se perderán presets, trabajadores y registros.')){localStorage.removeItem('friosur_app_v1');localStorage.removeItem('friosur_rt_v1');location.reload();}">Resetear DB local</button>
+      <button class="btn ghost" onclick="seedDemo()" style="margin-top:8px;">Resembrar datos demo</button>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px;">👤 Usuario activo</div>
+      <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="uName" value=""></div>
+      <div class="form-field"><label class="form-label">Rol</label>
+        <select class="select" id="uRol">
+          <option>Admin</option><option>Supervisor</option><option>Operario</option><option>Invitado</option>
+        </select>
+      </div>
+      <button class="btn" onclick="saveUser()">Guardar usuario</button>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px;">🔗 Integraciones</div>
+      <div style="font-size:12px;color:var(--text-3);">
+        <strong>Supabase:</strong> ver pestaña Supabase<br>
+        <strong>GitHub:</strong> sube el repo con <span class="kbd">index.html</span>, <span class="kbd">admin.html</span> y <span class="kbd">supabase_schema.sql</span>. Habilita GitHub Pages desde Settings → Pages.
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<!-- ═══ LOGIN MODAL ═══ -->
+<div id="authOverlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:99999;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;">
+  <div style="background:#fff;border-radius:16px;padding:32px;width:min(380px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.5);">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:28px;font-weight:800;color:#1e3a66;">🐟 FRIOSUR SpA</div>
+      <div style="font-size:13px;color:#64748b;margin-top:4px;">Control de Producción · Admin</div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;color:#334155;display:block;margin-bottom:4px;">Email</label>
+      <input id="authEmail" type="email" placeholder="admin@friosur.cl" autocomplete="username" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="font-size:12px;font-weight:600;color:#334155;display:block;margin-bottom:4px;">Contraseña</label>
+      <input id="authPass" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
+    <div id="authMsg" style="margin-top:12px;font-size:12px;color:#dc2626;text-align:center;min-height:16px;"></div>
+    <div style="margin-top:16px;font-size:11px;color:#94a3b8;text-align:center;">
+      ¿Olvidaste tu contraseña? Contacta al administrador.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   FRIOSUR ADMIN · lógica
+   ════════════════════════════════════════════════════════════════ */
+const STORE_KEY='friosur_app_v1';
+const RT_KEY='friosur_rt_v1';
+const SB_KEY='friosur_sb';
+const SB_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ'};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* DB compartida con la Tablet */
+const DB={data:null,
+  load(){try{const raw=localStorage.getItem(STORE_KEY);this.data=raw?JSON.parse(raw):this._seed();this._heal();}catch(e){this.data=this._seed();}},
+  save(){localStorage.setItem(STORE_KEY,JSON.stringify(this.data));},
+  _heal(){
+    const d=this.data;
+    d.presets=d.presets||[];d.trabajadores=d.trabajadores||[];d.turnos=d.turnos||[];d.equipos=d.equipos||[];
+    d.roles=d.roles||[{id:1,nombre:'Admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true}},
+                     {id:2,nombre:'Supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false}},
+                     {id:3,nombre:'Operario',permisos:{dashboard:true,reportes:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,import:false,supabase:false,ajustes:false}}];
+    d.usuario=d.usuario||{nombre:'C. Rodríguez',rol:'Admin'};
+  },
+  _seed(){return {
+    presets:[
+      {id:1,nombre:'Filete Merluza 170-UP Bloque',destino:'POLONIA',calibre:'170-UP',especie:'MERLUZA DE COLA',tipo:'molde',formato:'BLOQUE',kgRef:7.5,horasTunel:9,horasPlaca:4.5,tempObj:-18,activo:true},
+      {id:2,nombre:'Filete Reineta IQF',destino:'EXPORT',calibre:'S/C',especie:'REINETA',tipo:'pallet',formato:'IQF',kgRef:10,horasTunel:3.5,horasPlaca:0,tempObj:-25,activo:true},
+    ],
+    trabajadores:[
+      {id:1,codigo:'T-001',nombre:'JUAN PÉREZ',ficha:'101',area:'moldes',turno:'dia',rol:'operario',linea:'L1',activo:true},
+      {id:2,codigo:'T-002',nombre:'MARÍA GONZÁLEZ',ficha:'102',area:'pesaje',turno:'dia',rol:'operario',linea:'L2',activo:true},
+    ],
+    turnos:[
+      {codigo:'dia',nombre:'Día',inicio:'07:00',fin:'19:00',activo:true},
+      {codigo:'noche',nombre:'Noche',inicio:'19:00',fin:'07:00',activo:true},
+    ],
+    equipos:[
+      {codigo:'T-01',nombre:'Túnel 1',tipo:'tunel',capacidad:800,activo:true},
+      {codigo:'P-01',nombre:'Placa 1',tipo:'placa',capacidad:200,activo:true},
+    ],
+  };},
+};
+DB.load();
+
+/* RT también compartido (solo lectura para análisis) */
+const RT={data:null,load(){try{this.data=JSON.parse(localStorage.getItem(RT_KEY))||{moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};}catch(e){this.data={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};}},save(){localStorage.setItem(RT_KEY,JSON.stringify(this.data));}};
+RT.load();
+
+/* ─── Toast ─────────────────────────────── */
+function toast(msg,type='info'){const c=document.getElementById('toasts');const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;c.appendChild(t);setTimeout(()=>t.remove(),2800);}
+
+/* ─── Navegación ─────────────────────────── */
+document.querySelectorAll('.nav-item').forEach(n=>{
+  n.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    n.classList.add('active');
+    const id=n.dataset.page;
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-'+id).classList.add('active');
+    if(id==='dashboard')renderDashboard();
+    if(id==='reportes')renderReport();
+    if(id==='tuneles')renderTunReport();
+    if(id==='import')populateIEFilters();
+    if(id==='analisis')renderAnalisis();
+    if(id==='presets')renderPresets();
+    if(id==='trabajadores')renderTrabs();
+    if(id==='turnos')renderTurnos();
+    if(id==='equipos')renderEquipos();
+    if(id==='roles')renderRoles();
+  });
+});
+
+/* ─── Topbar context ──────────────────────── */
+function updateCtx(){
+  const d=new Date();
+  const DIAS=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const fecha=DIAS[d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+' '+MESES[d.getMonth()]+' '+d.getFullYear()+' · '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  document.getElementById('dateChip').textContent=fecha;
+  const kb=JSON.stringify(DB.data).length+JSON.stringify(RT.data).length;
+  document.getElementById('dbSizeChip').textContent='DB local: '+Math.round(kb/1024)+' kB';
+}
+setInterval(updateCtx,30000);updateCtx();
+
+/* ════════════ DASHBOARD ════════════════════ */
+/* Catálogo de widgets disponibles (paleta) */
+const WIDGET_CATALOG=[
+  // KPIs
+  {type:'kpi-moldes',    title:'KPI · Moldes',     size:'sm', group:'KPI', icon:'M'},
+  {type:'kpi-kg',        title:'KPI · Kg totales', size:'sm', group:'KPI', icon:'K'},
+  {type:'kpi-pesajes',   title:'KPI · Pesajes',    size:'sm', group:'KPI', icon:'P'},
+  {type:'kpi-operarios', title:'KPI · Operarios',  size:'sm', group:'KPI', icon:'O'},
+  // Charts
+  {type:'chart-hora',    title:'Gráfico · Por hora',    size:'md', group:'Gráficos', icon:'▌'},
+  {type:'chart-especie', title:'Gráfico · Por especie', size:'md', group:'Gráficos', icon:'◔'},
+  {type:'chart-linea',   title:'Gráfico · Por línea',   size:'lg', group:'Gráficos', icon:'▬'},
+  {type:'chart-turno',   title:'Gráfico · Por turno',   size:'md', group:'Gráficos', icon:'◐'},
+  // Tablas (registros completos)
+  {type:'tbl-moldes',    title:'Tabla · Ver moldes',    size:'lg', group:'Registros', icon:'≡'},
+  {type:'tbl-pesaje',    title:'Tabla · Ver pesajes',   size:'lg', group:'Registros', icon:'≡'},
+  // Pivots
+  {type:'pv-hora-mol',   title:'Moldes · Por hora',     size:'lg', group:'Por hora', icon:'⏱'},
+  {type:'pv-hora-pes',   title:'Pesaje · Por hora',     size:'lg', group:'Por hora', icon:'⏱'},
+  // Consolidados
+  {type:'pv-consol-mol', title:'Moldes · Consolidado (línea×hora)', size:'lg', group:'Consolidado', icon:'Σ'},
+  {type:'pv-consol-pes', title:'Pesaje · Consolidado (op×especie)', size:'lg', group:'Consolidado', icon:'Σ'},
+  // Por especie
+  {type:'pv-esp-mol',    title:'Moldes · Por especie',  size:'lg', group:'Por especie', icon:'🐟'},
+  {type:'pv-esp-pes',    title:'Pesaje · Por especie',  size:'lg', group:'Por especie', icon:'🐟'},
+];
+const DEFAULT_WIDGETS=[
+  {id:'w1',type:'kpi-moldes',title:'Moldes registrados',size:'sm'},
+  {id:'w2',type:'kpi-kg',title:'Kg producidos',size:'sm'},
+  {id:'w3',type:'kpi-pesajes',title:'Pesajes',size:'sm'},
+  {id:'w4',type:'kpi-operarios',title:'Operarios activos',size:'sm'},
+  {id:'w5',type:'chart-hora',title:'Producción por hora',size:'md'},
+  {id:'w6',type:'chart-especie',title:'Distribución por especie',size:'md'},
+  {id:'w7',type:'chart-linea',title:'Rendimiento por línea',size:'lg'},
+];
+let dashWidgets=JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
+
+/* Layouts guardados con nombre */
+const LAYOUTS_KEY='friosur_dash_layouts';
+let dashLayouts={};
+try{const s=localStorage.getItem(LAYOUTS_KEY);if(s)dashLayouts=JSON.parse(s);}catch(e){}
+function saveDashLayouts(){localStorage.setItem(LAYOUTS_KEY,JSON.stringify(dashLayouts));}
+
+const PALETTE=['#3b6fb8','#1e3a66','#16a34a','#dc2626','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#64748b'];
+/* cargar layout guardado */
+try{const saved=localStorage.getItem('friosur_dash_layout');if(saved)dashWidgets=JSON.parse(saved);}catch(e){}
+function saveDashLayout(){localStorage.setItem('friosur_dash_layout',JSON.stringify(dashWidgets));}
+
+let _filters={desde:null,hasta:null,turno:'',especies:new Set(),lineas:new Set()};
+let _charts={};
+
+function _recDate(r){
+  if(r.ts)return new Date(r.ts);
+  if(r.fecha)return new Date(r.fecha);
+  return null;
+}
+function _filterRecs(recs){
+  return recs.filter(r=>{
+    if(_filters.turno&&r.turno!==_filters.turno)return false;
+    if(_filters.especies.size&&!_filters.especies.has(r.especie))return false;
+    if(_filters.lineas.size&&!_filters.lineas.has(r.linea))return false;
+    if(_filters.desde||_filters.hasta){
+      const d=_recDate(r);if(!d)return true;
+      if(_filters.desde&&d<_filters.desde)return false;
+      if(_filters.hasta){const h=new Date(_filters.hasta);h.setHours(23,59,59,999);if(d>h)return false;}
+    }
+    return true;
+  });
+}
+function applyFechaPreset(){
+  const v=document.getElementById('slFechaPreset').value;
+  const d=document.getElementById('slFechaDesde'),h=document.getElementById('slFechaHasta');
+  const today=new Date();today.setHours(0,0,0,0);
+  const iso=dt=>dt.toISOString().slice(0,10);
+  if(v==='todo'){d.value='';h.value='';}
+  else if(v==='hoy'){d.value=iso(today);h.value=iso(today);}
+  else if(v==='ayer'){const y=new Date(today);y.setDate(y.getDate()-1);d.value=iso(y);h.value=iso(y);}
+  else if(v==='semana'){const s=new Date(today);s.setDate(s.getDate()-7);d.value=iso(s);h.value=iso(today);}
+  else if(v==='mes'){const s=new Date(today.getFullYear(),today.getMonth(),1);d.value=iso(s);h.value=iso(today);}
+  else if(v==='turno'){
+    // Turno actual según horarios definidos en DB.data.turnos
+    const now=new Date();const hm=now.getHours()*60+now.getMinutes();
+    const turnos=(DB.data.turnos||[]).filter(t=>t.activo);
+    let tActivo=null;
+    turnos.forEach(t=>{
+      if(!t.inicio||!t.fin)return;
+      const [ih,im]=t.inicio.split(':').map(Number);const [fh,fm]=t.fin.split(':').map(Number);
+      const ini=ih*60+im,fin=fh*60+fm;
+      if(ini<fin){if(hm>=ini&&hm<fin)tActivo=t;}
+      else{if(hm>=ini||hm<fin)tActivo=t;} // cruza medianoche
+    });
+    document.getElementById('slTurno').value=tActivo?tActivo.codigo:'';
+    d.value=iso(today);h.value=iso(today);
+  }
+  applyFilters();
+}
+
+function renderDashboard(){
+  populateSlicers();
+  renderWidgetPalette();
+  refreshLayoutPicker();
+  renderKPIs();
+  renderDashGrid();
+}
+function _shade(hex,delta){
+  // variar luminosidad preservando hue
+  const h=hex.replace('#','');if(h.length!==6)return hex;
+  const rgb=[0,2,4].map(i=>parseInt(h.slice(i,i+2),16));
+  const out=rgb.map(v=>Math.max(0,Math.min(255,v+delta*2.55))).map(v=>Math.round(v).toString(16).padStart(2,'0'));
+  return '#'+out.join('');
+}
+function renderWidgetPalette(){
+  const box=document.getElementById('wpChips');if(!box)return;
+  // agrupar
+  const groups={};WIDGET_CATALOG.forEach(c=>{(groups[c.group]=groups[c.group]||[]).push(c);});
+  box.innerHTML=Object.keys(groups).map(g=>
+    `<span class="wp-group">${esc(g)}:</span>`+
+    groups[g].map(c=>
+      `<div class="wp-chip" draggable="true" data-palette="1" data-wtype="${esc(c.type)}" data-wsize="${c.size}" data-wtitle="${esc(c.title)}" title="Arrastra al dashboard o pulsa +">
+        <span class="wp-icon">${c.icon}</span>${esc(c.title)}
+        <button class="wp-add" type="button" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}')" title="Agregar">+</button>
+      </div>`
+    ).join('')
+  ).join(' ');
+  // drag handlers
+  box.querySelectorAll('.wp-chip').forEach(el=>{
+    el.addEventListener('dragstart',e=>{
+      e.dataTransfer.effectAllowed='copy';
+      e.dataTransfer.setData('text/widget-type',el.dataset.wtype);
+      e.dataTransfer.setData('text/widget-size',el.dataset.wsize);
+      e.dataTransfer.setData('text/widget-title',el.dataset.wtitle);
+      el.classList.add('dragging');
+      document.getElementById('dashGrid').classList.add('drop-hot');
+    });
+    el.addEventListener('dragend',()=>{
+      el.classList.remove('dragging');
+      document.getElementById('dashGrid').classList.remove('drop-hot');
+    });
+  });
+}
+function addWidgetByType(type,title,size){
+  dashWidgets.push({id:'w'+Date.now(),type,title:title||type,size:size||'md'});
+  saveDashLayout();renderDashGrid();toast('Widget agregado','success');
+}
+function resetDashLayout(){
+  if(!confirm('¿Restaurar el dashboard por defecto?'))return;
+  dashWidgets=JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
+  saveDashLayout();renderDashGrid();refreshLayoutPicker();
+}
+
+/* ─── Layouts guardados ─── */
+function refreshLayoutPicker(){
+  const sel=document.getElementById('layoutPicker');if(!sel)return;
+  const keys=Object.keys(dashLayouts).sort();
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— Cargar layout —</option>'+keys.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('');
+  if(keys.includes(cur))sel.value=cur;
+}
+function saveLayoutAs(){
+  const name=prompt('Nombre del layout (ej: "Planillero día", "Supervisor noche"):');
+  if(!name)return;
+  dashLayouts[name.trim()]={widgets:JSON.parse(JSON.stringify(dashWidgets)),savedAt:Date.now()};
+  saveDashLayouts();refreshLayoutPicker();
+  document.getElementById('layoutPicker').value=name.trim();
+  toast('Layout "'+name.trim()+'" guardado','success');
+}
+function loadLayout(name){
+  if(!name)return;
+  const l=dashLayouts[name];if(!l)return;
+  dashWidgets=JSON.parse(JSON.stringify(l.widgets));
+  saveDashLayout();renderDashGrid();
+  toast('Layout cargado: '+name,'info');
+}
+function deleteCurrentLayout(){
+  const sel=document.getElementById('layoutPicker');const name=sel.value;
+  if(!name){toast('Selecciona un layout','warn');return;}
+  if(!confirm('¿Eliminar layout "'+name+'"?'))return;
+  delete dashLayouts[name];saveDashLayouts();refreshLayoutPicker();
+  sel.value='';toast('Layout eliminado','success');
+}
+
+/* ─── Color por widget ─── */
+function setWidgetColor(id,color){
+  const w=dashWidgets.find(x=>x.id===id);if(!w)return;
+  w.color=color;saveDashLayout();renderDashGrid();
+}
+function openColorPicker(id){
+  const w=dashWidgets.find(x=>x.id===id);if(!w)return;
+  const pop=document.createElement('div');
+  pop.style.cssText='position:fixed;z-index:3000;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:10px;box-shadow:var(--shadow-lg);display:flex;flex-wrap:wrap;gap:6px;max-width:220px;';
+  pop.innerHTML=PALETTE.map(c=>`<button type="button" style="width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #ccc;background:${c};cursor:pointer;" onclick="setWidgetColor('${id}','${c}');this.parentElement.remove();"></button>`).join('')+
+    `<button type="button" style="width:100%;font-size:11px;padding:4px;margin-top:4px;" onclick="setWidgetColor('${id}','');this.parentElement.remove();">Color por defecto</button>`;
+  const btn=event.currentTarget;const r=btn.getBoundingClientRect();
+  pop.style.top=(r.bottom+4)+'px';pop.style.left=Math.max(8,r.right-220)+'px';
+  document.body.appendChild(pop);
+  setTimeout(()=>{const close=e=>{if(!pop.contains(e.target)){pop.remove();document.removeEventListener('click',close);}};document.addEventListener('click',close);},10);
+}
+function populateSlicers(){
+  const ems=document.getElementById('slEspecies');
+  const lns=document.getElementById('slLineas');
+  const especies=[...new Set([...RT.data.moldes,...RT.data.pesajes].map(r=>r.especie).filter(Boolean))];
+  const lineas=[...new Set([...RT.data.moldes,...RT.data.pesajes].map(r=>r.linea).filter(Boolean))];
+  ems.innerHTML=especies.map(e=>`<div class="slicer-chip ${_filters.especies.has(e)?'on':''}" onclick="toggleSlicer('especies','${esc(e)}',this)">${esc(e)}</div>`).join('')||'<span style="font-size:11px;color:var(--text-3);padding:6px;">Sin datos</span>';
+  lns.innerHTML=lineas.map(l=>`<div class="slicer-chip ${_filters.lineas.has(l)?'on':''}" onclick="toggleSlicer('lineas','${esc(l)}',this)">${esc(l)}</div>`).join('')||'<span style="font-size:11px;color:var(--text-3);padding:6px;">Sin datos</span>';
+}
+function toggleSlicer(type,val,el){
+  if(_filters[type].has(val))_filters[type].delete(val);else _filters[type].add(val);
+  el.classList.toggle('on');applyFilters();
+}
+function applyFilters(){
+  const d=document.getElementById('slFechaDesde').value;
+  const h=document.getElementById('slFechaHasta').value;
+  _filters.desde=d?new Date(d+'T00:00:00'):null;
+  _filters.hasta=h?new Date(h+'T00:00:00'):null;
+  _filters.turno=document.getElementById('slTurno').value;
+  renderKPIs();renderDashGrid();
+}
+function clearFilters(){
+  _filters={desde:null,hasta:null,turno:'',especies:new Set(),lineas:new Set()};
+  ['slFechaDesde','slFechaHasta'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('slFechaPreset').value='todo';
+  document.getElementById('slTurno').value='';
+  populateSlicers();renderKPIs();renderDashGrid();
+}
+function renderKPIs(){
+  const moldes=_filterRecs(RT.data.moldes);
+  const pesajes=_filterRecs(RT.data.pesajes);
+  const kgMol=moldes.reduce((s,r)=>s+(r.kg||0),0);
+  const kgPes=pesajes.reduce((s,r)=>s+(r.kg||0),0);
+  const operarios=new Set([...moldes,...pesajes].map(r=>r.nombre)).size;
+  document.getElementById('kpiRow').innerHTML=`
+    <div class="stat"><div class="stat-lbl">Moldes</div><div class="stat-val">${moldes.reduce((s,r)=>s+(r.cant||0),0)}</div><div class="stat-trend">${moldes.length} registros</div></div>
+    <div class="stat"><div class="stat-lbl">Kg totales</div><div class="stat-val">${(kgMol+kgPes).toLocaleString('es-CL',{maximumFractionDigits:0})}</div><div class="stat-trend">Mol ${kgMol.toLocaleString('es-CL',{maximumFractionDigits:0})} + Pes ${kgPes.toLocaleString('es-CL',{maximumFractionDigits:0})}</div></div>
+    <div class="stat"><div class="stat-lbl">Pesajes</div><div class="stat-val">${pesajes.length}</div><div class="stat-trend">${(pesajes.length?kgPes/pesajes.length:0).toFixed(1)} kg prom.</div></div>
+    <div class="stat"><div class="stat-lbl">Operarios activos</div><div class="stat-val">${operarios}</div><div class="stat-trend">Con registros</div></div>`;
+}
+
+function renderDashGrid(){
+  const grid=document.getElementById('dashGrid');
+  if(!dashWidgets.length){
+    grid.innerHTML='<div style="grid-column:span 12;padding:60px 20px;text-align:center;color:var(--text-3);border:2px dashed var(--border);border-radius:12px;">Dashboard vacío — arrastra un widget desde la paleta ↑ o pulsa <strong>+</strong></div>';
+  } else {
+    grid.innerHTML=dashWidgets.map(w=>{
+      const isTable=w.type.startsWith('tbl-')||w.type.startsWith('pv-');
+      const body=isTable
+        ?`<div class="widget-body" id="c_${w.id}"></div>`
+        :`<div class="widget-body"><canvas id="c_${w.id}"></canvas></div>`;
+      const accent=w.color||'';
+      const accentBar=accent?`<div style="position:absolute;top:0;left:0;right:0;height:4px;background:${accent};border-radius:var(--radius) var(--radius) 0 0;"></div>`:'';
+      return `<div class="widget size-${w.size}" draggable="true" data-id="${w.id}" style="${accent?'border-top-color:'+accent+';':''}">
+        ${accentBar}
+        <div class="widget-hdr">
+          <div class="widget-title" style="${accent?'color:'+accent+';':''}">${esc(w.title)}</div>
+          <div class="widget-actions">
+            <button onclick="openColorPicker('${w.id}')" title="Color">🎨</button>
+            <button onclick="cycleSize('${w.id}')" title="Tamaño sm/md/lg">⇔</button>
+            <button onclick="removeWidget('${w.id}')" title="Eliminar">✕</button>
+          </div>
+        </div>
+        ${body}
+      </div>`;
+    }).join('');
+  }
+  setupDragDrop();
+  dashWidgets.forEach(w=>drawWidget(w));
+}
+function setupDragDrop(){
+  const grid=document.getElementById('dashGrid');
+  const widgets=grid.querySelectorAll('.widget');
+  let draggingEl=null;
+  widgets.forEach(el=>{
+    el.addEventListener('dragstart',e=>{draggingEl=el;el.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/widget-reorder',el.dataset.id);});
+    el.addEventListener('dragend',()=>{el.classList.remove('dragging');grid.querySelectorAll('.widget').forEach(w=>w.classList.remove('drop-target'));});
+    el.addEventListener('dragover',e=>{e.preventDefault();if(el!==draggingEl)el.classList.add('drop-target');});
+    el.addEventListener('dragleave',()=>el.classList.remove('drop-target'));
+    el.addEventListener('drop',e=>{
+      e.preventDefault();el.classList.remove('drop-target');
+      const pType=e.dataTransfer.getData('text/widget-type');
+      if(pType){
+        // drop desde paleta → insertar antes del widget target
+        const size=e.dataTransfer.getData('text/widget-size')||'md';
+        const title=e.dataTransfer.getData('text/widget-title')||pType;
+        const idx=dashWidgets.findIndex(w=>w.id===el.dataset.id);
+        dashWidgets.splice(Math.max(0,idx),0,{id:'w'+Date.now(),type:pType,title,size});
+        saveDashLayout();renderDashGrid();toast('Widget agregado','success');return;
+      }
+      if(el===draggingEl)return;
+      // reorder
+      const from=dashWidgets.findIndex(w=>w.id===draggingEl.dataset.id);
+      const to=dashWidgets.findIndex(w=>w.id===el.dataset.id);
+      const [moved]=dashWidgets.splice(from,1);
+      dashWidgets.splice(to,0,moved);
+      saveDashLayout();renderDashGrid();
+    });
+  });
+  // Drop sobre el grid vacío o al final
+  grid.addEventListener('dragover',e=>{
+    if(e.dataTransfer.types.includes('text/widget-type')){e.preventDefault();e.dataTransfer.dropEffect='copy';}
+  });
+  grid.addEventListener('drop',e=>{
+    const pType=e.dataTransfer.getData('text/widget-type');
+    if(!pType)return;
+    // Si el drop fue directamente sobre el grid (no sobre un widget hijo)
+    if(e.target.closest('.widget'))return;
+    e.preventDefault();
+    const size=e.dataTransfer.getData('text/widget-size')||'md';
+    const title=e.dataTransfer.getData('text/widget-title')||pType;
+    dashWidgets.push({id:'w'+Date.now(),type:pType,title,size});
+    saveDashLayout();renderDashGrid();toast('Widget agregado','success');
+  });
+}
+function cycleSize(id){const w=dashWidgets.find(x=>x.id===id);if(!w)return;w.size=w.size==='sm'?'md':w.size==='md'?'lg':'sm';saveDashLayout();renderDashGrid();}
+function removeWidget(id){if(!confirm('¿Eliminar widget?'))return;dashWidgets=dashWidgets.filter(w=>w.id!==id);saveDashLayout();renderDashGrid();}
+function addWidget(){
+  // Abre picker visual con todo el catálogo
+  const body='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;max-height:440px;overflow:auto;">'+
+    WIDGET_CATALOG.map(c=>`<button type="button" class="btn ghost" style="text-align:left;padding:12px;display:block;width:100%;" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}');closeModal();">
+      <div style="font-weight:700;font-size:13px;">${esc(c.icon)} ${esc(c.title)}</div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${esc(c.group)} · tamaño ${c.size}</div>
+    </button>`).join('')+'</div>';
+  const m=document.createElement('div');m.className='modal-backdrop';m.id='__modal';
+  m.innerHTML=`<div class="modal"><div class="modal-hdr"><div class="modal-title">Agregar widget</div><button class="modal-x" onclick="closeModal()">×</button></div><div class="modal-body">${body}</div><div class="modal-ftr"><button class="btn ghost" onclick="closeModal()">Cerrar</button></div></div>`;
+  document.body.appendChild(m);
+}
+function reloadDashboard(){RT.load();renderDashboard();toast('Datos actualizados','success');}
+
+function drawWidget(w){
+  const cv=document.getElementById('c_'+w.id);if(!cv)return;
+  if(_charts[w.id])_charts[w.id].destroy();
+  const moldes=_filterRecs(RT.data.moldes);
+  const pesajes=_filterRecs(RT.data.pesajes);
+  const all=[...moldes,...pesajes];
+  if(w.type.startsWith('kpi-')){
+    const ctx=cv.getContext('2d');const p=cv.parentElement;cv.width=p.clientWidth;cv.height=p.clientHeight;
+    ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle=w.color||getComputedStyle(document.body).getPropertyValue('--brand').trim();ctx.font='800 42px Inter';ctx.textAlign='center';ctx.textBaseline='middle';
+    let val='—';
+    if(w.type==='kpi-moldes')val=moldes.reduce((s,r)=>s+(r.cant||0),0);
+    if(w.type==='kpi-kg')val=(moldes.reduce((s,r)=>s+(r.kg||0),0)+pesajes.reduce((s,r)=>s+(r.kg||0),0)).toFixed(0);
+    if(w.type==='kpi-pesajes')val=pesajes.length;
+    if(w.type==='kpi-operarios')val=new Set(all.map(r=>r.nombre)).size;
+    ctx.fillText(val,cv.width/2,cv.height/2);
+    return;
+  }
+  let data,opts;
+  const col=w.color||null;
+  if(w.type==='chart-hora'){
+    const map={};all.forEach(r=>{const h=(r.hora||'').slice(0,2);if(!h)return;map[h]=(map[h]||0)+(r.kg||0);});
+    const labels=Object.keys(map).sort();
+    data={labels,datasets:[{label:'kg',data:labels.map(l=>map[l]),backgroundColor:col||'#3b6fb8'}]};
+    opts={type:'bar'};
+  } else if(w.type==='chart-especie'){
+    const map={};all.forEach(r=>{const e=r.especie||'—';map[e]=(map[e]||0)+(r.kg||0);});
+    const base=['#3b6fb8','#1e3a66','#16a34a','#f59e0b','#dc2626','#8b5cf6','#06b6d4'];
+    data={labels:Object.keys(map),datasets:[{data:Object.values(map),backgroundColor:col?base.map((_,i)=>_shade(col,i*12)):base}]};
+    opts={type:'doughnut'};
+  } else if(w.type==='chart-linea'){
+    const map={};all.forEach(r=>{const l=r.linea||'—';map[l]=(map[l]||0)+(r.kg||0);});
+    const labels=Object.keys(map).sort();
+    data={labels,datasets:[{label:'kg',data:labels.map(l=>map[l]),backgroundColor:col||'#16a34a'}]};
+    opts={type:'bar',indexAxis:'y'};
+  } else if(w.type==='chart-turno'){
+    const map={dia:0,noche:0};all.forEach(r=>{if(r.turno==='noche')map.noche+=(r.kg||0);else map.dia+=(r.kg||0);});
+    data={labels:['Día','Noche'],datasets:[{data:[map.dia,map.noche],backgroundColor:col?[_shade(col,0),_shade(col,-25)]:['#f59e0b','#1e3a66']}]};
+    opts={type:'pie'};
+  } else if(w.type.startsWith('tbl-')||w.type.startsWith('pv-')){
+    drawTableWidget(w,moldes,pesajes);return;
+  } else {return;}
+  _charts[w.id]=new Chart(cv,{type:opts.type,data,options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:opts.type!=='bar'}},scales:opts.type==='bar'?{x:{},y:{beginAtZero:true}}:undefined,indexAxis:opts.indexAxis}});
+}
+
+/* ─── Helpers de tabla/pivot para widgets ─── */
+function _fmt(v,d){d=d==null?1:d;return v?Number(v).toLocaleString('es-CL',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';}
+function _fmtInt(v){return v?Number(v).toLocaleString('es-CL'):'—';}
+function drawTableWidget(w,moldes,pesajes){
+  const host=document.getElementById('c_'+w.id);if(!host)return;
+  let html='';
+  if(w.type==='tbl-moldes'){
+    const rows=moldes.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,200);
+    if(!rows.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
+    html=`<table><thead><tr><th>Hora</th><th>L.</th><th>Trab.</th><th>Producto</th><th class="num">Cant</th><th class="num">Kg</th><th>Guía</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td>${esc(r.hora||'')}</td><td>${esc(r.linea||'')}</td><td>${esc(r.nombre||'')}</td><td>${esc(r.producto||r.preset||'')}</td><td class="num">${_fmtInt(r.cant)}</td><td class="num">${_fmt(r.kg)}</td><td>${esc(r.guia||'')}</td></tr>`).join('')+`</tbody></table>`;
+  } else if(w.type==='tbl-pesaje'){
+    const rows=pesajes.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,200);
+    if(!rows.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin pesajes</div>';return;}
+    html=`<table><thead><tr><th>Hora</th><th>L.</th><th>Trab.</th><th>Especie</th><th>Tipo</th><th class="num">Kg</th><th>Guía</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td>${esc(r.hora||'')}</td><td>${esc(r.linea||'')}</td><td>${esc(r.nombre||'')}</td><td>${esc(r.especie||'')}</td><td>${esc(r.tipo||'')}</td><td class="num">${_fmt(r.kg)}</td><td>${esc(r.guia||'')}</td></tr>`).join('')+`</tbody></table>`;
+  } else if(w.type==='pv-hora-mol'||w.type==='pv-hora-pes'){
+    const src=w.type==='pv-hora-mol'?moldes:pesajes;
+    if(!src.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin registros</div>';return;}
+    const hoursSet=new Set();src.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
+    const hours=[...hoursSet].sort((a,b)=>a-b);
+    const map={};src.forEach(r=>{const k=(r.nombre||'—');if(!map[k])map[k]={byH:{},tot:0};const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;const v=+r.kg||0;if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+v;map[k].tot+=v;});
+    const rows=Object.keys(map).sort().map(k=>({n:k,...map[k]}));
+    const totCol={};let gt=0;rows.forEach(r=>{hours.forEach(h=>totCol[h]=(totCol[h]||0)+(r.byH[h]||0));gt+=r.tot;});
+    html=`<table><thead><tr><th>Operario</th>${hours.map(h=>`<th class="num">${String(h).padStart(2,'0')}h</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td>${esc(r.n)}</td>${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}<td class="num"><strong>${_fmt(r.tot)}</strong></td></tr>`).join('')+
+      `</tbody><tfoot><tr><td>Total</td>${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}<td class="num">${_fmt(gt)}</td></tr></tfoot></table>`;
+  } else if(w.type==='pv-consol-mol'){
+    if(!moldes.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
+    const hoursSet=new Set();const linSet=new Set();
+    moldes.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));linSet.add(r.linea||'—');});
+    const hours=[...hoursSet].sort((a,b)=>a-b);const lins=[...linSet].sort();
+    const map={};lins.forEach(l=>map[l]={byH:{},tot:0});
+    moldes.forEach(r=>{const l=r.linea||'—';const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;const v=+r.kg||0;if(hh!=null)map[l].byH[hh]=(map[l].byH[hh]||0)+v;map[l].tot+=v;});
+    const totCol={};let gt=0;lins.forEach(l=>{hours.forEach(h=>totCol[h]=(totCol[h]||0)+(map[l].byH[h]||0));gt+=map[l].tot;});
+    html=`<table><thead><tr><th>Línea</th>${hours.map(h=>`<th class="num">${String(h).padStart(2,'0')}h</th>`).join('')}<th class="num">Total Kg</th></tr></thead><tbody>`+
+      lins.map(l=>`<tr><td><strong>${esc(l)}</strong></td>${hours.map(h=>`<td class="num">${map[l].byH[h]?_fmt(map[l].byH[h]):'—'}</td>`).join('')}<td class="num"><strong>${_fmt(map[l].tot)}</strong></td></tr>`).join('')+
+      `</tbody><tfoot><tr><td>Total</td>${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}<td class="num">${_fmt(gt)}</td></tr></tfoot></table>`;
+  } else if(w.type==='pv-consol-pes'||w.type==='pv-esp-pes'||w.type==='pv-esp-mol'){
+    const src=w.type==='pv-esp-mol'?moldes:pesajes;
+    if(!src.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin registros</div>';return;}
+    const espSet=new Set();src.forEach(r=>espSet.add(r.especie||'—'));
+    const esps=[...espSet].sort();
+    const map={};src.forEach(r=>{const k=(r.nombre||'—');if(!map[k])map[k]={byE:{},tot:0};const e=r.especie||'—';const v=+r.kg||0;map[k].byE[e]=(map[k].byE[e]||0)+v;map[k].tot+=v;});
+    const rows=Object.keys(map).sort().map(k=>({n:k,...map[k]}));
+    const totCol={};let gt=0;rows.forEach(r=>{esps.forEach(e=>totCol[e]=(totCol[e]||0)+(r.byE[e]||0));gt+=r.tot;});
+    html=`<table><thead><tr><th>Operario</th>${esps.map(e=>`<th class="num">${esc(e)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td>${esc(r.n)}</td>${esps.map(e=>`<td class="num">${r.byE[e]?_fmt(r.byE[e]):'—'}</td>`).join('')}<td class="num"><strong>${_fmt(r.tot)}</strong></td></tr>`).join('')+
+      `</tbody><tfoot><tr><td>Total</td>${esps.map(e=>`<td class="num">${_fmt(totCol[e])}</td>`).join('')}<td class="num">${_fmt(gt)}</td></tr></tfoot></table>`;
+  }
+  host.innerHTML=html;
+}
+
+/* ════════════ TÚNELES / PLACAS — reporte ════════════ */
+function _tunInferTurno(hm){
+  if(!hm)return '';
+  const [h,m]=hm.split(':').map(Number);const mm=h*60+(m||0);
+  const turnos=(DB.data.turnos||[]).filter(t=>t.activo);
+  for(const t of turnos){
+    if(!t.inicio||!t.fin)continue;
+    const [ih,im]=t.inicio.split(':').map(Number);const [fh,fm]=t.fin.split(':').map(Number);
+    const ini=ih*60+im,fin=fh*60+fm;
+    if(ini<fin){if(mm>=ini&&mm<fin)return t.codigo;}
+    else{if(mm>=ini||mm<fin)return t.codigo;}
+  }
+  return '';
+}
+function renderTunReport(){
+  const equipos=(DB.data.equipos||[]).filter(e=>e.activo);
+  const fTipo=document.getElementById('tunTipo').value;
+  const fEst=document.getElementById('tunEstado').value;
+  const fTurno=document.getElementById('tunTurno').value;
+  const incHist=document.getElementById('tunHist').value==='1';
+  const eqState=RT.data.eqState||{};
+  const eqHist=RT.data.eqHist||{};
+
+  // ─── KPIs ───
+  let libres=0,cargando=0,congelando=0,listos=0;
+  equipos.forEach(eq=>{
+    const st=(eqState[eq.codigo]||{estado:'libre'}).estado;
+    if(st==='libre')libres++;else if(st==='cargando')cargando++;else if(st==='congelando')congelando++;else if(st==='listo')listos++;
+  });
+  document.getElementById('tunKpis').innerHTML=`
+    <div class="stat"><div class="stat-lbl">Libres</div><div class="stat-val">${libres}</div><div class="stat-trend">Disponibles</div></div>
+    <div class="stat"><div class="stat-lbl">Cargando</div><div class="stat-val">${cargando}</div><div class="stat-trend">En carga</div></div>
+    <div class="stat"><div class="stat-lbl">Congelando</div><div class="stat-val">${congelando}</div><div class="stat-trend">En ciclo</div></div>
+    <div class="stat"><div class="stat-lbl">Listos</div><div class="stat-val">${listos}</div><div class="stat-trend">Por descargar</div></div>`;
+
+  // ─── Pendiente por cargar ───
+  const moldes=RT.data.moldes||[];const generales=RT.data.generales||[];
+  const pendMap={};
+  [...moldes,...generales].forEach(r=>{
+    const pend=r.pendiente!=null?r.pendiente:r.cant;
+    if(!pend||pend<=0)return;
+    const p=(DB.data.presets||[]).find(x=>x.id===r.presetId);if(!p)return;
+    const key=r.presetId;
+    if(!pendMap[key])pendMap[key]={preset:p,cant:0,kg:0};
+    pendMap[key].cant+=pend;pendMap[key].kg+=(pend*(p.kgRef||p.kg_ref||0));
+  });
+  const pendArr=Object.values(pendMap).sort((a,b)=>b.cant-a.cant);
+  const pendWrap=document.getElementById('tunPendWrap');
+  if(!pendArr.length){
+    pendWrap.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3);">Sin pendientes — todo cargado ✓</div>';
+    document.getElementById('tunPendSub').textContent='0 unidades';
+  } else {
+    const totU=pendArr.reduce((s,x)=>s+x.cant,0);
+    const totKg=pendArr.reduce((s,x)=>s+x.kg,0);
+    pendWrap.innerHTML='<table><thead><tr><th>Producto</th><th>Tipo</th><th>Destino</th><th>Calibre</th><th class="num">Unidades</th><th class="num">Kg aprox.</th></tr></thead><tbody>'+
+      pendArr.map(p=>`<tr><td><strong>${esc(p.preset.nombre)}</strong></td><td>${esc(p.preset.tipo||'—')}</td><td>${esc(p.preset.destino||'—')}</td><td>${esc(p.preset.calibre||'—')}</td><td class="num">${p.cant}</td><td class="num">${p.kg.toFixed(1)}</td></tr>`).join('')+
+      '</tbody></table>';
+    document.getElementById('tunPendSub').textContent=totU+' unidades · '+totKg.toFixed(0)+' kg aprox.';
+  }
+
+  // ─── Estado actual ───
+  const filtrados=equipos.filter(eq=>{
+    if(fTipo&&eq.tipo!==fTipo)return false;
+    const st=(eqState[eq.codigo]||{estado:'libre'}).estado;
+    if(fEst&&st!==fEst)return false;
+    const rt=eqState[eq.codigo]||{};
+    const tIni=_tunInferTurno(rt.horaInicio||'');
+    if(fTurno&&tIni&&tIni!==fTurno)return false;
+    return true;
+  });
+  const estWrap=document.getElementById('tunEstadoWrap');
+  estWrap.innerHTML='<table><thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Hora inicio</th><th>Hora fin est.</th><th>Turno</th><th class="num">Items</th><th class="num">Cap.</th><th>Productos</th></tr></thead><tbody>'+
+    (filtrados.length?filtrados.map(eq=>{
+      const rt=eqState[eq.codigo]||{estado:'libre',items:[]};
+      const prods=(rt.items||[]).map(it=>it.producto).slice(0,3).join(', ')+((rt.items||[]).length>3?' +'+((rt.items||[]).length-3):'');
+      const totI=(rt.items||[]).reduce((s,it)=>s+(it.cant||0),0);
+      const badge={libre:'ok',cargando:'warn',congelando:'info',listo:'ok'}[rt.estado]||'slate';
+      const turno=_tunInferTurno(rt.horaInicio||'');
+      return `<tr>
+        <td><strong>${esc(eq.codigo)}</strong></td>
+        <td>${esc(eq.nombre)}</td>
+        <td>${eq.tipo==='tunel'?'Túnel':'Placa'}</td>
+        <td><span class="badge ${badge}">${esc(rt.estado||'—')}</span></td>
+        <td class="num">${esc(rt.horaInicio||'—')}</td>
+        <td class="num">${esc(rt.horaFinEst||'—')}</td>
+        <td>${esc(turno||'—')}</td>
+        <td class="num">${totI||0}</td>
+        <td class="num">${eq.capacidad||'—'}</td>
+        <td style="font-size:11px;color:var(--text-3);">${esc(prods||'—')}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--text-3);">Sin equipos que coincidan con el filtro</td></tr>')+'</tbody></table>';
+
+  // ─── Histórico ciclos descargados ───
+  const histWrap=document.getElementById('tunHistWrap');
+  const histSub=document.getElementById('tunHistSub');
+  if(!incHist){histWrap.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Histórico oculto</div>';histSub.textContent='';}
+  else{
+    const rows=[];
+    Object.keys(eqHist||{}).forEach(cod=>{
+      const eq=equipos.find(e=>e.codigo===cod);if(!eq)return;
+      if(fTipo&&eq.tipo!==fTipo)return;
+      (eqHist[cod]||[]).forEach(h=>{
+        const turno=_tunInferTurno(h.horaInicio||'');
+        if(fTurno&&turno&&turno!==fTurno)return;
+        rows.push({eq,h,turno});
+      });
+    });
+    rows.sort((a,b)=>(b.h.id||0)-(a.h.id||0));
+    if(!rows.length){histWrap.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3);">Sin ciclos en histórico</div>';histSub.textContent='0 ciclos';}
+    else{
+      histWrap.innerHTML='<table><thead><tr><th>Equipo</th><th>Tipo</th><th>Hora inicio</th><th>Hora término</th><th class="num">Duración (h)</th><th>Turno</th><th class="num">Cant.</th><th>Productos</th></tr></thead><tbody>'+
+        rows.map(r=>`<tr>
+          <td><strong>${esc(r.eq.codigo)}</strong> — ${esc(r.eq.nombre)}</td>
+          <td>${r.eq.tipo==='tunel'?'Túnel':'Placa'}</td>
+          <td class="num">${esc(r.h.horaInicio||'—')}</td>
+          <td class="num">${esc(r.h.horaDescarga||'—')}</td>
+          <td class="num">${(r.h.horasTotal||0).toFixed(1)}</td>
+          <td>${esc(r.turno||'—')}</td>
+          <td class="num">${r.h.cant||0}</td>
+          <td style="font-size:11px;">${esc((r.h.productos||[]).join(', ')||'—')}</td>
+        </tr>`).join('')+'</tbody></table>';
+      histSub.textContent=rows.length+' ciclos';
+    }
+  }
+}
+function exportTunReport(){
+  const wb=XLSX.utils.book_new();
+  const equipos=(DB.data.equipos||[]).filter(e=>e.activo);
+  const eqState=RT.data.eqState||{};const eqHist=RT.data.eqHist||{};
+  const est=equipos.map(eq=>{
+    const rt=eqState[eq.codigo]||{estado:'libre',items:[]};
+    return {
+      codigo:eq.codigo,nombre:eq.nombre,tipo:eq.tipo,
+      estado:rt.estado,hora_inicio:rt.horaInicio||'',hora_fin_est:rt.horaFinEst||'',
+      turno:_tunInferTurno(rt.horaInicio||''),
+      items:(rt.items||[]).reduce((s,it)=>s+(it.cant||0),0),
+      capacidad:eq.capacidad||'',
+      productos:(rt.items||[]).map(it=>it.producto).join(' | ')
+    };
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(est),'estado_actual');
+  const hist=[];
+  Object.keys(eqHist).forEach(cod=>{
+    const eq=equipos.find(e=>e.codigo===cod);if(!eq)return;
+    (eqHist[cod]||[]).forEach(h=>hist.push({
+      equipo_codigo:cod,equipo_nombre:eq.nombre,tipo:eq.tipo,
+      hora_inicio:h.horaInicio||'',hora_termino:h.horaDescarga||'',
+      duracion_h:h.horasTotal||0,
+      turno:_tunInferTurno(h.horaInicio||''),
+      cantidad:h.cant||0,productos:(h.productos||[]).join(' | ')
+    }));
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(hist.length?hist:[{equipo_codigo:'—'}]),'historico');
+  // pendientes
+  const moldes=RT.data.moldes||[];const generales=RT.data.generales||[];
+  const pendMap={};
+  [...moldes,...generales].forEach(r=>{
+    const pend=r.pendiente!=null?r.pendiente:r.cant;if(!pend||pend<=0)return;
+    const p=(DB.data.presets||[]).find(x=>x.id===r.presetId);if(!p)return;
+    const k=r.presetId;if(!pendMap[k])pendMap[k]={producto:p.nombre,tipo:p.tipo,destino:p.destino,calibre:p.calibre,unidades:0,kg:0};
+    pendMap[k].unidades+=pend;pendMap[k].kg+=pend*(p.kgRef||p.kg_ref||0);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(Object.values(pendMap).length?Object.values(pendMap):[{producto:'—'}]),'pendientes');
+  XLSX.writeFile(wb,'tuneles_placas_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('Reporte exportado','success');
+}
+
+/* ════════════ REPORTES (con drill-down) ════════════ */
+let _drillPath=[];
+let _repChart=null;
+function renderReport(){
+  const tipo=document.getElementById('repTipo').value;
+  const moldes=_filterRecs(RT.data.moldes);
+  const pesajes=_filterRecs(RT.data.pesajes);
+  let labels=[],values=[],rows=[];
+  const tit=document.getElementById('repTitle');const sub=document.getElementById('repSub');
+  if(tipo==='produccion'){
+    tit.textContent='Producción diaria';
+    const map={};[...moldes,...pesajes].forEach(r=>{const k=(r.fecha||'hoy');map[k]=(map[k]||0)+(r.kg||0);});
+    labels=Object.keys(map).sort();values=labels.map(l=>map[l]);
+    rows=labels.map((l,i)=>[l,values[i].toFixed(1)]);
+    drawRepTable(['Día','Kg totales'],rows);
+  } else if(tipo==='operario'){
+    tit.textContent='Productividad por operario';
+    const map={};[...moldes,...pesajes].forEach(r=>{const k=r.nombre||'—';if(!map[k])map[k]={n:0,kg:0};map[k].n++;map[k].kg+=(r.kg||0);});
+    const arr=Object.entries(map).sort((a,b)=>b[1].kg-a[1].kg);
+    labels=arr.map(x=>x[0]);values=arr.map(x=>x[1].kg);
+    rows=arr.map(x=>[x[0],x[1].n,x[1].kg.toFixed(1)]);
+    drawRepTable(['Operario','Registros','Kg'],rows,i=>drillTo('operario',arr[i][0]));
+  } else if(tipo==='especie'){
+    tit.textContent='Consolidado por especie';
+    const map={};[...moldes,...pesajes].forEach(r=>{const k=r.especie||'—';if(!map[k])map[k]={n:0,kg:0};map[k].n++;map[k].kg+=(r.kg||0);});
+    const arr=Object.entries(map).sort((a,b)=>b[1].kg-a[1].kg);
+    labels=arr.map(x=>x[0]);values=arr.map(x=>x[1].kg);
+    rows=arr.map(x=>[x[0],x[1].n,x[1].kg.toFixed(1)]);
+    drawRepTable(['Especie','Registros','Kg'],rows,i=>drillTo('especie',arr[i][0]));
+  } else if(tipo==='linea'){
+    tit.textContent='Rendimiento por línea';
+    const map={};[...moldes,...pesajes].forEach(r=>{const k=r.linea||'—';if(!map[k])map[k]={n:0,kg:0};map[k].n++;map[k].kg+=(r.kg||0);});
+    const arr=Object.entries(map).sort();
+    labels=arr.map(x=>x[0]);values=arr.map(x=>x[1].kg);
+    rows=arr.map(x=>[x[0],x[1].n,x[1].kg.toFixed(1)]);
+    drawRepTable(['Línea','Registros','Kg'],rows);
+  } else if(tipo==='turno'){
+    tit.textContent='Comparativa turno';
+    const map={dia:0,noche:0};[...moldes,...pesajes].forEach(r=>{if(r.turno==='noche')map.noche+=(r.kg||0);else map.dia+=(r.kg||0);});
+    labels=['Día','Noche'];values=[map.dia,map.noche];
+    rows=[['Día',map.dia.toFixed(1)],['Noche',map.noche.toFixed(1)]];
+    drawRepTable(['Turno','Kg'],rows);
+  }
+  sub.textContent=`Registros: ${moldes.length+pesajes.length} · Drill path: ${_drillPath.length?_drillPath.map(d=>d.level+':'+d.value).join(' → '):'raíz'}`;
+  renderDrillCrumbs();
+  if(_repChart)_repChart.destroy();
+  const ctx=document.getElementById('repChart');
+  _repChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Kg',data:values,backgroundColor:'#1e3a66'}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length){const i=els[0].index;const v=labels[i];drillTo(tipo,v);}}}});
+}
+function drawRepTable(headers,rows,onClickFn){
+  const th=document.querySelector('#repTable thead');const tb=document.querySelector('#repTable tbody');
+  th.innerHTML='<tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr>';
+  tb.innerHTML=rows.map((r,i)=>'<tr '+(onClickFn?'style="cursor:pointer;" onclick="window._drillClick('+i+')"':'')+'>'+r.map((c,j)=>'<td '+(j>0&&typeof c!=='string'?'class="num"':'')+'>'+esc(c)+'</td>').join('')+'</tr>').join('');
+  window._drillClick=onClickFn||(()=>{});
+}
+function drillTo(level,value){_drillPath.push({level,value});renderReport();}
+function drillReset(){_drillPath=[];renderReport();}
+function renderDrillCrumbs(){
+  const el=document.getElementById('drillCrumbs');
+  el.innerHTML='<span class="crumb" onclick="drillReset()">Todos</span>'+_drillPath.map((d,i)=>`<span>→</span><span class="crumb ${i===_drillPath.length-1?'current':''}" onclick="(${i===_drillPath.length-1?'':'drillBack'}(${i}))">${esc(d.level)}:${esc(d.value)}</span>`).join('');
+}
+window.drillBack=i=>{_drillPath=_drillPath.slice(0,i+1);renderReport();};
+function exportReport(fmt){
+  if(fmt==='xlsx'){
+    const tbl=document.getElementById('repTable');
+    const wb=XLSX.utils.book_new();const ws=XLSX.utils.table_to_sheet(tbl);
+    XLSX.utils.book_append_sheet(wb,ws,'Reporte');
+    XLSX.writeFile(wb,'reporte_'+Date.now()+'.xlsx');toast('Excel generado','success');
+  } else {window.print();}
+}
+
+/* ════════════ ANÁLISIS (pivots) ════════════ */
+function setAnalTab(btn,id){
+  document.querySelectorAll('.tabs-inline button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
+  document.querySelectorAll('.anal-tab').forEach(t=>t.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');
+  renderAnalisis();
+}
+function renderAnalisis(){
+  const moldes=_filterRecs(RT.data.moldes);const pesajes=_filterRecs(RT.data.pesajes);
+  // Pivot hora
+  const horas=[...new Set([...moldes,...pesajes].map(r=>(r.hora||'').slice(0,2)).filter(Boolean))].sort();
+  const th=document.getElementById('anTblHora');
+  const mapH={};[...moldes,...pesajes].forEach(r=>{const h=(r.hora||'').slice(0,2);if(!h)return;mapH[h]=(mapH[h]||0)+(r.kg||0);});
+  th.innerHTML='<thead><tr><th>Hora</th><th class="num">Kg</th></tr></thead><tbody>'+horas.map(h=>`<tr><td>${h}:00</td><td class="num">${(mapH[h]||0).toFixed(1)}</td></tr>`).join('')+'</tbody>';
+  // Pivot operario
+  const mapO={};[...moldes,...pesajes].forEach(r=>{const k=r.nombre||'—';if(!mapO[k])mapO[k]={n:0,kg:0};mapO[k].n++;mapO[k].kg+=(r.kg||0);});
+  const arrO=Object.entries(mapO).sort((a,b)=>b[1].kg-a[1].kg);
+  document.getElementById('anTblOp').innerHTML='<thead><tr><th>#</th><th>Operario</th><th class="num">Reg</th><th class="num">Kg</th></tr></thead><tbody>'+arrO.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x[0])}</td><td class="num">${x[1].n}</td><td class="num">${x[1].kg.toFixed(1)}</td></tr>`).join('')+'</tbody>';
+  // Pivot especie
+  const mapE={};[...moldes,...pesajes].forEach(r=>{const k=r.especie||'—';if(!mapE[k])mapE[k]={n:0,kg:0};mapE[k].n++;mapE[k].kg+=(r.kg||0);});
+  const arrE=Object.entries(mapE).sort((a,b)=>b[1].kg-a[1].kg);
+  document.getElementById('anTblEsp').innerHTML='<thead><tr><th>Especie</th><th class="num">Reg</th><th class="num">Kg</th></tr></thead><tbody>'+arrE.map(x=>`<tr><td>${esc(x[0])}</td><td class="num">${x[1].n}</td><td class="num">${x[1].kg.toFixed(1)}</td></tr>`).join('')+'</tbody>';
+  // Histórico equipos
+  const rows=[];Object.entries(RT.data.eqHist||{}).forEach(([cod,arr])=>{arr.forEach(h=>{rows.push({cod,...h});});});
+  document.getElementById('anTblHist').innerHTML='<thead><tr><th>Equipo</th><th>Inicio</th><th>Fin</th><th class="num">Horas</th><th class="num">Cant</th><th>Productos</th></tr></thead><tbody>'+(rows.length?rows.map(r=>`<tr><td>${esc(r.cod)}</td><td>${esc(r.horaInicio||'—')}</td><td>${esc(r.horaDescarga||'—')}</td><td class="num">${(r.horasTotal||0).toFixed(1)}</td><td class="num">${r.cant||0}</td><td>${esc(r.productos||'')}</td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3);">Sin histórico</td></tr>')+'</tbody>';
+}
+
+/* ════════════ PRESETS CRUD ════════════ */
+function renderPresets(){
+  const tb=document.getElementById('tbPresets');
+  tb.innerHTML=DB.data.presets.map(p=>`<tr>
+    <td><strong>${esc(p.nombre)}</strong></td>
+    <td>${esc(p.tipo||'—')}</td><td>${esc(p.destino||'—')}</td><td>${esc(p.especie||'—')}</td><td>${esc(p.calibre||'—')}</td>
+    <td class="num">${p.kgRef}</td><td class="num">${p.horasTunel||0}</td><td class="num">${p.horasPlaca||0}</td><td class="num">${p.tempObj||0}</td>
+    <td>${p.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
+    <td><button class="btn sm ghost" onclick="openPresetModal(${p.id})">✎</button> <button class="btn sm ghost" onclick="delPreset(${p.id})">✕</button></td>
+  </tr>`).join('')||'<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets</td></tr>';
+}
+function openPresetModal(id){
+  const p=id?DB.data.presets.find(x=>x.id===id):{id:Date.now(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,activo:true};
+  openModal('Preset',`
+    <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(p.nombre)}"></div>
+    <div class="grid-2">
+      <div class="form-field"><label class="form-label">Tipo</label><select class="select" id="f_tipo"><option value="molde" ${p.tipo==='molde'?'selected':''}>Molde</option><option value="pallet" ${p.tipo==='pallet'?'selected':''}>Pallet</option><option value="carro" ${p.tipo==='carro'?'selected':''}>Carro</option><option value="castillo" ${p.tipo==='castillo'?'selected':''}>Castillo</option></select></div>
+      <div class="form-field"><label class="form-label">Formato</label><input class="input" id="f_formato" value="${esc(p.formato||'')}"></div>
+      <div class="form-field"><label class="form-label">Destino</label><input class="input" id="f_destino" value="${esc(p.destino||'')}"></div>
+      <div class="form-field"><label class="form-label">Especie</label><input class="input" id="f_especie" value="${esc(p.especie||'')}"></div>
+      <div class="form-field"><label class="form-label">Calibre</label><input class="input" id="f_calibre" value="${esc(p.calibre||'')}"></div>
+      <div class="form-field"><label class="form-label">Kg/unidad</label><input class="input" id="f_kgRef" type="number" step="0.1" value="${p.kgRef||0}"></div>
+      <div class="form-field"><label class="form-label">Horas Túnel</label><input class="input" id="f_horasTunel" type="number" step="0.5" value="${p.horasTunel||0}"></div>
+      <div class="form-field"><label class="form-label">Horas Placa</label><input class="input" id="f_horasPlaca" type="number" step="0.5" value="${p.horasPlaca||0}"></div>
+      <div class="form-field"><label class="form-label">Tº objetivo</label><input class="input" id="f_tempObj" type="number" value="${p.tempObj||0}"></div>
+      <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${p.activo?'selected':''}>Activo</option><option value="0" ${!p.activo?'selected':''}>Inactivo</option></select></div>
+    </div>`,()=>{
+    const n={id:p.id,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
+    if(!n.nombre){toast('Nombre obligatorio','err');return false;}
+    const i=DB.data.presets.findIndex(x=>x.id===n.id);
+    if(i>=0)DB.data.presets[i]=n;else DB.data.presets.push(n);
+    DB.save();renderPresets();toast('Preset guardado','success');return true;
+  });
+}
+function delPreset(id){if(!confirm('¿Eliminar preset?'))return;DB.data.presets=DB.data.presets.filter(p=>p.id!==id);DB.save();renderPresets();}
+
+/* ════════════ TRABAJADORES CRUD ════════════ */
+function renderTrabs(){
+  const tb=document.getElementById('tbTrabajadores');
+  const q=(document.getElementById('trabSearch').value||'').toLowerCase();
+  const a=document.getElementById('trabArea').value;
+  const tu=document.getElementById('trabTurno').value;
+  const list=DB.data.trabajadores.filter(t=>(!q||t.nombre.toLowerCase().includes(q)||(t.ficha+'').includes(q)||(t.codigo||'').toLowerCase().includes(q))&&(!a||t.area===a)&&(!tu||t.turno===tu));
+  tb.innerHTML=list.map(t=>`<tr>
+    <td class="num">${esc(t.codigo||'—')}</td><td><strong>${esc(t.nombre)}</strong></td><td class="num">${esc(t.ficha||'—')}</td>
+    <td>${esc(t.area||'—')}</td><td>${esc(t.rol||'—')}</td><td>${esc(t.turno||'—')}</td><td>${esc(t.linea||'—')}</td>
+    <td>${t.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
+    <td><button class="btn sm ghost" onclick="openTrabModal(${t.id})">✎</button> <button class="btn sm ghost" onclick="delTrab(${t.id})">✕</button></td>
+  </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
+}
+function openTrabModal(id){
+  const t=id?DB.data.trabajadores.find(x=>x.id===id):{id:Date.now(),codigo:'',nombre:'',ficha:'',area:'moldes',turno:'dia',rol:'operario',linea:'L1',activo:true};
+  openModal('Trabajador',`
+    <div class="grid-2">
+      <div class="form-field"><label class="form-label">Código</label><input class="input" id="f_codigo" value="${esc(t.codigo||'')}"></div>
+      <div class="form-field"><label class="form-label">Ficha</label><input class="input" id="f_ficha" value="${esc(t.ficha||'')}"></div>
+      <div class="form-field" style="grid-column:span 2;"><label class="form-label">Nombre completo</label><input class="input" id="f_nombre" value="${esc(t.nombre||'')}"></div>
+      <div class="form-field"><label class="form-label">Área</label><select class="select" id="f_area"><option value="moldes" ${t.area==='moldes'?'selected':''}>Moldes</option><option value="pesaje" ${t.area==='pesaje'?'selected':''}>Pesaje</option><option value="otro" ${t.area==='otro'?'selected':''}>Otro</option></select></div>
+      <div class="form-field"><label class="form-label">Rol</label><select class="select" id="f_rol"><option value="operario" ${t.rol==='operario'?'selected':''}>Operario</option><option value="planillero" ${t.rol==='planillero'?'selected':''}>Planillero</option><option value="supervisor" ${t.rol==='supervisor'?'selected':''}>Supervisor</option></select></div>
+      <div class="form-field"><label class="form-label">Turno</label><select class="select" id="f_turno">${DB.data.turnos.map(x=>`<option value="${x.codigo}" ${t.turno===x.codigo?'selected':''}>${esc(x.nombre)}</option>`).join('')}</select></div>
+      <div class="form-field"><label class="form-label">Línea</label><input class="input" id="f_linea" value="${esc(t.linea||'')}"></div>
+      <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${t.activo?'selected':''}>Activo</option><option value="0" ${!t.activo?'selected':''}>Inactivo</option></select></div>
+    </div>`,()=>{
+    const n={id:t.id,codigo:document.getElementById('f_codigo').value.trim(),nombre:document.getElementById('f_nombre').value.trim().toUpperCase(),ficha:document.getElementById('f_ficha').value.trim(),area:document.getElementById('f_area').value,rol:document.getElementById('f_rol').value,turno:document.getElementById('f_turno').value,linea:document.getElementById('f_linea').value.trim(),activo:document.getElementById('f_activo').value==='1'};
+    if(!n.nombre){toast('Nombre obligatorio','err');return false;}
+    const i=DB.data.trabajadores.findIndex(x=>x.id===n.id);
+    if(i>=0)DB.data.trabajadores[i]=n;else DB.data.trabajadores.push(n);
+    DB.save();renderTrabs();toast('Trabajador guardado','success');return true;
+  });
+}
+function delTrab(id){if(!confirm('¿Eliminar trabajador?'))return;DB.data.trabajadores=DB.data.trabajadores.filter(t=>t.id!==id);DB.save();renderTrabs();}
+function importTrabsExcel(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'binary'});
+      const sh=wb.Sheets[wb.SheetNames[0]];
+      const arr=XLSX.utils.sheet_to_json(sh,{defval:''});
+      if(!arr.length){toast('Archivo vacío','err');return;}
+      const modo=confirm('¿Reemplazar TODOS los trabajadores?\n\nOK = Reemplazar · Cancelar = Agregar/actualizar por ficha/código');
+      const norm=r=>({
+        id:r.id||Date.now()+Math.random(),
+        codigo:String(r.codigo||'').trim(),
+        nombre:String(r.nombre||'').trim().toUpperCase(),
+        ficha:String(r.ficha||'').trim(),
+        area:String(r.area||'moldes').trim().toLowerCase(),
+        rol:String(r.rol||'operario').trim().toLowerCase(),
+        turno:String(r.turno||'dia').trim().toLowerCase(),
+        linea:String(r.linea||'').trim(),
+        activo:r.activo===false||r.activo==='0'||r.activo==='NO'||r.activo==='no'?false:true
+      });
+      const nuevos=arr.filter(x=>x.nombre).map(norm);
+      if(modo){
+        DB.data.trabajadores=nuevos;
+      } else {
+        nuevos.forEach(n=>{
+          const key=(n.ficha||n.codigo||n.nombre);
+          const i=DB.data.trabajadores.findIndex(x=>(x.ficha&&x.ficha===n.ficha)||(x.codigo&&x.codigo===n.codigo)||(x.nombre===n.nombre));
+          if(i>=0){n.id=DB.data.trabajadores[i].id;DB.data.trabajadores[i]=n;}
+          else DB.data.trabajadores.push(n);
+        });
+      }
+      DB.save();renderTrabs();toast(nuevos.length+' trabajadores importados','success');
+    }catch(err){console.error(err);toast('Error leyendo Excel','err');}
+  };
+  r.readAsBinaryString(file);
+}
+function exportTrabsTemplate(){
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet([
+    {codigo:'E001',nombre:'JUAN PÉREZ',ficha:'1234',area:'moldes',rol:'operario',turno:'dia',linea:'L1',activo:true},
+    {codigo:'E002',nombre:'MARÍA SILVA',ficha:'1235',area:'pesaje',rol:'planillero',turno:'noche',linea:'L2',activo:true}
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'trabajadores');
+  XLSX.writeFile(wb,'plantilla_trabajadores.xlsx');
+  toast('Plantilla descargada','success');
+}
+
+/* ════════════ TURNOS CRUD ════════════ */
+function renderTurnos(){
+  const tb=document.getElementById('tbTurnos');
+  tb.innerHTML=DB.data.turnos.map(t=>`<tr>
+    <td class="num">${esc(t.codigo)}</td><td><strong>${esc(t.nombre)}</strong></td><td class="num">${esc(t.inicio)}</td><td class="num">${esc(t.fin)}</td>
+    <td>${t.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
+    <td><button class="btn sm ghost" onclick="openTurnoModal('${esc(t.codigo)}')">✎</button> <button class="btn sm ghost" onclick="delTurno('${esc(t.codigo)}')">✕</button></td>
+  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3);">Sin turnos</td></tr>';
+}
+function openTurnoModal(cod){
+  const t=cod?DB.data.turnos.find(x=>x.codigo===cod):{codigo:'',nombre:'',inicio:'08:00',fin:'20:00',activo:true};
+  openModal('Turno',`
+    <div class="alert" style="background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text-2);">
+      <strong>Guía rápida:</strong><br>
+      · <strong>Día</strong> — código <span class="kbd">dia</span>, 08:00 → 20:00<br>
+      · <strong>Noche</strong> — código <span class="kbd">noche</span>, 20:00 → 06:00 (cruza medianoche)<br>
+      Si escribes "noche" en el código los horarios se autocompletan.
+    </div>
+    <div class="form-field"><label class="form-label">Tipo</label>
+      <select class="select" id="f_preset" onchange="_applyTurnoPreset(this.value)">
+        <option value="">— personalizado —</option>
+        <option value="dia">Día (08:00 → 20:00)</option>
+        <option value="noche">Noche (20:00 → 06:00)</option>
+      </select>
+    </div>
+    <div class="grid-2">
+      <div class="form-field"><label class="form-label">Código</label><input class="input" id="f_codigo" value="${esc(t.codigo||'')}" ${cod?'readonly':''} oninput="_codigoTurnoHint()"></div>
+      <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(t.nombre||'')}"></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-field"><label class="form-label">Inicio</label><input class="input" id="f_inicio" type="time" value="${esc(t.inicio||'')}"></div>
+      <div class="form-field"><label class="form-label">Fin <span class="hint" id="f_finHint"></span></label><input class="input" id="f_fin" type="time" value="${esc(t.fin||'')}"></div>
+    </div>
+    <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${t.activo?'selected':''}>Activo</option><option value="0" ${!t.activo?'selected':''}>Inactivo</option></select></div>`,()=>{
+    const n={codigo:document.getElementById('f_codigo').value.trim().toLowerCase(),nombre:document.getElementById('f_nombre').value.trim(),inicio:document.getElementById('f_inicio').value,fin:document.getElementById('f_fin').value,activo:document.getElementById('f_activo').value==='1'};
+    if(!n.codigo||!n.nombre){toast('Campos obligatorios','err');return false;}
+    const i=DB.data.turnos.findIndex(x=>x.codigo===n.codigo);
+    if(i>=0)DB.data.turnos[i]=n;else DB.data.turnos.push(n);
+    DB.save();renderTurnos();toast('Turno guardado','success');return true;
+  });
+}
+function delTurno(cod){if(!confirm('¿Eliminar turno?'))return;DB.data.turnos=DB.data.turnos.filter(t=>t.codigo!==cod);DB.save();renderTurnos();}
+function _applyTurnoPreset(v){
+  if(v==='dia'){document.getElementById('f_codigo').value='dia';document.getElementById('f_nombre').value='Día';document.getElementById('f_inicio').value='08:00';document.getElementById('f_fin').value='20:00';}
+  else if(v==='noche'){document.getElementById('f_codigo').value='noche';document.getElementById('f_nombre').value='Noche';document.getElementById('f_inicio').value='20:00';document.getElementById('f_fin').value='06:00';}
+  _codigoTurnoHint();
+}
+function _codigoTurnoHint(){
+  const c=(document.getElementById('f_codigo').value||'').trim().toLowerCase();
+  const hint=document.getElementById('f_finHint');
+  const fi=document.getElementById('f_inicio'),ff=document.getElementById('f_fin'),fn=document.getElementById('f_nombre');
+  if(c==='noche'){
+    if(!fi.value||fi.value==='08:00')fi.value='20:00';
+    if(!ff.value||ff.value==='20:00')ff.value='06:00';
+    if(!fn.value)fn.value='Noche';
+    if(hint)hint.textContent='(cruza medianoche)';
+  } else if(c==='dia'){
+    if(!fi.value||fi.value==='20:00')fi.value='08:00';
+    if(!ff.value||ff.value==='06:00')ff.value='20:00';
+    if(!fn.value)fn.value='Día';
+    if(hint)hint.textContent='';
+  } else if(hint){hint.textContent='';}
+}
+
+/* ════════════ EQUIPOS CRUD ════════════ */
+function renderEquipos(){
+  const tb=document.getElementById('tbEquipos');
+  tb.innerHTML=DB.data.equipos.map(e=>`<tr>
+    <td class="num">${esc(e.codigo)}</td><td><strong>${esc(e.nombre)}</strong></td><td>${e.tipo==='tunel'?'Túnel':'Placa'}</td>
+    <td class="num">${e.capacidad||0}</td>
+    <td>${e.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
+    <td><button class="btn sm ghost" onclick="openEqModal('${esc(e.codigo)}')">✎</button> <button class="btn sm ghost" onclick="delEq('${esc(e.codigo)}')">✕</button></td>
+  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3);">Sin equipos</td></tr>';
+}
+function openEqModal(cod){
+  const e=cod?DB.data.equipos.find(x=>x.codigo===cod):{codigo:'',nombre:'',tipo:'tunel',capacidad:0,activo:true};
+  openModal('Equipo',`
+    <div class="grid-2">
+      <div class="form-field"><label class="form-label">Código</label><input class="input" id="f_codigo" value="${esc(e.codigo||'')}" ${cod?'readonly':''}></div>
+      <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(e.nombre||'')}"></div>
+      <div class="form-field"><label class="form-label">Tipo</label><select class="select" id="f_tipo"><option value="tunel" ${e.tipo==='tunel'?'selected':''}>Túnel</option><option value="placa" ${e.tipo==='placa'?'selected':''}>Placa</option></select></div>
+      <div class="form-field"><label class="form-label">Capacidad</label><input class="input" id="f_capacidad" type="number" value="${e.capacidad||0}"></div>
+      <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${e.activo?'selected':''}>Activo</option><option value="0" ${!e.activo?'selected':''}>Inactivo</option></select></div>
+    </div>`,()=>{
+    const n={codigo:document.getElementById('f_codigo').value.trim().toUpperCase(),nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,capacidad:parseInt(document.getElementById('f_capacidad').value)||0,activo:document.getElementById('f_activo').value==='1'};
+    if(!n.codigo||!n.nombre){toast('Campos obligatorios','err');return false;}
+    const i=DB.data.equipos.findIndex(x=>x.codigo===n.codigo);
+    if(i>=0)DB.data.equipos[i]=n;else DB.data.equipos.push(n);
+    DB.save();renderEquipos();toast('Equipo guardado','success');return true;
+  });
+}
+function delEq(cod){if(!confirm('¿Eliminar equipo?'))return;DB.data.equipos=DB.data.equipos.filter(e=>e.codigo!==cod);DB.save();renderEquipos();}
+
+/* ════════════ ROLES ════════════ */
+const MODULES=['dashboard','reportes','analisis','presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes'];
+function renderRoles(){
+  const tb=document.getElementById('tbRoles');
+  tb.innerHTML=`<thead><tr><th>Rol</th>${MODULES.map(m=>`<th style="text-align:center;font-size:10px;">${esc(m)}</th>`).join('')}<th></th></tr></thead><tbody>
+  ${DB.data.roles.map(r=>`<tr>
+    <td><strong>${esc(r.nombre)}</strong></td>
+    ${MODULES.map(m=>`<td style="text-align:center;"><input type="checkbox" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
+    <td><button class="btn sm ghost" onclick="delRol(${r.id})">✕</button></td>
+  </tr>`).join('')}
+  </tbody>`;
+}
+function togglePerm(rid,mod,val){const r=DB.data.roles.find(x=>x.id===rid);if(!r)return;r.permisos=r.permisos||{};r.permisos[mod]=val;DB.save();toast('Permiso actualizado','info');}
+function openRolModal(){
+  const n=prompt('Nombre del nuevo rol:');if(!n)return;
+  DB.data.roles.push({id:Date.now(),nombre:n,permisos:{}});DB.save();renderRoles();
+}
+function delRol(id){if(!confirm('¿Eliminar rol?'))return;DB.data.roles=DB.data.roles.filter(r=>r.id!==id);DB.save();renderRoles();}
+
+/* ════════════ IMPORT / EXPORT ════════════ */
+function exportJSON(){
+  const all={DB:DB.data,RT:RT.data,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(all,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='friosur_backup_'+Date.now()+'.json';a.click();
+  toast('Backup JSON descargado','success');
+}
+function importJSON(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.DB)DB.data=d.DB;DB._heal();DB.save();if(d.RT)localStorage.setItem(RT_KEY,JSON.stringify(d.RT));RT.load();renderPresets();renderTrabs();renderTurnos();renderEquipos();renderRoles();toast('Importado OK','success');}catch(err){toast('JSON inválido','err');}};r.readAsText(f);
+}
+function exportExcel(which){
+  const wb=XLSX.utils.book_new();
+  const addSheet=(name,rows)=>{if(!rows.length)return;const ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,name);};
+  if(which==='all'||which==='presets')addSheet('presets',DB.data.presets);
+  if(which==='all'||which==='trabajadores')addSheet('trabajadores',DB.data.trabajadores);
+  if(which==='all'||which==='turnos')addSheet('turnos',DB.data.turnos);
+  if(which==='all'||which==='equipos')addSheet('equipos',DB.data.equipos);
+  if(which==='all'||which==='moldes')addSheet('moldes',RT.data.moldes);
+  if(which==='all'||which==='pesajes')addSheet('pesajes',RT.data.pesajes);
+  XLSX.writeFile(wb,'friosur_'+which+'_'+Date.now()+'.xlsx');toast('Excel generado','success');
+}
+function importExcel(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=ev=>{try{
+    const wb=XLSX.read(ev.target.result,{type:'array'});
+    wb.SheetNames.forEach(name=>{const arr=XLSX.utils.sheet_to_json(wb.Sheets[name]);
+      if(name==='presets')DB.data.presets=arr;
+      else if(name==='trabajadores')DB.data.trabajadores=arr;
+      else if(name==='turnos')DB.data.turnos=arr;
+      else if(name==='equipos')DB.data.equipos=arr;
+    });DB.save();renderPresets();renderTrabs();renderTurnos();renderEquipos();toast('Excel importado','success');
+  }catch(err){toast('Excel inválido','err');}};r.readAsArrayBuffer(f);
+}
+
+/* ════════════ SUPABASE ════════════ */
+let _sb=null;
+function loadSbCreds(){try{const c=JSON.parse(localStorage.getItem(SB_KEY))||{};if(!c.url&&SB_DEFAULT.url){return{...SB_DEFAULT,connected:true};}return c;}catch(e){return{...SB_DEFAULT,connected:true};}}
+function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
+(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{connectSupabase(true);setTimeout(initAuth,500);},300);})();
+
+/* ════════════ AUTH ════════════ */
+let _currentUser=null;
+function showAuthOverlay(){document.getElementById('authOverlay').style.display='flex';}
+function hideAuthOverlay(){document.getElementById('authOverlay').style.display='none';}
+async function initAuth(){
+  if(!_sb)return;
+  const{data:{session}}=await _sb.auth.getSession();
+  if(session){await applySession(session);}else{showAuthOverlay();}
+  _sb.auth.onAuthStateChange(async(event,sess)=>{
+    if(event==='SIGNED_OUT'){_currentUser=null;showAuthOverlay();}
+    else if(event==='SIGNED_IN'&&sess){await applySession(sess);}
+  });
+}
+async function applySession(session){
+  hideAuthOverlay();
+  // Cargar perfil + rol
+  try{
+    const{data,error}=await _sb.from('user_profiles').select('*').eq('id',session.user.id).single();
+    if(error)throw error;
+    _currentUser={id:session.user.id,email:session.user.email,rol:data.rol,nombre:data.nombre||session.user.email.split('@')[0]};
+  }catch(e){_currentUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
+  applyRolePermissions();
+  updateUserBadge();
+  sbLog('Sesión: '+_currentUser.email+' ('+_currentUser.rol+')');
+  // Re-conectar supabase con token autenticado (ya lo hace automáticamente la SDK)
+  if(typeof pullAll==='function')setTimeout(pullAll,300);
+}
+async function doLogin(){
+  const email=document.getElementById('authEmail').value.trim();
+  const pass=document.getElementById('authPass').value;
+  const msg=document.getElementById('authMsg');
+  msg.textContent='';
+  if(!email||!pass){msg.textContent='Ingresa email y contraseña';return;}
+  if(!_sb){msg.textContent='Supabase no conectado';return;}
+  msg.style.color='#64748b';msg.textContent='Verificando…';
+  try{
+    const{data,error}=await _sb.auth.signInWithPassword({email,password:pass});
+    if(error)throw error;
+    msg.style.color='#16a34a';msg.textContent='✓ Ingresando…';
+    document.getElementById('authPass').value='';
+  }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
+}
+async function doLogout(){
+  if(!_sb)return;
+  await _sb.auth.signOut();
+  _currentUser=null;
+  toast('Sesión cerrada','success');
+}
+function updateUserBadge(){
+  let badge=document.getElementById('userBadge');
+  if(!badge){
+    const top=document.querySelector('.topbar-right, .topbar-actions, .topbar')||document.body;
+    badge=document.createElement('div');badge.id='userBadge';
+    badge.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(255,255,255,.1);border-radius:20px;font-size:12px;color:#fff;margin-left:12px;cursor:pointer;';
+    badge.onclick=()=>{if(confirm('¿Cerrar sesión?'))doLogout();};
+    top.appendChild(badge);
+  }
+  if(_currentUser){
+    const rolColor={admin:'#dc2626',supervisor:'#f59e0b',planillero:'#3b6fb8',operario:'#64748b'}[_currentUser.rol]||'#64748b';
+    badge.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+rolColor+';"></span><span><strong>'+esc(_currentUser.nombre)+'</strong> · '+esc(_currentUser.rol)+'</span><span style="opacity:.6;font-size:10px;">⎋</span>';
+    badge.title='Clic para cerrar sesión';
+  }
+}
+function applyRolePermissions(){
+  if(!_currentUser)return;
+  const r=_currentUser.rol;
+  // operario: solo dashboard y reportes
+  // planillero: + presets + trabajadores (solo lectura visual)
+  // supervisor: casi todo excepto ajustes/supabase
+  // admin: todo
+  const hidden={
+    operario:['presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes'],
+    planillero:['turnos','equipos','roles','supabase','ajustes'],
+    supervisor:['roles','supabase'],
+    admin:[]
+  }[r]||[];
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const p=el.getAttribute('data-page');
+    el.style.display=hidden.includes(p)?'none':'';
+  });
+}
+function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
+function connectSupabase(silent){
+  const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
+  if(!url||!key){toast('Ingresa URL y key','err');return;}
+  try{_sb=window.supabase.createClient(url,key);saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();}
+  catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
+}
+let _sbChannels=[];
+function sbSubscribeRealtime(){
+  if(!_sb)return;
+  _sbChannels.forEach(ch=>{try{_sb.removeChannel(ch);}catch(e){}});_sbChannels=[];
+  const subs=[
+    {tbl:'moldes',     target:'RT',  key:'moldes'},
+    {tbl:'pesajes',    target:'RT',  key:'pesajes'},
+    {tbl:'presets',    target:'DB',  key:'presets',    render:()=>typeof renderPresets==='function'&&renderPresets()},
+    {tbl:'trabajadores',target:'DB', key:'trabajadores',render:()=>typeof renderTrabs==='function'&&renderTrabs()},
+    {tbl:'turnos',     target:'DB',  key:'turnos',     render:()=>typeof renderTurnos==='function'&&renderTurnos()},
+    {tbl:'equipos',    target:'DB',  key:'equipos',    render:()=>typeof renderEquipos==='function'&&renderEquipos()}
+  ];
+  subs.forEach(s=>{
+    const ch=_sb.channel('rt-'+s.tbl).on('postgres_changes',{event:'*',schema:'public',table:s.tbl},(p)=>{
+      const tgt=s.target==='RT'?RT:DB;
+      if(!tgt.data)tgt.data={};
+      const arr=tgt.data[s.key]||[];
+      const mapper=SB_MAP[s.tbl]?SB_MAP[s.tbl].in:(x=>x);
+      const pkCol=(s.tbl==='turnos'||s.tbl==='equipos')?'codigo':'id';
+      if(p.eventType==='INSERT'||p.eventType==='UPDATE'){
+        const rec=mapper(p.new);
+        const i=arr.findIndex(r=>String(r[pkCol])===String(p.new[pkCol]));
+        if(i>=0)arr[i]=rec; else arr.push(rec);
+      }else if(p.eventType==='DELETE'){
+        const i=arr.findIndex(r=>String(r[pkCol])===String(p.old[pkCol]));
+        if(i>=0)arr.splice(i,1);
+      }
+      tgt.data[s.key]=arr;
+      if(s.target==='RT'&&RT.save)RT.save(); else if(s.target==='DB'&&DB.save)DB.save();
+      sbRerenderCurrent();
+      sbLog('↻ '+s.tbl+' '+p.eventType+' (id='+((p.new||p.old)[pkCol])+')');
+    }).subscribe((status)=>{sbLog('canal '+s.tbl+': '+status);});
+    _sbChannels.push(ch);
+  });
+  sbLog('Realtime: '+subs.length+' canales activos');
+}
+/* Re-render de la página actualmente visible */
+function sbRerenderCurrent(){
+  try{
+    const active=document.querySelector('.page.active, .page[style*="block"]');
+    const id=active?active.id:'';
+    if(typeof renderDashGrid==='function')renderDashGrid();
+    if(id==='page-reportes'&&typeof renderReportes==='function')renderReportes();
+    if(id==='page-analisis'&&typeof renderAnalisis==='function')renderAnalisis();
+    if(id==='page-presets'&&typeof renderPresets==='function')renderPresets();
+    if(id==='page-trabajadores'&&typeof renderTrabs==='function')renderTrabs();
+    if(id==='page-turnos'&&typeof renderTurnos==='function')renderTurnos();
+    if(id==='page-equipos'&&typeof renderEquipos==='function')renderEquipos();
+    if(id==='page-roles'&&typeof renderRoles==='function')renderRoles();
+    if(id==='page-tuneles'&&typeof renderTunReport==='function')renderTunReport();
+  }catch(e){console.warn('[rerender]',e);}
+}
+function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
+async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}try{const{data,error}=await _sb.from('presets').select('*').limit(1);if(error)throw error;toast('Conexión OK ('+data.length+' fila)','success');sbLog('Test OK: '+data.length+' filas');}catch(e){toast('Error: '+e.message,'err');sbLog('Test fallo: '+e.message,false);}}
+/* ── Mappers JS (camelCase) ↔ SQL (snake_case) ── */
+const _today=()=>new Date().toISOString().slice(0,10);
+const SB_MAP={
+  presets:{
+    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,temp_obj:r.tempObj??r.temp_obj??null,activo:r.activo!==false}),
+    in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo})
+  },
+  trabajadores:{
+    out:r=>({id:r.id,codigo:r.codigo||null,nombre:r.nombre,ficha:r.ficha||null,area:r.area||null,rol:r.rol||null,turno:r.turno||null,linea:r.linea||null,activo:r.activo!==false}),
+    in:r=>r
+  },
+  turnos:{
+    out:r=>({codigo:r.codigo,nombre:r.nombre||null,inicio:r.inicio||null,fin:r.fin||null,activo:r.activo!==false}),
+    in:r=>r
+  },
+  equipos:{
+    out:r=>({codigo:r.codigo||String(r.id||''),nombre:r.nombre||null,tipo:r.tipo||null,capacidad:r.capacidad??null,activo:r.activo!==false}),
+    in:r=>r
+  },
+  roles:{
+    out:r=>({id:r.id,nombre:r.nombre,permisos:r.permisos||{}}),
+    in:r=>r
+  },
+  moldes:{
+    out:r=>({id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,producto:r.producto||null,preset_id:r.presetId??r.preset_id??null,destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,cant:r.cant??null,pendiente:r.pendiente??null,kg:r.kg??null,guia:r.guia||null,fecha:r.fecha||_today()}),
+    in:r=>({...r,presetId:r.preset_id})
+  },
+  pesajes:{
+    out:r=>({id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,trab_id:r.trabId??r.trab_id??null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,especie:r.especie||null,tipo:r.tipo||null,kg:r.kg??null,guia:r.guia||null,fecha:r.fecha||_today()}),
+    in:r=>({...r,trabId:r.trab_id})
+  }
+};
+function _sbRows(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.out);}
+function _sbParse(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.in);}
+
+async function pushAll(){
+  if(!_sb){toast('Conecta primero','warn');return;}
+  document.getElementById('sbDot').className='status-dot syncing';
+  const tables={presets:DB.data.presets,trabajadores:DB.data.trabajadores,turnos:DB.data.turnos,equipos:DB.data.equipos,roles:DB.data.roles,moldes:RT.data.moldes,pesajes:RT.data.pesajes};
+  // Sets de IDs válidos para limpiar foreign keys
+  const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
+  const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
+  let ok=0,err=0;
+  for(const[t,rows]of Object.entries(tables)){
+    try{if(!rows||!rows.length){sbLog(t+': (vacío)');continue;}
+      let mapped=_sbRows(t,rows);
+      // Limpieza de FK huérfanas
+      if(t==='moldes'){mapped=mapped.map(r=>({...r,preset_id:validPresetIds.has(r.preset_id)?r.preset_id:null}));}
+      if(t==='pesajes'){mapped=mapped.map(r=>({...r,trab_id:validTrabIds.has(r.trab_id)?r.trab_id:null}));}
+      const pkCol=(t==='turnos'||t==='equipos')?'codigo':'id';
+      const{error}=await _sb.from(t).upsert(mapped,{onConflict:pkCol});
+      if(error)throw error;sbLog(t+': '+rows.length+' filas ↑');ok++;
+    }catch(e){sbLog(t+' error: '+e.message,false);err++;}
+  }
+  document.getElementById('sbDot').className='status-dot online';
+  toast('Push: '+ok+' OK, '+err+' err',err?'warn':'success');
+}
+async function pullAll(){
+  if(!_sb){toast('Conecta primero','warn');return;}
+  document.getElementById('sbDot').className='status-dot syncing';
+  try{
+    for(const t of['presets','trabajadores','turnos','equipos','roles']){
+      const{data,error}=await _sb.from(t).select('*');
+      if(error)throw error;DB.data[t]=_sbParse(t,data);sbLog(t+': '+data.length+' filas ↓');
+    }
+    // Operacionales
+    for(const t of['moldes','pesajes']){
+      const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+      if(error)throw error;if(!RT.data)RT.data={};RT.data[t]=_sbParse(t,data);sbLog(t+': '+data.length+' filas ↓');
+    }
+    DB.save();if(RT.save)RT.save();
+    renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
+    toast('Datos descargados','success');
+  }catch(e){toast('Error pull: '+e.message,'err');sbLog('Pull error: '+e.message,false);}
+  document.getElementById('sbDot').className='status-dot online';
+}
+function copySQL(){const el=document.getElementById('sqlBlock');navigator.clipboard.writeText(el.textContent);toast('SQL copiado','success');}
+
+const SCHEMA_SQL=`-- FRIOSUR · Schema Supabase
+-- Ejecuta en SQL Editor de Supabase antes de sincronizar
+
+create table if not exists presets(
+  id bigint primary key,
+  nombre text not null,
+  tipo text, formato text, destino text, especie text, calibre text,
+  kg_ref numeric, horas_tunel numeric, horas_placa numeric, temp_obj numeric,
+  activo boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists trabajadores(
+  id bigint primary key,
+  codigo text, nombre text not null, ficha text,
+  area text, rol text, turno text, linea text,
+  activo boolean default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists turnos(
+  codigo text primary key, nombre text, inicio time, fin time, activo boolean default true
+);
+
+create table if not exists equipos(
+  codigo text primary key, nombre text, tipo text, capacidad int, activo boolean default true
+);
+
+create table if not exists roles(
+  id bigint primary key, nombre text, permisos jsonb
+);
+
+create table if not exists moldes(
+  id bigint primary key, hora text, turno text, linea text,
+  codigo text, nombre text, ficha text,
+  producto text, preset_id bigint, destino text, calibre text, especie text,
+  cant int, pendiente int, kg numeric, guia text,
+  fecha date default current_date,
+  created_at timestamptz default now()
+);
+
+create table if not exists pesajes(
+  id bigint primary key, hora text, turno text, linea text,
+  trab_id bigint, codigo text, nombre text, ficha text,
+  especie text, tipo text, kg numeric, guia text,
+  fecha date default current_date,
+  created_at timestamptz default now()
+);
+
+create table if not exists armado_linea(
+  area text, linea text, turno text, planillero jsonb, trabajadores jsonb, producto text,
+  fecha date default current_date,
+  primary key(area,linea,fecha)
+);
+
+-- Índices útiles
+create index if not exists idx_pesajes_fecha on pesajes(fecha);
+create index if not exists idx_moldes_fecha on moldes(fecha);
+create index if not exists idx_pesajes_trab on pesajes(trab_id);
+
+-- RLS (activa cuando tengas auth):
+-- alter table presets enable row level security;
+-- create policy "read_all" on presets for select using (true);
+-- create policy "authenticated_write" on presets for all using (auth.role()='authenticated');`;
+document.getElementById('sqlBlock').textContent=SCHEMA_SQL;
+
+/* ════════════ AJUSTES / USUARIO ════════════ */
+function seedDemo(){if(!confirm('¿Resembrar datos demo? (no borra lo actual)'))return;DB.data=DB._seed();DB._heal();DB.save();toast('Seed aplicado','success');renderPresets();renderTrabs();renderTurnos();renderEquipos();}
+function saveUser(){DB.data.usuario={nombre:document.getElementById('uName').value.trim()||'—',rol:document.getElementById('uRol').value};DB.save();toast('Usuario guardado','success');}
+function setTheme(t){document.body.setAttribute('data-theme',t);localStorage.setItem('friosur_admin_theme',t);}
+(function initTheme(){const t=localStorage.getItem('friosur_admin_theme');if(t)setTheme(t);
+  document.getElementById('uName').value=DB.data.usuario.nombre;document.getElementById('uRol').value=DB.data.usuario.rol;
+})();
+
+/* ════════════ MODAL helper ════════════ */
+let _modalCallback=null;
+function openModal(title,body,cb){
+  _modalCallback=cb;
+  const m=document.createElement('div');m.className='modal-backdrop';m.id='__modal';
+  m.innerHTML=`<div class="modal"><div class="modal-hdr"><div class="modal-title">${esc(title)}</div><button class="modal-x" onclick="closeModal()">×</button></div><div class="modal-body">${body}</div><div class="modal-ftr"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" onclick="confirmModal()">Guardar</button></div></div>`;
+  document.body.appendChild(m);
+}
+function closeModal(){const m=document.getElementById('__modal');if(m)m.remove();_modalCallback=null;}
+function confirmModal(){if(_modalCallback){const ok=_modalCallback();if(ok!==false)closeModal();}else closeModal();}
+
+function tabletLink(){window.open('index.html','_blank');}
+
+/* ════════════ IMPORT/EXPORT FILTRADO (moldes/pesajes) ════════════ */
+function populateIEFilters(){
+  const sel=document.getElementById('ieTurno');if(!sel)return;
+  sel.innerHTML='<option value="">Todos</option>'+(DB.data.turnos||[]).map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre)} (${esc(t.inicio)}–${esc(t.fin)})</option>`).join('');
+  const rh=document.getElementById('ieRangoHora');
+  if(rh){const oldHandler=rh.onchange;rh.onchange=()=>{document.getElementById('ieHoraCustom').style.display=rh.value==='custom'?'':'none';previewFiltered();};}
+  previewFiltered();
+}
+function _ieResolveRango(){
+  const rh=document.getElementById('ieRangoHora').value;
+  const tur=document.getElementById('ieTurno').value;
+  if(rh==='custom')return {ini:document.getElementById('ieHoraIni').value,fin:document.getElementById('ieHoraFin').value};
+  if(rh==='turno'&&tur){
+    const t=(DB.data.turnos||[]).find(x=>x.codigo===tur);
+    if(t)return {ini:t.inicio,fin:t.fin};
+  }
+  return {ini:'',fin:''};
+}
+function _hmToMin(hm){if(!hm)return null;const [h,m]=hm.split(':').map(Number);return h*60+(m||0);}
+function _ieFilter(recs){
+  const desde=document.getElementById('ieDesde').value;
+  const hasta=document.getElementById('ieHasta').value;
+  const turno=document.getElementById('ieTurno').value;
+  const linea=(document.getElementById('ieLinea').value||'').trim().toUpperCase();
+  const {ini,fin}=_ieResolveRango();
+  const iniM=_hmToMin(ini),finM=_hmToMin(fin);
+  return recs.filter(r=>{
+    if(turno&&r.turno!==turno)return false;
+    if(linea&&(r.linea||'').toUpperCase()!==linea)return false;
+    if(desde||hasta){
+      const d=r.ts?new Date(r.ts):(r.fecha?new Date(r.fecha):null);
+      if(d){
+        if(desde&&d<new Date(desde+'T00:00:00'))return false;
+        if(hasta){const h=new Date(hasta+'T23:59:59');if(d>h)return false;}
+      }
+    }
+    if(iniM!=null&&finM!=null&&r.hora){
+      const rm=_hmToMin((r.hora||'').slice(0,5));
+      if(rm==null)return true;
+      if(iniM<finM){if(rm<iniM||rm>=finM)return false;}
+      else{if(rm<iniM&&rm>=finM)return false;} // cruza medianoche
+    }
+    return true;
+  });
+}
+function _ieSrc(mod){
+  if(mod==='moldes')return RT.data.moldes||[];
+  if(mod==='pesajes')return RT.data.pesajes||[];
+  if(mod==='presets')return DB.data.presets||[];
+  if(mod==='trabajadores')return DB.data.trabajadores||[];
+  if(mod==='turnos')return DB.data.turnos||[];
+  if(mod==='equipos')return DB.data.equipos||[];
+  return [];
+}
+function _ieWrite(mod,arr,reemplazar){
+  const tgt=_ieSrc(mod);
+  if(mod==='moldes'){RT.data.moldes=reemplazar?arr:tgt.concat(arr);RT.save();}
+  else if(mod==='pesajes'){RT.data.pesajes=reemplazar?arr:tgt.concat(arr);RT.save();}
+  else if(mod==='presets'){DB.data.presets=reemplazar?arr:tgt.concat(arr);DB.save();}
+  else if(mod==='trabajadores'){DB.data.trabajadores=reemplazar?arr:tgt.concat(arr);DB.save();renderTrabs&&renderTrabs();}
+  else if(mod==='turnos'){DB.data.turnos=reemplazar?arr:tgt.concat(arr);DB.save();renderTurnos&&renderTurnos();}
+  else if(mod==='equipos'){DB.data.equipos=reemplazar?arr:tgt.concat(arr);DB.save();renderEquipos&&renderEquipos();}
+}
+function previewFiltered(){
+  const mod=document.getElementById('ieModulo').value;
+  const src=_ieSrc(mod);
+  const catalog=['presets','trabajadores','turnos','equipos'].includes(mod);
+  const f=catalog?src:_ieFilter(src);
+  const el=document.getElementById('iePreview');
+  if(catalog){
+    el.innerHTML=`📦 <strong>${f.length}</strong> registros del catálogo <em>${mod}</em><br><span style="font-size:11px;color:var(--text-3);font-weight:400;">(los filtros de fecha/turno no aplican)</span>`;
+  } else {
+    const kg=f.reduce((s,r)=>s+(+r.kg||0),0);
+    el.innerHTML=`📊 <strong>${f.length}</strong> de ${src.length} registros filtrados<br>Total: <strong>${kg.toFixed(1)} kg</strong>`;
+  }
+}
+function exportFiltered(){
+  const mod=document.getElementById('ieModulo').value;
+  const src=_ieSrc(mod);
+  const catalog=['presets','trabajadores','turnos','equipos'].includes(mod);
+  const f=catalog?src:_ieFilter(src);
+  if(!f.length){toast('Sin registros para exportar','warn');return;}
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
+  const tag=catalog?'':'_filtrado';
+  XLSX.writeFile(wb,mod+tag+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast(f.length+' registros exportados','success');
+}
+function importFiltered(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const mod=document.getElementById('ieModulo').value;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const sh=wb.Sheets[mod]||wb.Sheets[wb.SheetNames[0]];
+      const arr=XLSX.utils.sheet_to_json(sh,{defval:''});
+      if(!arr.length){toast('Archivo vacío','err');return;}
+      const reemplazar=confirm('¿Reemplazar TODOS los '+mod+'?\n\nOK = Reemplazar · Cancelar = Añadir');
+      _ieWrite(mod,arr,reemplazar);
+      toast(arr.length+' registros importados en '+mod,'success');
+      previewFiltered();
+    }catch(err){console.error(err);toast('Error leyendo Excel','err');}
+    ev.target.value='';
+  };
+  r.readAsBinaryString(f);
+}
+
+/* ════════════ INIT ════════════ */
+renderDashboard();
+</script>
+
+</body>
+</html>

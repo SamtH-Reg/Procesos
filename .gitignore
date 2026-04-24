@@ -1,0 +1,9 @@
+.claude/
+.DS_Store
+*.log
+node_modules/
+.env
+.env.local
+Thumbs.db
+*.swp
+*.bak
