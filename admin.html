@@ -459,13 +459,9 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 <!-- ═══ TRABAJADORES ═══ -->
 <div class="page" id="page-trabajadores">
   <div class="page-hdr">
-    <div><h1 class="page-title">Trabajadores</h1><div class="page-sub">Datos maestros, fichas, áreas, roles y turnos</div></div>
+    <div><h1 class="page-title">Trabajadores</h1><div class="page-sub">Sincronizados desde proyecto Asistencia · solo lectura</div></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn ghost sm" onclick="exportExcel('trabajadores')" title="Descargar Excel">📤 Exportar Excel</button>
-      <button class="btn ghost sm" onclick="document.getElementById('trabImportFile').click()" title="Cargar Excel">📥 Importar Excel</button>
-      <input type="file" id="trabImportFile" accept=".xlsx,.xls" style="display:none;" onchange="importTrabsExcel(this.files[0]);this.value=''">
-      <button class="btn ghost sm" onclick="exportTrabsTemplate()" title="Descargar plantilla">📄 Plantilla</button>
-      <button class="btn" onclick="openTrabModal()">+ Nuevo trabajador</button>
     </div>
   </div>
   <!-- ── Sync desde proyecto Asistencia ── -->
@@ -513,20 +509,21 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
   </div>
 
   <div class="slicer-bar">
-    <div class="slicer"><label class="form-label">Buscar</label><input class="input" id="trabSearch" placeholder="Nombre, ficha, código..." oninput="renderTrabs()"></div>
-    <div class="slicer"><label class="form-label">Área</label>
-      <select class="select" id="trabArea" onchange="renderTrabs()">
-        <option value="">Todas</option><option value="moldes">Moldes</option><option value="pesaje">Pesaje</option><option value="otro">Otro</option>
-      </select>
-    </div>
-    <div class="slicer"><label class="form-label">Turno</label>
+    <div class="slicer" style="min-width:280px;"><label class="form-label">Buscar</label><input class="input" id="trabSearch" placeholder="Nombre o código..." oninput="renderTrabs()"></div>
+    <div class="slicer"><label class="form-label">Tipo Contrato</label>
       <select class="select" id="trabTurno" onchange="renderTrabs()">
-        <option value="">Todos</option><option value="dia">Día</option><option value="noche">Noche</option>
+        <option value="">Todos</option><option value="Indefinido">Indefinido</option><option value="Temporeros">Temporeros</option>
       </select>
     </div>
+    <div class="slicer"><label class="form-label">Estado</label>
+      <select class="select" id="trabArea" onchange="renderTrabs()">
+        <option value="">Todos</option><option value="activo">Activo</option><option value="inactivo">Inactivo</option>
+      </select>
+    </div>
+    <div style="margin-left:auto;font-size:12px;color:var(--text-3);align-self:flex-end;padding-bottom:4px;" id="trabCount"></div>
   </div>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>Código</th><th>Nombre</th><th>Ficha</th><th>Área</th><th>Rol</th><th>Turno</th><th>Línea</th><th>Estado</th><th></th></tr></thead>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Centro de Costo</th><th>Tipo Contrato</th><th>Estado</th></tr></thead>
     <tbody id="tbTrabajadores"></tbody>
   </table></div>
 </div>
@@ -1765,28 +1762,23 @@ async function testSyncCfg(){
     _syncLog('Conexión OK — tabla "'+cfg.table+'" accesible ('+d.length+' filas de muestra)',true);
   }catch(e){_syncLog('Error: '+e.message,false);}
 }
-/* Mapeo campos empleados (Asistencia) → trabajadores (Procesos) */
+/* Mapeo campos empleados (Asistencia) → trabajadores (Procesos)
+   Se preservan los campos originales tal cual para mostrarlos sin transformar */
 function _mapEmpleado(emp,idx){
-  // centro_costo: "1110 -PRODUCCIÓN (FS)" / "1111 -SERVICIOS DE PROD (FS)"
-  const cc=(emp.centro_costo||emp.area||'').toLowerCase();
-  let area='otro';
-  if(cc.includes('pesaje')||cc.includes('pes'))area='pesaje';
-  else if(cc.includes('molde')||cc.includes('mol'))area='moldes';
-  else if(cc.includes('empaqu')||cc.includes('emp'))area='empaque';
-  else if(cc.includes('prod'))area='produccion';
-  // contrato: "Indefinido" / "Temporeros" → turno no viene de aquí normalmente
-  // Si hay campo turno directo lo usamos, sino lo dejamos vacío
-  const turno=emp.turno||emp.turno_nombre||'';
   return {
     id: idx+1,
     codigo: emp.codigo||String(idx+1),
-    nombre: (emp.nombre||'').toUpperCase().trim(),
-    ficha: emp.codigo||null,             // código = ficha en Friosur
-    area: area,
+    nombre: (emp.nombre||'').trim(),
+    // Campos originales preservados
+    centro_costo: emp.centro_costo||null,
+    contrato: emp.contrato||null,
+    activo: emp.activo!==false,
+    // Campos auxiliares para compatibilidad con el resto del sistema
+    ficha: emp.codigo||null,
+    area: emp.area||null,
     rol: emp.rol||'operario',
-    turno: turno,
-    linea: emp.linea||null,
-    activo: emp.activo!==false
+    turno: emp.turno||null,
+    linea: emp.linea||null
   };
 }
 async function runSyncEmpleados(){
@@ -1833,15 +1825,23 @@ async function runSyncEmpleados(){
 function renderTrabs(){
   const tb=document.getElementById('tbTrabajadores');
   const q=(document.getElementById('trabSearch').value||'').toLowerCase();
-  const a=document.getElementById('trabArea').value;
-  const tu=document.getElementById('trabTurno').value;
-  const list=DB.data.trabajadores.filter(t=>(!q||t.nombre.toLowerCase().includes(q)||(t.ficha+'').includes(q)||(t.codigo||'').toLowerCase().includes(q))&&(!a||t.area===a)&&(!tu||t.turno===tu));
+  const estadoFilt=document.getElementById('trabArea').value;  // re-used for estado
+  const contratoFilt=document.getElementById('trabTurno').value; // re-used for contrato
+  const list=DB.data.trabajadores.filter(t=>{
+    if(q&&!t.nombre.toLowerCase().includes(q)&&!(t.codigo||'').toLowerCase().includes(q))return false;
+    if(contratoFilt&&(t.contrato||'')!==contratoFilt)return false;
+    if(estadoFilt==='activo'&&t.activo===false)return false;
+    if(estadoFilt==='inactivo'&&t.activo!==false)return false;
+    return true;
+  });
+  const cnt=document.getElementById('trabCount');if(cnt)cnt.textContent=list.length+' / '+DB.data.trabajadores.length+' trabajadores';
   tb.innerHTML=list.map(t=>`<tr>
-    <td class="num">${esc(t.codigo||'—')}</td><td><strong>${esc(t.nombre)}</strong></td><td class="num">${esc(t.ficha||'—')}</td>
-    <td>${esc(t.area||'—')}</td><td>${esc(t.rol||'—')}</td><td>${esc(t.turno||'—')}</td><td>${esc(t.linea||'—')}</td>
-    <td>${t.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
-    <td><button class="btn sm ghost" onclick="openTrabModal(${t.id})">✎</button> <button class="btn sm ghost" onclick="delTrab(${t.id})">✕</button></td>
-  </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
+    <td><strong style="color:var(--brand);">${esc(t.codigo||'—')}</strong></td>
+    <td>${esc(t.nombre)}</td>
+    <td>${esc(t.centro_costo||t.area||'—')}</td>
+    <td>${esc(t.contrato||t.turno||'—')}</td>
+    <td>${t.activo!==false?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
+  </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
 }
 function openTrabModal(id){
   const t=id?DB.data.trabajadores.find(x=>x.id===id):{id:Date.now(),codigo:'',nombre:'',ficha:'',area:'moldes',turno:'dia',rol:'operario',linea:'L1',activo:true};
