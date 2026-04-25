@@ -152,9 +152,26 @@ tbody tr:hover{background:var(--surface-alt);}
 .wp-title{font-weight:700;font-size:13px;}
 .wp-sub{font-size:11px;color:var(--text-3);}
 .wp-chips{display:flex;flex-direction:column;gap:6px;}
-.wp-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--border);}
+.wp-row{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;padding:4px 0;border-bottom:1px dashed var(--border);}
 .wp-row:last-child{border-bottom:0;}
-.wp-row-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);font-weight:800;width:88px;flex-shrink:0;padding-right:4px;border-right:2px solid var(--brand);}
+.wp-row-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);font-weight:800;width:108px;flex-shrink:0;padding:3px 6px 3px 4px;border-right:2px solid var(--brand);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none;transition:.12s;}
+.wp-row-label:hover{color:var(--brand);}
+.wp-row-label .wp-chev{display:inline-block;width:10px;font-size:10px;transition:transform .15s;}
+.wp-row.collapsed .wp-chev{transform:rotate(-90deg);}
+.wp-row.collapsed .wp-chips-inner{display:none;}
+.wp-row .wp-count{font-size:9px;background:var(--surface-alt);color:var(--text-3);padding:1px 5px;border-radius:8px;font-weight:700;}
+.wp-chips-inner{display:flex;flex-wrap:wrap;gap:5px;flex:1;}
+.wp-actions{display:flex;gap:4px;margin-left:auto;}
+.wp-mini{background:transparent;border:1px solid var(--border);border-radius:6px;font-size:10px;padding:2px 7px;cursor:pointer;color:var(--text-2);font-weight:600;}
+.wp-mini:hover{border-color:var(--brand);color:var(--brand);}
+/* RT pulse */
+.rt-pulse{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:var(--text-3);padding:2px 8px;border-radius:999px;background:var(--surface-alt);border:1px solid var(--border);transition:.2s;}
+.rt-pulse .rt-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;transition:.2s;}
+.rt-pulse.live{color:#059669;border-color:#10b981;background:#ecfdf5;}
+.rt-pulse.live .rt-dot{background:#10b981;box-shadow:0 0 0 0 #10b981;animation:rt-ping .9s ease-out;}
+@keyframes rt-ping{0%{box-shadow:0 0 0 0 rgba(16,185,129,.6);}100%{box-shadow:0 0 0 8px rgba(16,185,129,0);}}
+.widget.rt-flash{animation:rt-flash 1s ease-out;}
+@keyframes rt-flash{0%{box-shadow:0 0 0 2px #10b981;}100%{box-shadow:none;}}
 .wp-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--surface-alt);border:1px solid var(--border);border-radius:999px;font-size:11px;font-weight:600;cursor:grab;user-select:none;transition:.12s;}
 .wp-chip:hover{border-color:var(--accent);background:var(--surface);transform:translateY(-1px);box-shadow:var(--shadow-sm);}
 .wp-chip:active{cursor:grabbing;}
@@ -283,11 +300,16 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
   <!-- Paleta de widgets (arrastra al dashboard) -->
   <div class="wp-bar">
     <div class="wp-hdr">
-      <div>
-        <div class="wp-title">📊 Paleta de Widgets</div>
-        <div class="wp-sub">Arrastra al dashboard o pulsa el <strong>+</strong> para agregar · cambia tamaño ⇔ y color 🎨</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div>
+          <div class="wp-title">📊 Paleta de Widgets</div>
+          <div class="wp-sub">Arrastra al dashboard o pulsa el <strong>+</strong> · click en el grupo para colapsar</div>
+        </div>
+        <span class="rt-pulse" id="rtPulse" title="Actualización en tiempo real"><span class="rt-dot"></span><span id="rtPulseText">RT</span></span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <button class="wp-mini" onclick="wpToggleAll(false)" title="Expandir todos los grupos">▾ Todos</button>
+        <button class="wp-mini" onclick="wpToggleAll(true)" title="Colapsar todos los grupos">▸ Ninguno</button>
         <select class="select" id="layoutPicker" onchange="loadLayout(this.value)" style="min-width:160px;">
           <option value="">— Cargar layout —</option>
         </select>
@@ -832,24 +854,33 @@ function _shade(hex,delta){
   const out=rgb.map(v=>Math.max(0,Math.min(255,v+delta*2.55))).map(v=>Math.round(v).toString(16).padStart(2,'0'));
   return '#'+out.join('');
 }
+const WP_COLLAPSE_KEY='friosur_wp_collapsed_v1';
+function wpGetCollapsed(){try{return JSON.parse(localStorage.getItem(WP_COLLAPSE_KEY)||'{}')||{};}catch(e){return {};}}
+function wpSetCollapsed(o){try{localStorage.setItem(WP_COLLAPSE_KEY,JSON.stringify(o));}catch(e){}}
+function wpToggleGroup(g){const c=wpGetCollapsed();c[g]=!c[g];wpSetCollapsed(c);renderWidgetPalette();}
+function wpToggleAll(collapse){const c={};if(collapse){WIDGET_CATALOG.forEach(w=>{c[w.group]=true;});}wpSetCollapsed(c);renderWidgetPalette();}
 function renderWidgetPalette(){
   const box=document.getElementById('wpChips');if(!box)return;
   // Agrupar por categoría con orden definido
   const groupOrder=['KPI','Gráficos','Registros','Por hora','Consolidado','Por especie'];
   const groups={};WIDGET_CATALOG.forEach(c=>{(groups[c.group]=groups[c.group]||[]).push(c);});
+  const collapsed=wpGetCollapsed();
   // Quitar prefijos redundantes del título según el grupo
   const cleanTitle=(c)=>c.title.replace(/^(KPI · |Gráfico · |Tabla · )/,'').replace(/Moldes · /,'M: ').replace(/Pesaje · /,'P: ');
-  box.innerHTML=groupOrder.filter(g=>groups[g]).map(g=>
-    `<div class="wp-row">
-      <div class="wp-row-label">${esc(g)}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1;">${groups[g].map(c=>
+  box.innerHTML=groupOrder.filter(g=>groups[g]).map(g=>{
+    const isC=!!collapsed[g];
+    return `<div class="wp-row${isC?' collapsed':''}" data-group="${esc(g)}">
+      <div class="wp-row-label" onclick="wpToggleGroup('${esc(g).replace(/'/g,"\\'")}')" title="Click para colapsar/expandir">
+        <span class="wp-chev">▾</span><span>${esc(g)}</span><span class="wp-count">${groups[g].length}</span>
+      </div>
+      <div class="wp-chips-inner">${groups[g].map(c=>
         `<div class="wp-chip" draggable="true" data-palette="1" data-wtype="${esc(c.type)}" data-wsize="${c.size}" data-wtitle="${esc(c.title)}" title="${esc(c.title)} — arrastra o pulsa +">
           <span class="wp-icon">${c.icon}</span>${esc(cleanTitle(c))}
           <button class="wp-add" type="button" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}')" title="Agregar">+</button>
         </div>`
       ).join('')}</div>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
   // drag handlers
   box.querySelectorAll('.wp-chip').forEach(el=>{
     el.addEventListener('dragstart',e=>{
@@ -1954,34 +1985,52 @@ function sbSubscribeRealtime(){
       }
       tgt.data[s.key]=arr;
       if(s.target==='RT'&&RT.save)RT.save(); else if(s.target==='DB'&&DB.save)DB.save();
-      sbRerenderCurrent();
+      sbRerenderCurrent(s.tbl);
       sbLog('↻ '+s.tbl+' '+p.eventType+' (id='+((p.new||p.old)[pkCol])+')');
     }).subscribe((status)=>{sbLog('canal '+s.tbl+': '+status);});
     _sbChannels.push(ch);
   });
   sbLog('Realtime: '+subs.length+' canales activos');
 }
-/* Re-render con debounce (evita 16 redraws en ráfaga de realtime) */
+/* ── Re-render reactivo con debounce corto + indicador RT ── */
 let _rerenderTimer=null;
-function sbRerenderCurrent(){
-  if(_rerenderTimer)clearTimeout(_rerenderTimer);
+let _dirtyTables=new Set();
+let _rtPulseTimer=null;
+function rtPulse(tbl){
+  const el=document.getElementById('rtPulse');if(!el)return;
+  el.classList.add('live');
+  const t=document.getElementById('rtPulseText');if(t)t.textContent='RT · '+tbl;
+  if(_rtPulseTimer)clearTimeout(_rtPulseTimer);
+  _rtPulseTimer=setTimeout(()=>{el.classList.remove('live');if(t)t.textContent='RT';},900);
+}
+function sbRerenderCurrent(tbl){
+  if(tbl)_dirtyTables.add(tbl);
+  if(tbl)rtPulse(tbl);
+  if(_rerenderTimer)return; // ya programado
   _rerenderTimer=setTimeout(()=>{
     _rerenderTimer=null;
+    const dirty=new Set(_dirtyTables);_dirtyTables.clear();
     try{
       const active=document.querySelector('.page.active, .page[style*="block"]');
       const id=active?active.id:'';
-      if(typeof renderKPIs==='function')renderKPIs();
-      if(typeof renderDashGrid==='function')renderDashGrid();
-      if(id==='page-reportes'&&typeof renderReportes==='function')renderReportes();
-      if(id==='page-analisis'&&typeof renderAnalisis==='function')renderAnalisis();
-      if(id==='page-presets'&&typeof renderPresets==='function')renderPresets();
-      if(id==='page-trabajadores'&&typeof renderTrabs==='function')renderTrabs();
-      if(id==='page-turnos'&&typeof renderTurnos==='function')renderTurnos();
-      if(id==='page-equipos'&&typeof renderEquipos==='function')renderEquipos();
-      if(id==='page-roles'&&typeof renderRoles==='function')renderRoles();
-      if(id==='page-tuneles'&&typeof renderTunReport==='function')renderTunReport();
+      const dataChanged=dirty.has('moldes')||dirty.has('pesajes')||dirty.size===0;
+      // Página dashboard: KPIs + grid (afecta a moldes/pesajes y catálogos referenciados)
+      if(id==='page-dashboard'||!id){
+        if(typeof renderKPIs==='function')renderKPIs();
+        if(typeof renderDashGrid==='function')renderDashGrid();
+        const grid=document.getElementById('dashGrid');
+        if(grid){grid.querySelectorAll('.widget').forEach(w=>{w.classList.remove('rt-flash');void w.offsetWidth;w.classList.add('rt-flash');});}
+      }
+      if(id==='page-reportes'&&dataChanged&&typeof renderReportes==='function')renderReportes();
+      if(id==='page-analisis'&&dataChanged&&typeof renderAnalisis==='function')renderAnalisis();
+      if(id==='page-presets'&&dirty.has('presets')&&typeof renderPresets==='function')renderPresets();
+      if(id==='page-trabajadores'&&dirty.has('trabajadores')&&typeof renderTrabs==='function')renderTrabs();
+      if(id==='page-turnos'&&dirty.has('turnos')&&typeof renderTurnos==='function')renderTurnos();
+      if(id==='page-equipos'&&dirty.has('equipos')&&typeof renderEquipos==='function')renderEquipos();
+      if(id==='page-roles'&&dirty.has('roles')&&typeof renderRoles==='function')renderRoles();
+      if(id==='page-tuneles'&&dataChanged&&typeof renderTunReport==='function')renderTunReport();
     }catch(e){console.warn('[rerender]',e);}
-  },350);
+  },120);
 }
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
 async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}try{const{data,error}=await _sb.from('presets').select('*').limit(1);if(error)throw error;toast('Conexión OK ('+data.length+' fila)','success');sbLog('Test OK: '+data.length+' filas');}catch(e){toast('Error: '+e.message,'err');sbLog('Test fallo: '+e.message,false);}}
