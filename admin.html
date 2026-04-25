@@ -175,8 +175,8 @@ tbody tr:hover{background:var(--surface-alt);}
 .rt-pulse{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:var(--text-3);padding:2px 8px;border-radius:999px;background:var(--surface-alt);border:1px solid var(--border);transition:.2s;}
 .rt-pulse .rt-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;transition:.2s;}
 .rt-pulse.live{color:#059669;border-color:#10b981;background:#ecfdf5;}
-.rt-pulse.live .rt-dot{background:#10b981;box-shadow:0 0 0 0 #10b981;animation:rt-ping .9s ease-out;}
-@keyframes rt-ping{0%{box-shadow:0 0 0 0 rgba(16,185,129,.6);}100%{box-shadow:0 0 0 8px rgba(16,185,129,0);}}
+.rt-pulse.live .rt-dot{background:#10b981;animation:rt-breathe 1.4s ease-in-out infinite;}
+@keyframes rt-breathe{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
 .widget.rt-flash{animation:rt-flash 1s ease-out;}
 @keyframes rt-flash{0%{box-shadow:0 0 0 2px #10b981;}100%{box-shadow:none;}}
 .wp-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--surface-alt);border:1px solid var(--border);border-radius:999px;font-size:11px;font-weight:600;cursor:grab;user-select:none;transition:.12s;}
@@ -2059,12 +2059,23 @@ let _dirtyTables=new Set();
 let _rtPulseTimer=null;
 let _pollInterval=null;
 let _lastPollData='';
+let _rtPulseTbl='';
 function rtPulse(tbl){
   const el=document.getElementById('rtPulse');if(!el)return;
-  el.classList.add('live');
-  const t=document.getElementById('rtPulseText');if(t)t.textContent='RT · '+(tbl||'•');
+  // Actualizar texto solo si cambia la tabla (sin re-renderizar cada evento)
+  if(tbl&&tbl!==_rtPulseTbl){
+    _rtPulseTbl=tbl;
+    const t=document.getElementById('rtPulseText');if(t)t.textContent='RT \xb7 '+tbl;
+  }
+  // Encender solo si estaba apagado (no reparpadear en cada evento)
+  if(!el.classList.contains('live'))el.classList.add('live');
+  // Apagar 2s después del último evento (silencio = sin datos nuevos)
   if(_rtPulseTimer)clearTimeout(_rtPulseTimer);
-  _rtPulseTimer=setTimeout(()=>{el.classList.remove('live');if(t)t.textContent='RT';},900);
+  _rtPulseTimer=setTimeout(()=>{
+    _rtPulseTbl='';
+    el.classList.remove('live');
+    const t=document.getElementById('rtPulseText');if(t)t.textContent='RT';
+  },2000);
 }
 function _doRender(dirty){
   // Siempre recarga desde localStorage para garantizar datos frescos
