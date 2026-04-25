@@ -488,14 +488,20 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center;max-width:700px;">
         <label class="form-label" style="margin:0;">URL proyecto Asistencia</label>
         <input class="input" id="syncUrl" placeholder="https://xxxxx.supabase.co" style="font-size:12px;">
-        <label class="form-label" style="margin:0;">Anon Key</label>
+        <label class="form-label" style="margin:0;">API Key <span style="font-size:10px;color:var(--text-3);">(anon o service_role)</span></label>
         <input class="input" id="syncKey" placeholder="eyJhbGci..." style="font-size:12px;font-family:monospace;">
         <label class="form-label" style="margin:0;">Tabla origen</label>
         <input class="input" id="syncTable" value="empleados" style="font-size:12px;">
         <label class="form-label" style="margin:0;">Mapeo de columnas</label>
         <div style="font-size:11px;color:var(--text-3);line-height:1.8;">
-          <code>codigo → codigo</code> · <code>nombre → nombre</code> · <code>activo → activo</code><br>
+          <code>codigo → codigo · ficha</code> · <code>nombre → nombre</code> · <code>activo → activo</code><br>
           <code>centro_costo → area</code> · <code>contrato → turno</code>
+        </div>
+        <label class="form-label" style="margin:0;color:#f59e0b;">⚠ Si retorna vacío</label>
+        <div style="font-size:11px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:8px;line-height:1.7;">
+          El proyecto Asistencia tiene RLS activo. Ejecuta esto en su <strong>SQL Editor</strong>:<br>
+          <code style="display:block;margin-top:4px;background:#fff;padding:4px 6px;border-radius:4px;font-size:10px;">create policy "sync_read" on empleados for select to anon using (true);</code>
+          <span style="color:var(--text-3);">O usa la <strong>service_role key</strong> del proyecto Asistencia (Settings → API)</span>
         </div>
       </div>
       <div style="margin-top:8px;display:flex;gap:6px;">
@@ -1759,17 +1765,27 @@ async function testSyncCfg(){
     _syncLog('Conexión OK — tabla "'+cfg.table+'" accesible ('+d.length+' filas de muestra)',true);
   }catch(e){_syncLog('Error: '+e.message,false);}
 }
-/* Mapeo campos empleados → trabajadores */
+/* Mapeo campos empleados (Asistencia) → trabajadores (Procesos) */
 function _mapEmpleado(emp,idx){
+  // centro_costo: "1110 -PRODUCCIÓN (FS)" / "1111 -SERVICIOS DE PROD (FS)"
+  const cc=(emp.centro_costo||emp.area||'').toLowerCase();
+  let area='otro';
+  if(cc.includes('pesaje')||cc.includes('pes'))area='pesaje';
+  else if(cc.includes('molde')||cc.includes('mol'))area='moldes';
+  else if(cc.includes('empaqu')||cc.includes('emp'))area='empaque';
+  else if(cc.includes('prod'))area='produccion';
+  // contrato: "Indefinido" / "Temporeros" → turno no viene de aquí normalmente
+  // Si hay campo turno directo lo usamos, sino lo dejamos vacío
+  const turno=emp.turno||emp.turno_nombre||'';
   return {
-    id: idx+1,                           // id bigint autogenerado por posición
+    id: idx+1,
     codigo: emp.codigo||String(idx+1),
     nombre: (emp.nombre||'').toUpperCase().trim(),
-    ficha: emp.codigo||null,
-    area: (emp.centro_costo||'').toLowerCase().includes('pesaje')?'pesaje':(emp.centro_costo||'').toLowerCase().includes('molde')?'moldes':'otro',
-    rol: 'operario',
-    turno: (emp.contrato||'').toLowerCase().includes('noche')?'noche':'dia',
-    linea: null,
+    ficha: emp.codigo||null,             // código = ficha en Friosur
+    area: area,
+    rol: emp.rol||'operario',
+    turno: turno,
+    linea: emp.linea||null,
     activo: emp.activo!==false
   };
 }
@@ -1790,7 +1806,7 @@ async function runSyncEmpleados(){
     // 1. Descargar empleados del proyecto Asistencia (paginado en 1000)
     let all=[],offset=0,chunk;
     do{
-      const r=await fetch(`${cfg.url}/rest/v1/${cfg.table}?select=*&activo=eq.true&limit=1000&offset=${offset}`,
+      const r=await fetch(`${cfg.url}/rest/v1/${cfg.table}?select=*&limit=1000&offset=${offset}`,
         {headers:{'apikey':cfg.key,'Authorization':'Bearer '+cfg.key,'Range-Unit':'items'}});
       if(!r.ok)throw new Error('HTTP '+r.status+' al leer '+cfg.table);
       chunk=await r.json();all=all.concat(chunk);offset+=chunk.length;
