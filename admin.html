@@ -164,6 +164,13 @@ tbody tr:hover{background:var(--surface-alt);}
 .wp-actions{display:flex;gap:4px;margin-left:auto;}
 .wp-mini{background:transparent;border:1px solid var(--border);border-radius:6px;font-size:10px;padding:2px 7px;cursor:pointer;color:var(--text-2);font-weight:600;}
 .wp-mini:hover{border-color:var(--brand);color:var(--brand);}
+.wp-collapse-btn{background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;width:26px;height:26px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .2s,background .15s;}
+.wp-collapse-btn:hover{background:var(--brand);color:#fff;border-color:var(--brand);}
+.wp-bar.bar-collapsed .wp-collapse-btn{transform:rotate(-90deg);}
+.wp-bar.bar-collapsed #wpBody{display:none;}
+.wp-bar.bar-collapsed #wpExpandControls{display:none!important;}
+.wp-bar.bar-collapsed .wp-sub{display:none;}
+.wp-bar.bar-collapsed{padding-bottom:0;}
 /* RT pulse */
 .rt-pulse{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:var(--text-3);padding:2px 8px;border-radius:999px;background:var(--surface-alt);border:1px solid var(--border);transition:.2s;}
 .rt-pulse .rt-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;transition:.2s;}
@@ -298,18 +305,22 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
   <div class="grid-4" id="kpiRow" style="margin-bottom:16px;"></div>
 
   <!-- Paleta de widgets (arrastra al dashboard) -->
-  <div class="wp-bar">
-    <div class="wp-hdr">
-      <div style="display:flex;align-items:center;gap:10px;">
+  <div class="wp-bar" id="wpBar">
+    <!-- Cabecera siempre visible: título + botón colapsar + RT + controles -->
+    <div class="wp-hdr" style="cursor:default;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="wp-collapse-btn" id="wpCollapseBtn" onclick="wpBarToggle()" title="Colapsar / Expandir paleta">▾</button>
         <div>
           <div class="wp-title">📊 Paleta de Widgets</div>
-          <div class="wp-sub">Arrastra al dashboard o pulsa el <strong>+</strong> · click en el grupo para colapsar</div>
+          <div class="wp-sub" id="wpBarSub">Arrastra al dashboard o pulsa el <strong>+</strong> · click en grupo para colapsar</div>
         </div>
         <span class="rt-pulse" id="rtPulse" title="Actualización en tiempo real"><span class="rt-dot"></span><span id="rtPulseText">RT</span></span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <button class="wp-mini" onclick="wpToggleAll(false)" title="Expandir todos los grupos">▾ Todos</button>
-        <button class="wp-mini" onclick="wpToggleAll(true)" title="Colapsar todos los grupos">▸ Ninguno</button>
+        <span id="wpExpandControls" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="wp-mini" onclick="wpToggleAll(false)" title="Expandir todos los grupos">▾ Todos</button>
+          <button class="wp-mini" onclick="wpToggleAll(true)" title="Colapsar todos los grupos">▸ Ninguno</button>
+        </span>
         <select class="select" id="layoutPicker" onchange="loadLayout(this.value)" style="min-width:160px;">
           <option value="">— Cargar layout —</option>
         </select>
@@ -318,7 +329,10 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
         <button class="btn ghost sm" onclick="resetDashLayout()">↺ Default</button>
       </div>
     </div>
-    <div class="wp-chips" id="wpChips"></div>
+    <!-- Cuerpo colapsable -->
+    <div id="wpBody">
+      <div class="wp-chips" id="wpChips"></div>
+    </div>
   </div>
 
   <div class="dash-grid" id="dashGrid"></div>
@@ -842,6 +856,7 @@ function applyFechaPreset(){
 
 function renderDashboard(){
   populateSlicers();
+  wpBarInit();
   renderWidgetPalette();
   refreshLayoutPicker();
   renderKPIs();
@@ -853,6 +868,15 @@ function _shade(hex,delta){
   const rgb=[0,2,4].map(i=>parseInt(h.slice(i,i+2),16));
   const out=rgb.map(v=>Math.max(0,Math.min(255,v+delta*2.55))).map(v=>Math.round(v).toString(16).padStart(2,'0'));
   return '#'+out.join('');
+}
+const WP_BAR_KEY='friosur_wp_bar_v1';
+function wpBarToggle(){
+  const bar=document.getElementById('wpBar');
+  const isCollapsed=bar.classList.toggle('bar-collapsed');
+  try{localStorage.setItem(WP_BAR_KEY,isCollapsed?'1':'0');}catch(e){}
+}
+function wpBarInit(){
+  try{if(localStorage.getItem(WP_BAR_KEY)==='1')document.getElementById('wpBar').classList.add('bar-collapsed');}catch(e){}
 }
 const WP_COLLAPSE_KEY='friosur_wp_collapsed_v2';
 // Por defecto todos los grupos están colapsados; el usuario expande lo que necesita
