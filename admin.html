@@ -1723,7 +1723,8 @@ function delPreset(id){if(!confirm('¿Eliminar preset?'))return;DB.data.presets=
 
 /* ════════════ SYNC DESDE ASISTENCIA ════════════ */
 const SYNC_KEY='friosur_sync_cfg_v1';
-function _syncCfg(){try{return JSON.parse(localStorage.getItem(SYNC_KEY))||{};}catch(e){return{};}}
+const SYNC_DEFAULT={url:'https://qvtztwqbbbzortkodtla.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2dHp0d3FiYmJ6b3J0a29kdGxhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NDA4NTMsImV4cCI6MjA4OTAxNjg1M30.zMcRweclE46qwOCTduo7sLfduZxXjKvFLmim7nZyiok',table:'empleados'};
+function _syncCfg(){try{const s=JSON.parse(localStorage.getItem(SYNC_KEY));return(s&&s.url)?s:SYNC_DEFAULT;}catch(e){return SYNC_DEFAULT;}}
 function _syncLog(msg,ok){
   const el=document.getElementById('syncLog');if(!el)return;
   el.style.display='block';
