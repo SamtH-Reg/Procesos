@@ -1810,17 +1810,11 @@ async function runSyncEmpleados(){
     _syncLog(`${all.length} empleados descargados — mapeando…`);
     // 2. Mapear a formato trabajadores
     const mapped=all.map((e,i)=>_mapEmpleado(e,i));
-    // 3. Guardar en DB local (reemplaza)
-    DB.data.trabajadores=mapped;DB._heal();DB.save();
-    // 4. Subir a Supabase Procesos si está conectado
-    let supaMsg='';
-    if(_sb){
-      _syncLog('Subiendo a Supabase Procesos…');
-      const{error}=await _sb.from('trabajadores').upsert(_sbRows('trabajadores',mapped),{onConflict:'id'});
-      supaMsg=error?' (error Supabase: '+error.message+')':' y subidos a Supabase';
-    }
+    // 3. Guardar SOLO en localStorage (no pushear a Supabase Procesos
+    //    porque su tabla no tiene centro_costo/contrato y el RT event los borraría)
+    DB.data.trabajadores=mapped;DB.save();
     renderTrabs();
-    _syncLog(`✓ ${mapped.length} trabajadores sincronizados`+supaMsg,true);
+    _syncLog(`✓ ${mapped.length} trabajadores sincronizados desde Asistencia`,true);
     toast(mapped.length+' trabajadores importados desde Asistencia','success');
   }catch(e){_syncLog('Error: '+e.message,false);toast('Error sync: '+e.message,'err');}
   btn.disabled=false;btn.textContent='↓ Sincronizar ahora';
@@ -1842,8 +1836,8 @@ function renderTrabs(){
   tb.innerHTML=list.map(t=>`<tr>
     <td><strong style="color:var(--brand);">${esc(t.codigo||'—')}</strong></td>
     <td>${esc(t.nombre)}</td>
-    <td>${esc(t.centro_costo||t.area||'—')}</td>
-    <td>${esc(t.contrato||t.turno||'—')}</td>
+    <td>${esc(t.centro_costo||'—')}</td>
+    <td>${esc(t.contrato||'—')}</td>
     <td>${t.activo!==false?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
   </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
 }
@@ -2181,6 +2175,9 @@ function sbSubscribeRealtime(){
       const arr=tgt.data[s.key]||[];
       const mapper=SB_MAP[s.tbl]?SB_MAP[s.tbl].in:(x=>x);
       const pkCol=(s.tbl==='turnos'||s.tbl==='equipos')?'codigo':'id';
+      // Trabajadores vienen de Asistencia (sync externo) — ignorar eventos RT de Procesos
+      // para no sobreescribir centro_costo/contrato que Procesos no tiene en su schema
+      if(s.tbl==='trabajadores'){sbLog('↻ trabajadores RT ignorado (datos de Asistencia)');sbRerenderCurrent(s.tbl);return;}
       if(p.eventType==='INSERT'||p.eventType==='UPDATE'){
         const rec=mapper(p.new);
         const i=arr.findIndex(r=>String(r[pkCol])===String(p.new[pkCol]));
