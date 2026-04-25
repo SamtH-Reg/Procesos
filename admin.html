@@ -595,11 +595,6 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
         Las credenciales se guardan en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>). Para producción usa RLS y una función serverless que proteja la anon key.
       </div>
     </div>
-    <div class="card">
-      <div class="card-hdr"><div class="card-title">📋 Schema SQL</div><button class="btn sm ghost" onclick="copySQL()">Copiar</button></div>
-      <div style="font-size:12px;color:var(--text-3);margin-bottom:10px;">Ejecuta este SQL en <strong>SQL Editor</strong> de Supabase antes de sincronizar. Descarga también <span class="kbd">supabase_schema.sql</span>.</div>
-      <pre class="sql" id="sqlBlock"></pre>
-    </div>
   </div>
   <div class="card" style="margin-top:16px;">
     <div class="card-hdr"><div class="card-title">🧪 Log de sincronización</div><button class="btn sm ghost" onclick="document.getElementById('sbLog').innerHTML='';">Limpiar</button></div>
@@ -2230,74 +2225,6 @@ async function pullAll(){
   }catch(e){toast('Error pull: '+e.message,'err');sbLog('Pull error: '+e.message,false);}
   document.getElementById('sbDot').className='status-dot online';
 }
-function copySQL(){const el=document.getElementById('sqlBlock');navigator.clipboard.writeText(el.textContent);toast('SQL copiado','success');}
-
-const SCHEMA_SQL=`-- FRIOSUR · Schema Supabase
--- Ejecuta en SQL Editor de Supabase antes de sincronizar
-
-create table if not exists presets(
-  id bigint primary key,
-  nombre text not null,
-  tipo text, formato text, destino text, especie text, calibre text,
-  kg_ref numeric, horas_tunel numeric, horas_placa numeric, temp_obj numeric,
-  activo boolean default true,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-create table if not exists trabajadores(
-  id bigint primary key,
-  codigo text, nombre text not null, ficha text,
-  area text, rol text, turno text, linea text,
-  activo boolean default true,
-  created_at timestamptz default now()
-);
-
-create table if not exists turnos(
-  codigo text primary key, nombre text, inicio time, fin time, activo boolean default true
-);
-
-create table if not exists equipos(
-  codigo text primary key, nombre text, tipo text, capacidad int, activo boolean default true
-);
-
-create table if not exists roles(
-  id bigint primary key, nombre text, permisos jsonb
-);
-
-create table if not exists moldes(
-  id bigint primary key, hora text, turno text, linea text,
-  codigo text, nombre text, ficha text,
-  producto text, preset_id bigint, destino text, calibre text, especie text,
-  cant int, pendiente int, kg numeric, guia text,
-  fecha date default current_date,
-  created_at timestamptz default now()
-);
-
-create table if not exists pesajes(
-  id bigint primary key, hora text, turno text, linea text,
-  trab_id bigint, codigo text, nombre text, ficha text,
-  especie text, tipo text, kg numeric, guia text,
-  fecha date default current_date,
-  created_at timestamptz default now()
-);
-
-create table if not exists armado_linea(
-  area text, linea text, turno text, planillero jsonb, trabajadores jsonb, producto text,
-  fecha date default current_date,
-  primary key(area,linea,fecha)
-);
-
--- Índices útiles
-create index if not exists idx_pesajes_fecha on pesajes(fecha);
-create index if not exists idx_moldes_fecha on moldes(fecha);
-create index if not exists idx_pesajes_trab on pesajes(trab_id);
-
--- RLS (activa cuando tengas auth):
--- alter table presets enable row level security;
--- create policy "read_all" on presets for select using (true);
--- create policy "authenticated_write" on presets for all using (auth.role()='authenticated');`;
-document.getElementById('sqlBlock').textContent=SCHEMA_SQL;
 
 /* ════════════ AJUSTES / USUARIO ════════════ */
 function seedDemo(){if(!confirm('¿Resembrar datos demo? (no borra lo actual)'))return;DB.data=DB._seed();DB._heal();DB.save();toast('Seed aplicado','success');renderPresets();renderTrabs();renderTurnos();renderEquipos();}
