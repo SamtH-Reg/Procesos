@@ -854,8 +854,15 @@ function _shade(hex,delta){
   const out=rgb.map(v=>Math.max(0,Math.min(255,v+delta*2.55))).map(v=>Math.round(v).toString(16).padStart(2,'0'));
   return '#'+out.join('');
 }
-const WP_COLLAPSE_KEY='friosur_wp_collapsed_v1';
-function wpGetCollapsed(){try{return JSON.parse(localStorage.getItem(WP_COLLAPSE_KEY)||'{}')||{};}catch(e){return {};}}
+const WP_COLLAPSE_KEY='friosur_wp_collapsed_v2';
+// Por defecto todos los grupos están colapsados; el usuario expande lo que necesita
+function _wpDefault(){const c={};WIDGET_CATALOG.forEach(w=>{c[w.group]=true;});return c;}
+function wpGetCollapsed(){
+  try{
+    const raw=localStorage.getItem(WP_COLLAPSE_KEY);
+    return raw?JSON.parse(raw):_wpDefault();
+  }catch(e){return _wpDefault();}
+}
 function wpSetCollapsed(o){try{localStorage.setItem(WP_COLLAPSE_KEY,JSON.stringify(o));}catch(e){}}
 function wpToggleGroup(g){const c=wpGetCollapsed();c[g]=!c[g];wpSetCollapsed(c);renderWidgetPalette();}
 function wpToggleAll(collapse){const c={};if(collapse){WIDGET_CATALOG.forEach(w=>{c[w.group]=true;});}wpSetCollapsed(c);renderWidgetPalette();}
