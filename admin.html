@@ -468,6 +468,44 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       <button class="btn" onclick="openTrabModal()">+ Nuevo trabajador</button>
     </div>
   </div>
+  <!-- ── Sync desde proyecto Asistencia ── -->
+  <div class="card" id="syncCard" style="margin-bottom:14px;padding:12px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px;">🔗</span>
+        <div>
+          <div style="font-weight:700;font-size:13px;">Sincronizar desde proyecto Asistencia</div>
+          <div style="font-size:11px;color:var(--text-3);">Importa empleados del otro proyecto Supabase → mapea a trabajadores de Procesos</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn ghost sm" onclick="toggleSyncCfg()" id="syncCfgBtn">⚙ Configurar</button>
+        <button class="btn sm" onclick="runSyncEmpleados()" id="syncRunBtn">↓ Sincronizar ahora</button>
+      </div>
+    </div>
+    <!-- Config expandible -->
+    <div id="syncCfg" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center;max-width:700px;">
+        <label class="form-label" style="margin:0;">URL proyecto Asistencia</label>
+        <input class="input" id="syncUrl" placeholder="https://xxxxx.supabase.co" style="font-size:12px;">
+        <label class="form-label" style="margin:0;">Anon Key</label>
+        <input class="input" id="syncKey" placeholder="eyJhbGci..." style="font-size:12px;font-family:monospace;">
+        <label class="form-label" style="margin:0;">Tabla origen</label>
+        <input class="input" id="syncTable" value="empleados" style="font-size:12px;">
+        <label class="form-label" style="margin:0;">Mapeo de columnas</label>
+        <div style="font-size:11px;color:var(--text-3);line-height:1.8;">
+          <code>codigo → codigo</code> · <code>nombre → nombre</code> · <code>activo → activo</code><br>
+          <code>centro_costo → area</code> · <code>contrato → turno</code>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px;">
+        <button class="btn ghost sm" onclick="saveSyncCfg()">💾 Guardar configuración</button>
+        <button class="btn ghost sm" onclick="testSyncCfg()">🔌 Probar conexión</button>
+      </div>
+    </div>
+    <div id="syncLog" style="margin-top:8px;font-size:11px;color:var(--text-3);display:none;"></div>
+  </div>
+
   <div class="slicer-bar">
     <div class="slicer"><label class="form-label">Buscar</label><input class="input" id="trabSearch" placeholder="Nombre, ficha, código..." oninput="renderTrabs()"></div>
     <div class="slicer"><label class="form-label">Área</label>
@@ -1683,6 +1721,97 @@ function openPresetModal(id){
 }
 function delPreset(id){if(!confirm('¿Eliminar preset?'))return;DB.data.presets=DB.data.presets.filter(p=>p.id!==id);DB.save();renderPresets();}
 
+/* ════════════ SYNC DESDE ASISTENCIA ════════════ */
+const SYNC_KEY='friosur_sync_cfg_v1';
+function _syncCfg(){try{return JSON.parse(localStorage.getItem(SYNC_KEY))||{};}catch(e){return{};}}
+function _syncLog(msg,ok){
+  const el=document.getElementById('syncLog');if(!el)return;
+  el.style.display='block';
+  const color=ok===false?'#dc2626':ok===true?'#16a34a':'var(--text-3)';
+  el.innerHTML=`<span style="color:${color};">${esc(msg)}</span>`;
+}
+function toggleSyncCfg(){
+  const cfg=document.getElementById('syncCfg');
+  const open=cfg.style.display==='none';
+  cfg.style.display=open?'block':'none';
+  if(open){
+    const s=_syncCfg();
+    document.getElementById('syncUrl').value=s.url||'';
+    document.getElementById('syncKey').value=s.key||'';
+    document.getElementById('syncTable').value=s.table||'empleados';
+  }
+}
+function saveSyncCfg(){
+  const cfg={url:document.getElementById('syncUrl').value.trim(),key:document.getElementById('syncKey').value.trim(),table:document.getElementById('syncTable').value.trim()||'empleados'};
+  if(!cfg.url||!cfg.key){_syncLog('Completa URL y anon key','false');return;}
+  localStorage.setItem(SYNC_KEY,JSON.stringify(cfg));
+  _syncLog('Configuración guardada ✓',true);
+}
+async function testSyncCfg(){
+  saveSyncCfg();
+  const cfg=_syncCfg();if(!cfg.url||!cfg.key){_syncLog('Configura URL y key primero',false);return;}
+  _syncLog('Probando conexión…');
+  try{
+    const r=await fetch(`${cfg.url}/rest/v1/${cfg.table}?limit=1`,{headers:{'apikey':cfg.key,'Authorization':'Bearer '+cfg.key}});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    _syncLog('Conexión OK — tabla "'+cfg.table+'" accesible ('+d.length+' filas de muestra)',true);
+  }catch(e){_syncLog('Error: '+e.message,false);}
+}
+/* Mapeo campos empleados → trabajadores */
+function _mapEmpleado(emp,idx){
+  return {
+    id: idx+1,                           // id bigint autogenerado por posición
+    codigo: emp.codigo||String(idx+1),
+    nombre: (emp.nombre||'').toUpperCase().trim(),
+    ficha: emp.codigo||null,
+    area: (emp.centro_costo||'').toLowerCase().includes('pesaje')?'pesaje':(emp.centro_costo||'').toLowerCase().includes('molde')?'moldes':'otro',
+    rol: 'operario',
+    turno: (emp.contrato||'').toLowerCase().includes('noche')?'noche':'dia',
+    linea: null,
+    activo: emp.activo!==false
+  };
+}
+async function runSyncEmpleados(){
+  const cfg=_syncCfg();
+  if(!cfg.url||!cfg.key){
+    _syncLog('');
+    document.getElementById('syncCfg').style.display='block';
+    const s=_syncCfg();
+    document.getElementById('syncUrl').value=s.url||'';
+    document.getElementById('syncKey').value=s.key||'';
+    document.getElementById('syncTable').value=s.table||'empleados';
+    _syncLog('⚙ Configura primero la conexión al proyecto Asistencia',false);return;
+  }
+  const btn=document.getElementById('syncRunBtn');btn.disabled=true;btn.textContent='Sincronizando…';
+  _syncLog('Descargando empleados…');
+  try{
+    // 1. Descargar empleados del proyecto Asistencia (paginado en 1000)
+    let all=[],offset=0,chunk;
+    do{
+      const r=await fetch(`${cfg.url}/rest/v1/${cfg.table}?select=*&activo=eq.true&limit=1000&offset=${offset}`,
+        {headers:{'apikey':cfg.key,'Authorization':'Bearer '+cfg.key,'Range-Unit':'items'}});
+      if(!r.ok)throw new Error('HTTP '+r.status+' al leer '+cfg.table);
+      chunk=await r.json();all=all.concat(chunk);offset+=chunk.length;
+    }while(chunk.length===1000);
+    _syncLog(`${all.length} empleados descargados — mapeando…`);
+    // 2. Mapear a formato trabajadores
+    const mapped=all.map((e,i)=>_mapEmpleado(e,i));
+    // 3. Guardar en DB local (reemplaza)
+    DB.data.trabajadores=mapped;DB._heal();DB.save();
+    // 4. Subir a Supabase Procesos si está conectado
+    let supaMsg='';
+    if(_sb){
+      _syncLog('Subiendo a Supabase Procesos…');
+      const{error}=await _sb.from('trabajadores').upsert(_sbRows('trabajadores',mapped),{onConflict:'id'});
+      supaMsg=error?' (error Supabase: '+error.message+')':' y subidos a Supabase';
+    }
+    renderTrabs();
+    _syncLog(`✓ ${mapped.length} trabajadores sincronizados`+supaMsg,true);
+    toast(mapped.length+' trabajadores importados desde Asistencia','success');
+  }catch(e){_syncLog('Error: '+e.message,false);toast('Error sync: '+e.message,'err');}
+  btn.disabled=false;btn.textContent='↓ Sincronizar ahora';
+}
 /* ════════════ TRABAJADORES CRUD ════════════ */
 function renderTrabs(){
   const tb=document.getElementById('tbTrabajadores');
