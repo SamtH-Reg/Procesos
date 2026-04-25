@@ -1892,8 +1892,12 @@ async function applySession(session){
   applyRolePermissions();
   updateUserBadge();
   sbLog('Sesión: '+_currentUser.email+' ('+_currentUser.rol+')');
-  // Re-conectar supabase con token autenticado (ya lo hace automáticamente la SDK)
-  if(typeof pullAll==='function')setTimeout(pullAll,300);
+  // Re-suscribir realtime con token autenticado y arrancar polling de respaldo
+  setTimeout(()=>{
+    if(typeof pullAll==='function')pullAll();
+    sbSubscribeRealtime(); // reconectar canales con JWT autenticado
+    if(typeof sbStartPoll==='function')sbStartPoll();
+  },400);
 }
 async function doLogin(){
   const email=document.getElementById('authEmail').value.trim();
@@ -1912,6 +1916,7 @@ async function doLogin(){
 }
 async function doLogout(){
   if(!_sb)return;
+  if(typeof sbStopPoll==='function')sbStopPoll();
   await _sb.auth.signOut();
   _currentUser=null;
   toast('Sesión cerrada','success');
@@ -1996,42 +2001,80 @@ function sbSubscribeRealtime(){
 let _rerenderTimer=null;
 let _dirtyTables=new Set();
 let _rtPulseTimer=null;
+let _pollInterval=null;
+let _lastPollData='';
 function rtPulse(tbl){
   const el=document.getElementById('rtPulse');if(!el)return;
   el.classList.add('live');
-  const t=document.getElementById('rtPulseText');if(t)t.textContent='RT · '+tbl;
+  const t=document.getElementById('rtPulseText');if(t)t.textContent='RT · '+(tbl||'•');
   if(_rtPulseTimer)clearTimeout(_rtPulseTimer);
   _rtPulseTimer=setTimeout(()=>{el.classList.remove('live');if(t)t.textContent='RT';},900);
+}
+function _doRender(dirty){
+  // Siempre recarga desde localStorage para garantizar datos frescos
+  try{RT.load();}catch(e){}
+  try{
+    const active=document.querySelector('.page.active');
+    const id=active?active.id:'page-dashboard';
+    const dataChanged=!dirty||dirty.has('moldes')||dirty.has('pesajes');
+    // Dashboard: siempre actualiza KPIs + grid
+    if(typeof renderKPIs==='function')renderKPIs();
+    if(id==='page-dashboard'&&typeof renderDashGrid==='function'){
+      renderDashGrid();
+      // flash verde en los widgets para indicar actualización
+      const grid=document.getElementById('dashGrid');
+      if(grid)grid.querySelectorAll('.widget').forEach(w=>{w.classList.remove('rt-flash');void w.offsetWidth;w.classList.add('rt-flash');});
+    }
+    if(id==='page-reportes'&&dataChanged&&typeof renderReportes==='function')renderReportes();
+    if(id==='page-analisis'&&dataChanged&&typeof renderAnalisis==='function')renderAnalisis();
+    if(id==='page-presets'&&(!dirty||dirty.has('presets'))&&typeof renderPresets==='function')renderPresets();
+    if(id==='page-trabajadores'&&(!dirty||dirty.has('trabajadores'))&&typeof renderTrabs==='function')renderTrabs();
+    if(id==='page-turnos'&&(!dirty||dirty.has('turnos'))&&typeof renderTurnos==='function')renderTurnos();
+    if(id==='page-equipos'&&(!dirty||dirty.has('equipos'))&&typeof renderEquipos==='function')renderEquipos();
+    if(id==='page-roles'&&(!dirty||dirty.has('roles'))&&typeof renderRoles==='function')renderRoles();
+    if(id==='page-tuneles'&&dataChanged&&typeof renderTunReport==='function')renderTunReport();
+  }catch(e){console.warn('[rerender]',e);}
 }
 function sbRerenderCurrent(tbl){
   if(tbl)_dirtyTables.add(tbl);
   if(tbl)rtPulse(tbl);
-  if(_rerenderTimer)return; // ya programado
+  if(_rerenderTimer)return;
   _rerenderTimer=setTimeout(()=>{
     _rerenderTimer=null;
     const dirty=new Set(_dirtyTables);_dirtyTables.clear();
-    try{
-      const active=document.querySelector('.page.active, .page[style*="block"]');
-      const id=active?active.id:'';
-      const dataChanged=dirty.has('moldes')||dirty.has('pesajes')||dirty.size===0;
-      // Página dashboard: KPIs + grid (afecta a moldes/pesajes y catálogos referenciados)
-      if(id==='page-dashboard'||!id){
-        if(typeof renderKPIs==='function')renderKPIs();
-        if(typeof renderDashGrid==='function')renderDashGrid();
-        const grid=document.getElementById('dashGrid');
-        if(grid){grid.querySelectorAll('.widget').forEach(w=>{w.classList.remove('rt-flash');void w.offsetWidth;w.classList.add('rt-flash');});}
-      }
-      if(id==='page-reportes'&&dataChanged&&typeof renderReportes==='function')renderReportes();
-      if(id==='page-analisis'&&dataChanged&&typeof renderAnalisis==='function')renderAnalisis();
-      if(id==='page-presets'&&dirty.has('presets')&&typeof renderPresets==='function')renderPresets();
-      if(id==='page-trabajadores'&&dirty.has('trabajadores')&&typeof renderTrabs==='function')renderTrabs();
-      if(id==='page-turnos'&&dirty.has('turnos')&&typeof renderTurnos==='function')renderTurnos();
-      if(id==='page-equipos'&&dirty.has('equipos')&&typeof renderEquipos==='function')renderEquipos();
-      if(id==='page-roles'&&dirty.has('roles')&&typeof renderRoles==='function')renderRoles();
-      if(id==='page-tuneles'&&dataChanged&&typeof renderTunReport==='function')renderTunReport();
-    }catch(e){console.warn('[rerender]',e);}
-  },120);
+    _doRender(dirty);
+  },100);
 }
+/* Polling de respaldo: verifica Supabase cada 8s, re-renderiza si hay cambios */
+async function _pollFresh(){
+  if(!_sb||!_currentUser)return;
+  try{
+    const ts=[];
+    for(const t of['moldes','pesajes']){
+      const{data,error}=await _sb.from(t).select('id').order('id',{ascending:false}).limit(1);
+      if(!error&&data&&data[0])ts.push(t+':'+data[0].id);
+    }
+    const sig=ts.join('|');
+    if(sig&&sig!==_lastPollData){
+      _lastPollData=sig;
+      // Hay cambios — descarga datos frescos y re-renderiza
+      for(const t of['moldes','pesajes']){
+        const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+        if(!error&&data){if(!RT.data)RT.data={};RT.data[t]=_sbParse(t,data);}
+      }
+      RT.save();
+      rtPulse('poll');
+      _doRender(new Set(['moldes','pesajes']));
+      sbLog('↺ poll detectó cambios → actualizado');
+    }
+  }catch(e){/* silencioso — no es crítico */}
+}
+function sbStartPoll(){
+  if(_pollInterval)clearInterval(_pollInterval);
+  _pollInterval=setInterval(_pollFresh,8000);
+  sbLog('Polling de respaldo activo (8s)');
+}
+function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
 async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}try{const{data,error}=await _sb.from('presets').select('*').limit(1);if(error)throw error;toast('Conexión OK ('+data.length+' fila)','success');sbLog('Test OK: '+data.length+' filas');}catch(e){toast('Error: '+e.message,'err');sbLog('Test fallo: '+e.message,false);}}
 /* ── Mappers JS (camelCase) ↔ SQL (snake_case) ── */
