@@ -2335,14 +2335,7 @@ function showToast(msg,type){
 /* Stepper + / − : los botones ya tienen onclick inline que llaman a mRegStep/gRegStep/eRegStep.
    NO añadir listener genérico aquí: duplicaría el incremento (+2 por pulsación). */
 
-/* Preset selection */
-document.querySelectorAll('.preset-grid').forEach(grid=>{
-  grid.addEventListener('click',e=>{
-    const card=e.target.closest('.preset-card');if(!card) return;
-    grid.querySelectorAll('.preset-card').forEach(c=>c.classList.remove('selected'));
-    card.classList.add('selected');
-  });
-});
+/* Preset selection: manejada por selectPresetM / selectPresetG directamente */
 
 /* (Equipment tiles, tabla moldes y pesaje ahora se renderizan dinámicamente
     desde RT.* en la sección RUNTIME más abajo) */
@@ -3059,7 +3052,15 @@ function renderMRegPresets(){
       <div class="preset-meta"><span class="preset-tag ${p.tipo==='molde'?'molde':'bandeja'}">${({molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
 }
-function selectPresetM(id){RT.selPresetM=id;rtSave();renderMRegPresets();mRegCalcKg();}
+function selectPresetM(id){
+  RT.selPresetM=id;rtSave();
+  // Actualizar clases SIN reconstruir el DOM (evita que el listener genérico pise el selected)
+  const grid=document.getElementById('mRegPresetGrid');
+  if(grid){grid.querySelectorAll('.preset-card').forEach(c=>{
+    c.classList.toggle('selected',String(c.dataset.preset)===String(id));
+  });}
+  mRegCalcKg();
+}
 let _mRegStepLast=0;
 function mRegStep(delta){
   const now=Date.now();
@@ -3234,7 +3235,14 @@ function renderGRegPresets(){
       <div class="preset-meta"><span class="preset-tag ${p.tipo}">${({pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
 }
-function selectPresetG(id){RT.selPresetG=id;rtSave();renderGRegPresets();gRegCalcKg();}
+function selectPresetG(id){
+  RT.selPresetG=id;rtSave();
+  const grid=document.getElementById('gRegPresetGrid');
+  if(grid){grid.querySelectorAll('.preset-card').forEach(c=>{
+    c.classList.toggle('selected',String(c.dataset.preset)===String(id));
+  });}
+  gRegCalcKg();
+}
 function gRegCalcKg(){
   const cant=parseInt(document.getElementById('gRegCant').value)||0;
   const p=DB.data.presets.find(x=>x.id===RT.selPresetG);
