@@ -1803,6 +1803,10 @@ async function runSyncEmpleados(){
       if(!r.ok)throw new Error('HTTP '+r.status+' al leer '+cfg.table);
       chunk=await r.json();all=all.concat(chunk);offset+=chunk.length;
     }while(chunk.length===1000);
+    if(!all.length){
+      _syncLog('⚠ Respuesta vacía — posible bloqueo RLS. Ejecuta en Asistencia SQL Editor:\n  create policy "sync_read" on empleados for select to anon using (true);\nO usa la service_role key en lugar de la anon key.',false);
+      btn.disabled=false;btn.textContent='↓ Sincronizar ahora';return;
+    }
     _syncLog(`${all.length} empleados descargados — mapeando…`);
     // 2. Mapear a formato trabajadores
     const mapped=all.map((e,i)=>_mapEmpleado(e,i));
