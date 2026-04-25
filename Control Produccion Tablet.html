@@ -555,21 +555,32 @@ input,select,textarea{font-family:inherit;}
 .preset-card.selected{
   border-color:#16a34a !important;
   border-width:3px !important;
-  background:#dcfce7 !important;
-  box-shadow:0 0 0 4px rgba(22,163,74,.35),0 8px 22px -6px rgba(22,163,74,.55) !important;
-  transform:translateY(-1px);
+  background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%) !important;
+  box-shadow:0 0 0 4px rgba(22,163,74,.25), 0 4px 16px rgba(22,163,74,.4) !important;
+  transform:scale(1.03);
+  z-index:2;
 }
-body[data-theme="dark"] .preset-card.selected{background:#052e1a !important;}
-.preset-card.selected .preset-name{color:#14532d !important;}
+body[data-theme="dark"] .preset-card.selected{background:linear-gradient(135deg,#052e1a 0%,#064e3b 100%) !important;}
+.preset-card.selected .preset-name{color:#14532d !important;font-weight:800 !important;}
 body[data-theme="dark"] .preset-card.selected .preset-name{color:#4ade80 !important;}
-.preset-card.selected .preset-meta strong{color:#14532d !important;}
+.preset-card.selected .preset-meta strong{color:#15803d !important;}
 body[data-theme="dark"] .preset-card.selected .preset-meta strong{color:#4ade80 !important;}
+.preset-card.selected::before{
+  content:'✓ SELECCIONADO';
+  position:absolute;top:0;left:0;right:0;
+  background:#16a34a;
+  color:#fff;
+  font-size:9px;font-weight:800;letter-spacing:.1em;
+  text-align:center;padding:2px 0;
+  border-radius:var(--radius-sm) var(--radius-sm) 0 0;
+}
 .preset-card.selected::after{
-  content:'';position:absolute;top:10px;right:10px;
-  width:22px;height:22px;border-radius:50%;
-  background:var(--safety-green);
+  content:'';position:absolute;top:8px;right:8px;
+  width:26px;height:26px;border-radius:50%;
+  background:#16a34a;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
   background-repeat:no-repeat;background-position:center;
+  box-shadow:0 2px 6px rgba(22,163,74,.5);
 }
 .preset-name{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
 .preset-meta{font-size:12px;color:var(--text-3);display:flex;gap:10px;align-items:center;}
@@ -3043,7 +3054,7 @@ function renderMRegPresets(){
   document.getElementById('mRegPresetCount').textContent=presets.length+' presets disponibles';
   if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets activos — crea uno en Ajustes → Presets</div>';return;}
   grid.innerHTML=presets.map(p=>`
-    <button type="button" class="preset-card ${RT.selPresetM===p.id?'selected':''}" data-preset="${p.id}" onclick="selectPresetM(${p.id})">
+    <button type="button" class="preset-card ${String(RT.selPresetM)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetM(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
       <div class="preset-meta"><span class="preset-tag ${p.tipo==='molde'?'molde':'bandeja'}">${({molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
@@ -3218,7 +3229,7 @@ function renderGRegPresets(){
   document.getElementById('gRegPresetCount').textContent=presets.length+' presets (pallet/carro/castillo)';
   if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets generales — crea uno en Ajustes → Presets con tipo pallet/carro/castillo</div>';return;}
   grid.innerHTML=presets.map(p=>`
-    <button type="button" class="preset-card ${RT.selPresetG===p.id?'selected':''}" data-preset="${p.id}" onclick="selectPresetG(${p.id})">
+    <button type="button" class="preset-card ${String(RT.selPresetG)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetG(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
       <div class="preset-meta"><span class="preset-tag ${p.tipo}">${({pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
