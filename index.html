@@ -1391,7 +1391,12 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
         </div>
         <div class="form-field">
           <label class="form-label">Trabajador</label>
-          <select class="select" id="mRegTrab" onchange="onMRegTrabChange()"></select>
+          <button class="ios-picker-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange')">
+            <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+            <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="mRegTrab" onchange="onMRegTrabChange()"></select>
         </div>
       </div>
 
@@ -1401,7 +1406,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
           <div class="worker-name" id="mRegWorkerName">—</div>
           <div class="worker-meta" id="mRegWorkerMeta">—</div>
         </div>
-        <button class="worker-clear" type="button" aria-label="Limpiar" onclick="document.getElementById('mRegTrab').value='';onMRegTrabChange();">
+        <button class="worker-clear" type="button" aria-label="Limpiar" onclick="clearRegPicker('mRegTrab','onMRegTrabChange');">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
@@ -1771,7 +1776,12 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
                 </div>
                 <div class="form-field">
                   <label class="form-label">Planillero</label>
-                  <select class="select filled" id="pRegPlanillero"></select>
+                  <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false)">
+                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegPlanillero"></select>
                 </div>
                 <div class="form-field">
                   <label class="form-label">N° Guía <span class="required">*</span></label>
@@ -1807,7 +1817,12 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
               <div class="form-grid cols-2">
                 <div class="form-field span-2">
                   <label class="form-label">Trabajador <span class="required">*</span></label>
-                  <select class="select filled" id="pRegTrab" onchange="onPRegTrabChange()"></select>
+                  <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange')">
+                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegTrab" onchange="onPRegTrabChange()"></select>
                 </div>
               </div>
               <div class="worker-badge" id="pRegWorkerBadge" style="margin-top:14px;margin-bottom:14px;display:none;">
@@ -1816,6 +1831,9 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
                   <div class="worker-name" id="pRegWorkerName">—</div>
                   <div class="worker-meta" id="pRegWorkerMeta">Ficha <span>—</span> · <span>0 pesajes hoy</span></div>
                 </div>
+                <button class="worker-clear" type="button" aria-label="Limpiar" onclick="clearRegPicker('pRegTrab','onPRegTrabChange');">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
               </div>
               <div class="form-field">
                 <label class="form-label">Kilos procesados <span class="required">*</span> <span class="hint">rango 0,2 – 20 kg</span></label>
@@ -3837,7 +3855,8 @@ function renderPRegTrab(){
   sel.innerHTML='<option value="">— Selecciona trabajador —</option>'
     +'<option value="__manual__">+ Ingresar manualmente</option>'
     +items.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
-  onPRegTrabChange();
+  // Only update badge if a value was already selected (don't hide it on repopulate)
+  if(!sel.value)onPRegTrabChange();
 }
 function onPRegTurnoChange(){renderPRegPlanilleros();renderPRegTrab();}
 function onPRegEspecieChange(){/* placeholder, could filter types */}
@@ -3908,7 +3927,7 @@ function regPesaje(){
   if(window.renderPResumen)renderPResumen();
   if(window.renderPConsol)renderPConsol();
   document.getElementById('pRegKg').value='';
-  onPRegTrabChange();
+  clearRegPicker('pRegTrab','onPRegTrabChange');
   showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
@@ -4353,17 +4372,14 @@ function editPArmadoLinea(ln){
       <!-- AGREGAR NUEVO -->
       <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
         <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
-        <div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:end;">
+        <button class="ios-picker-trigger" type="button" onclick="openIosPicker('trab',function(id,nombre,codigo){_pArmAddById(id,nombre);})" style="margin-bottom:10px;">
+          <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <span class="trigger-name">Buscar por nombre o código…</span>
+          <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
           <div class="form-field" style="margin:0;">
-            <label class="form-label" style="font-size:11px;">Buscar persona</label>
-            <select class="select" id="pArmAddTrab" onchange="onPArmSelectChange()">
-              <option value="">— Selecciona —</option>
-              <option value="__manual__">+ Ingresar manualmente (nombre libre)</option>
-              ${DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-field" style="margin:0;">
-            <label class="form-label" style="font-size:11px;">Nº Ficha</label>
+            <label class="form-label" style="font-size:11px;">Nº Ficha <span class="required">*</span></label>
             <input class="input" id="pArmAddFicha" placeholder="101" inputmode="numeric">
           </div>
           <button class="btn success" type="button" onclick="addPArmTrab()">
@@ -4371,8 +4387,12 @@ function editPArmadoLinea(ln){
             Agregar
           </button>
         </div>
-        <div id="pArmManualBox" style="display:none;margin-top:8px;">
-          <input class="input" id="pArmManualNombre" placeholder="Nombre completo del trabajador">
+        <div id="pArmManualBox" style="display:none;margin-top:10px;">
+          <label class="form-label" style="font-size:11px;">Nombre manual</label>
+          <div style="display:flex;gap:8px;">
+            <input class="input" id="pArmManualNombre" placeholder="Nombre completo del trabajador" style="flex:1;">
+            <button class="btn ghost sm" type="button" onclick="addPArmTrabManual()">OK</button>
+          </div>
         </div>
       </div>
     </div>
@@ -4391,25 +4411,22 @@ function renderPArmModal(){
   if(pBox){
     if(_editPArmado.planillero){
       const p=_editPArmado.planillero;
+      const tDb=DB.data.trabajadores.find(x=>x.id===p.trabId);
+      const ini=(p.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
       pBox.innerHTML=`<div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;"><strong>${esc(p.nombre)}</strong></div>
+        <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#34c759,#30b0c7);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0;">${esc(ini)}</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:14px;">${esc(p.nombre)}</div>
+          ${tDb?`<div style="font-size:11px;color:var(--text-3);">Código: ${esc(tDb.codigo||'—')}</div>`:''}
+        </div>
         <button class="btn ghost sm" type="button" onclick="_editPArmado.planillero=null;renderPArmModal();">Cambiar</button>
       </div>`;
     } else {
-      pBox.innerHTML=`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
-        <div class="form-field" style="margin:0;">
-          <label class="form-label" style="font-size:11px;">Buscar planillero</label>
-          <select class="select" id="pArmPlanSel">
-            <option value="">— Selecciona —</option>
-            <option value="__manual__">+ Ingresar manualmente</option>
-            ${DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
-          </select>
-        </div>
-        <button class="btn success sm" type="button" onclick="setPArmPlanillero()">Asignar</button>
-      </div>
-      <input class="input" id="pArmPlanManual" placeholder="Nombre (si manual)" style="margin-top:8px;display:none;">`;
-      const sel=document.getElementById('pArmPlanSel');
-      if(sel)sel.addEventListener('change',()=>{const man=document.getElementById('pArmPlanManual');if(man)man.style.display=sel.value==='__manual__'?'block':'none';});
+      pBox.innerHTML=`<button class="ios-picker-trigger" type="button" onclick="openIosPicker('planillero',function(id,nombre,codigo){_pArmSetPlanillero(id,nombre);})">
+        <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span class="trigger-name" style="color:var(--text-3);">Buscar planillero…</span>
+        <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>`;
     }
   }
   // lista trabajadores
@@ -4418,62 +4435,97 @@ function renderPArmModal(){
   if(cnt)cnt.textContent='('+_editPArmado.trabajadores.length+')';
   if(list){
     if(!_editPArmado.trabajadores.length){
-      list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px;">Sin trabajadores aún. Agrega abajo.</div>';
+      list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px;">Sin trabajadores aún. Usa el buscador de abajo.</div>';
     } else {
-      list.innerHTML=_editPArmado.trabajadores.map((t,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--slate-100);">
-        <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(t.nombre)}</div></div>
-        <label style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;font-weight:700;">Ficha</label>
-        <input class="input" style="max-width:100px;" value="${esc(t.ficha||'')}" inputmode="numeric" oninput="_editPArmado.trabajadores[${i}].ficha=this.value.trim();">
-        <button class="btn ghost sm icon" type="button" title="Eliminar" onclick="_editPArmado.trabajadores.splice(${i},1);renderPArmModal();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
-      </div>`).join('');
+      list.innerHTML=_editPArmado.trabajadores.map((t,i)=>{
+        const tDb=DB.data.trabajadores.find(x=>x.id===t.trabId);
+        const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+        const codigo=tDb?tDb.codigo:null;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--slate-100);">
+          <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#007aff,#5856d6);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0;">${esc(ini)}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${esc(t.nombre)}</div>
+            <div style="font-size:11px;color:var(--text-3);">${codigo?'Código: '+esc(codigo)+' · ':''}<span style="color:#0369a1;font-weight:600;">Ficha: ${esc(t.ficha||'—')}</span></div>
+          </div>
+          <label style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;font-weight:700;white-space:nowrap;">Ficha</label>
+          <input class="input" style="max-width:88px;" value="${esc(t.ficha||'')}" inputmode="numeric" placeholder="101" oninput="_editPArmado.trabajadores[${i}].ficha=this.value.trim();">
+          <button class="btn ghost sm icon" type="button" title="Quitar" onclick="_editPArmado.trabajadores.splice(${i},1);renderPArmModal();">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+          </button>
+        </div>`;
+      }).join('');
     }
   }
 }
-function setPArmPlanillero(){
-  const sel=document.getElementById('pArmPlanSel');if(!sel||!sel.value){showToast('Selecciona un planillero','error');return;}
-  let nombre='';let trabId=null;
-  if(sel.value==='__manual__'){
-    const man=document.getElementById('pArmPlanManual');
-    nombre=(man&&man.value||'').trim();
-    if(!nombre){showToast('Escribe el nombre','error');return;}
-  } else {
-    const id=parseInt(sel.value);const t=DB.data.trabajadores.find(x=>x.id===id);if(!t)return;
-    nombre=t.nombre;trabId=t.id;
+function _pArmSetPlanillero(id,nombre){
+  let trabId=null,realNombre=nombre;
+  if(id!=='__manual__'){
+    const t=DB.data.trabajadores.find(x=>x.id===id);
+    if(t){realNombre=t.nombre;trabId=t.id;}
   }
-  _editPArmado.planillero={trabId,nombre}; // planillero NO lleva ficha
+  _editPArmado.planillero={trabId,nombre:realNombre};
   renderPArmModal();
 }
-function onPArmSelectChange(){
-  const sel=document.getElementById('pArmAddTrab');
-  const fichaIn=document.getElementById('pArmAddFicha');
-  const manualBox=document.getElementById('pArmManualBox');
-  if(sel.value==='__manual__'){manualBox.style.display='';fichaIn.value='';return;}
-  manualBox.style.display='none';
-  const opt=sel.selectedOptions[0];
-  if(opt&&opt.dataset.ficha)fichaIn.value=opt.dataset.ficha; // prefill pero editable
-}
-function addPArmTrab(){
-  const sel=document.getElementById('pArmAddTrab');
-  const ficha=document.getElementById('pArmAddFicha').value.trim();
-  if(!ficha){showToast('Ficha obligatoria','error');document.getElementById('pArmAddFicha').focus();return;}
-  let nombre='',trabId=null;
-  if(sel.value==='__manual__'){
-    nombre=document.getElementById('pArmManualNombre').value.trim();
-    if(!nombre){showToast('Ingresa el nombre','error');return;}
-  } else {
-    const id=parseInt(sel.value);
-    const t=DB.data.trabajadores.find(x=>x.id===id);
-    if(!t){showToast('Selecciona un trabajador','error');return;}
-    nombre=t.nombre;trabId=t.id;
+function _pArmAddById(id,nombre){
+  if(id==='__manual__'){
+    // Show manual box
+    const mb=document.getElementById('pArmManualBox');if(mb)mb.style.display='block';
+    setTimeout(()=>{const inp=document.getElementById('pArmManualNombre');if(inp)inp.focus();},80);
+    return;
   }
-  // evitar duplicar misma ficha
+  const t=DB.data.trabajadores.find(x=>x.id===id);
+  if(!t)return;
+  // Pre-fill ficha input
+  const fichaIn=document.getElementById('pArmAddFicha');
+  if(fichaIn&&t.ficha)fichaIn.value=t.ficha;
+  if(fichaIn)fichaIn.focus();
+  // Store pending selection
+  if(fichaIn)fichaIn.dataset.pendingId=String(t.id);
+  if(fichaIn)fichaIn.dataset.pendingNombre=t.nombre;
+  showToast('Verifica/edita el N° Ficha y pulsa Agregar','success');
+}
+function setPArmPlanillero(){} // legacy compat no-op
+function onPArmSelectChange(){} // legacy compat no-op
+function addPArmTrab(){
+  const fichaIn=document.getElementById('pArmAddFicha');
+  const ficha=(fichaIn&&fichaIn.value||'').trim();
+  if(!ficha){showToast('Ficha obligatoria','error');fichaIn&&fichaIn.focus();return;}
+  // Check if we have a pending selection from iOS picker
+  let nombre='',trabId=null;
+  if(fichaIn&&fichaIn.dataset.pendingId){
+    const t=DB.data.trabajadores.find(x=>x.id===parseInt(fichaIn.dataset.pendingId));
+    if(t){nombre=t.nombre;trabId=t.id;}
+    delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;
+  } else {
+    // Try manual name box
+    const manNom=(document.getElementById('pArmManualNombre')||{}).value||'';
+    nombre=manNom.trim();
+    if(!nombre){showToast('Selecciona o ingresa un trabajador','error');return;}
+  }
   if(_editPArmado.trabajadores.some(x=>x.ficha===ficha)){showToast('Esa ficha ya está asignada en esta línea','error');return;}
   _editPArmado.trabajadores.push({trabId,nombre:nombre.toUpperCase(),ficha});
-  // reset
-  sel.value='';document.getElementById('pArmAddFicha').value='';document.getElementById('pArmManualBox').style.display='none';
+  if(fichaIn)fichaIn.value='';
+  const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';const mn=document.getElementById('pArmManualNombre');if(mn)mn.value='';}
   renderPArmModal();
+  showToast(nombre.toUpperCase()+' agregado','success');
 }
-function closePArmado(){const m=document.getElementById('pArmadoModal');if(m)m.remove();_editPLn=null;_editPArmado=null;}
+function addPArmTrabManual(){
+  const nombre=(document.getElementById('pArmManualNombre')||{value:''}).value.trim();
+  if(!nombre){showToast('Escribe el nombre','error');return;}
+  const ficha=(document.getElementById('pArmAddFicha')||{value:''}).value.trim();
+  if(!ficha){showToast('Ficha obligatoria','error');document.getElementById('pArmAddFicha')&&document.getElementById('pArmAddFicha').focus();return;}
+  if(_editPArmado.trabajadores.some(x=>x.ficha===ficha)){showToast('Esa ficha ya está asignada','error');return;}
+  _editPArmado.trabajadores.push({trabId:null,nombre:nombre.toUpperCase(),ficha});
+  document.getElementById('pArmAddFicha').value='';
+  const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';document.getElementById('pArmManualNombre').value='';}
+  renderPArmModal();
+  showToast(nombre.toUpperCase()+' agregado','success');
+}
+function closePArmado(){
+  const m=document.getElementById('pArmadoModal');if(m)m.remove();
+  closeIosPicker();
+  _editPLn=null;_editPArmado=null;
+}
 function savePArmado(){
   if(!_editPLn)return;
   RT.armadoPesaje[_editPLn]=JSON.parse(JSON.stringify(_editPArmado));
@@ -4481,7 +4533,8 @@ function savePArmado(){
   showToast('Línea actualizada','success');
 }
 window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.copiarPArmadoDia=copiarPArmadoDia;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
-window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
+window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
+window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
 
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
@@ -4604,7 +4657,7 @@ function openIosPicker(mode,cb){
     <div class="ios-picker-sheet" onclick="event.stopPropagation()">
       <div class="ios-picker-handle"></div>
       <div class="ios-picker-hdr">
-        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':'Agregar Trabajador'}</span>
+        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}</span>
         <button class="ios-picker-cancel" onclick="closeIosPicker()">Cancelar</button>
       </div>
       <div class="ios-picker-search-wrap">
@@ -4686,6 +4739,76 @@ function closeIosPicker(){
   const el=document.getElementById('iosPicker');if(el)el.remove();
   _iosPicker={mode:null,cb:null};
 }
+
+/* ── Generic Registration-Form Picker ───────────────────────────── */
+// Opens the iOS picker for any registration form select field.
+// selectId: the hidden <select> id whose .value will be set
+// title: sheet title string
+// changeFnName: name of global function to call after selection
+// allowManual: whether to show manual-entry option
+function openRegPicker(selectId, title, changeFnName, allowManual){
+  if(allowManual===undefined)allowManual=true;
+  openIosPicker(title, function(id, nombre, codigo){
+    if(id==='__manual__'){
+      // Show manual overlay (fallback prompt)
+      const nom=(prompt('Nombre del trabajador:')||'').trim();
+      if(!nom)return;
+      const fich=(prompt('Nº Ficha (opcional):','')||'').trim();
+      const uid='__m_'+Date.now();
+      const sel=document.getElementById(selectId);
+      if(sel){
+        const opt=document.createElement('option');
+        opt.value=uid;opt.textContent=nom+(fich?' · F'+fich:'');
+        opt.dataset.nombre=nom;opt.dataset.ficha=fich;opt.dataset.manual='1';
+        sel.appendChild(opt);sel.value=uid;
+      }
+      _updateRegPickerDisplay(selectId,nom,fich?'F'+fich:'');
+      if(changeFnName&&window[changeFnName])window[changeFnName]();
+      return;
+    }
+    const sel=document.getElementById(selectId);
+    if(sel){
+      // Ensure option exists in the hidden select
+      let opt=Array.from(sel.options).find(o=>String(o.value)===String(id));
+      if(!opt){
+        opt=document.createElement('option');
+        const tDb=DB.data.trabajadores.find(t=>t.id===id);
+        opt.value=String(id);
+        opt.textContent=nombre;
+        opt.dataset.nombre=nombre;
+        opt.dataset.ficha=(tDb&&tDb.ficha)||'';
+        sel.appendChild(opt);
+      }
+      sel.value=String(id);
+    }
+    _updateRegPickerDisplay(selectId,nombre,codigo);
+    if(changeFnName&&window[changeFnName])window[changeFnName]();
+  });
+}
+function _updateRegPickerDisplay(selectId,nombre,codigo){
+  const btn=document.getElementById(selectId+'Picker');
+  if(!btn)return;
+  const ini=(nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+  btn.innerHTML=`
+    <div class="trigger-av">${esc(ini)}</div>
+    <div style="flex:1;text-align:left;min-width:0;">
+      <div class="trigger-name" style="color:var(--text);">${esc(nombre)}</div>
+      ${codigo?`<div class="trigger-code">${esc(codigo)}</div>`:''}
+    </div>
+    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+}
+function clearRegPicker(selectId,changeFnName){
+  const sel=document.getElementById(selectId);if(sel)sel.value='';
+  const btn=document.getElementById(selectId+'Picker');
+  if(btn){
+    btn.innerHTML=`
+      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  }
+  if(changeFnName&&window[changeFnName])window[changeFnName]();
+}
+window.openRegPicker=openRegPicker;window.clearRegPicker=clearRegPicker;
 
 function editMArmadoLinea(ln){
   _ensureArmadoMolde();
