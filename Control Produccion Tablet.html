@@ -1089,6 +1089,129 @@ td.num{font-family:var(--mono);font-weight:600;text-align:right;}
 #panelConfig .card{transition:transform .15s,box-shadow .15s,border-color .15s;}
 #panelConfig .card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--border-strong);}
 #panelConfig .card:active{transform:translateY(0);}
+
+/* ── iOS Glassmorphism Worker Picker ─────────────────────────────── */
+.ios-picker-overlay{
+  position:fixed;inset:0;z-index:3000;
+  background:rgba(0,0,0,.38);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:ios-fade-in .18s ease;
+}
+@keyframes ios-fade-in{from{opacity:0;}to{opacity:1;}}
+.ios-picker-sheet{
+  width:100%;max-width:600px;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(48px) saturate(200%);
+  -webkit-backdrop-filter:blur(48px) saturate(200%);
+  border-radius:22px 22px 0 0;
+  box-shadow:0 -6px 48px rgba(0,0,0,.22),0 -1px 0 rgba(255,255,255,.6) inset;
+  font-family:-apple-system,'SF Pro Display','SF Pro Text',system-ui,sans-serif;
+  overflow:hidden;
+  animation:ios-sheet-up .24s cubic-bezier(.32,1,.28,1);
+  max-height:78vh;display:flex;flex-direction:column;
+}
+@keyframes ios-sheet-up{from{transform:translateY(100%);}to{transform:translateY(0);}}
+body[data-theme="dark"] .ios-picker-sheet{
+  background:rgba(28,28,32,.92);
+  box-shadow:0 -6px 48px rgba(0,0,0,.5),0 -1px 0 rgba(255,255,255,.06) inset;
+}
+.ios-picker-handle{
+  width:36px;height:5px;border-radius:3px;
+  background:rgba(60,60,67,.2);margin:10px auto 0;flex-shrink:0;
+}
+body[data-theme="dark"] .ios-picker-handle{background:rgba(235,235,245,.28);}
+.ios-picker-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px 8px;flex-shrink:0;
+}
+.ios-picker-title{font-size:17px;font-weight:700;letter-spacing:-.02em;color:#1c1c1e;}
+body[data-theme="dark"] .ios-picker-title{color:#f2f2f7;}
+.ios-picker-cancel{
+  font-size:15px;font-weight:500;color:#007aff;
+  background:none;border:none;cursor:pointer;padding:4px 0;
+  font-family:inherit;
+}
+.ios-picker-cancel:hover{opacity:.7;}
+.ios-picker-search-wrap{
+  margin:0 16px 10px;flex-shrink:0;
+  background:rgba(118,118,128,.12);
+  border-radius:12px;
+  display:flex;align-items:center;gap:8px;padding:9px 13px;
+}
+body[data-theme="dark"] .ios-picker-search-wrap{background:rgba(118,118,128,.24);}
+.ios-picker-search-wrap svg{width:16px;height:16px;flex-shrink:0;color:rgba(60,60,67,.5);}
+body[data-theme="dark"] .ios-picker-search-wrap svg{color:rgba(235,235,245,.5);}
+.ios-picker-search-inp{
+  flex:1;border:none;background:none;outline:none;
+  font-size:16px;font-family:inherit;color:#1c1c1e;
+  caret-color:#007aff;
+}
+body[data-theme="dark"] .ios-picker-search-inp{color:#f2f2f7;}
+.ios-picker-search-inp::placeholder{color:rgba(60,60,67,.38);}
+body[data-theme="dark"] .ios-picker-search-inp::placeholder{color:rgba(235,235,245,.36);}
+.ios-picker-list{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding-bottom:env(safe-area-inset-bottom,8px);
+}
+.ios-picker-item{
+  display:flex;align-items:center;gap:14px;padding:11px 20px;
+  border-bottom:1px solid rgba(60,60,67,.1);
+  cursor:pointer;
+  transition:background .1s,transform .1s;
+  -webkit-tap-highlight-color:transparent;
+}
+body[data-theme="dark"] .ios-picker-item{border-color:rgba(235,235,245,.08);}
+.ios-picker-item:last-child{border-bottom:none;}
+.ios-picker-item:active{background:rgba(0,122,255,.08);transform:scale(.985);transition:none;}
+.ios-picker-av{
+  width:42px;height:42px;flex-shrink:0;
+  border-radius:13px;
+  background:linear-gradient(135deg,#007aff 0%,#5856d6 100%);
+  color:#fff;display:grid;place-items:center;
+  font-size:14px;font-weight:700;letter-spacing:-.01em;
+  box-shadow:0 2px 8px rgba(0,122,255,.28);
+}
+.ios-picker-av.manual{background:linear-gradient(135deg,#30b0c7 0%,#007aff 100%);box-shadow:0 2px 8px rgba(0,122,255,.22);}
+.ios-picker-av.green{background:linear-gradient(135deg,#34c759 0%,#30b0c7 100%);box-shadow:0 2px 8px rgba(52,199,89,.28);}
+.ios-picker-info{flex:1;min-width:0;}
+.ios-picker-name{font-size:15px;font-weight:600;color:#1c1c1e;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body[data-theme="dark"] .ios-picker-name{color:#f2f2f7;}
+.ios-picker-name em{font-style:normal;background:rgba(255,214,10,.7);color:#1c1c1e;border-radius:3px;padding:0 1px;}
+.ios-picker-code{font-size:12px;font-weight:500;color:#8e8e93;letter-spacing:.02em;margin-top:2px;}
+body[data-theme="dark"] .ios-picker-code{color:#636366;}
+.ios-picker-chevron{width:18px;height:18px;flex-shrink:0;opacity:.3;}
+body[data-theme="dark"] .ios-picker-chevron{opacity:.4;}
+.ios-picker-empty{padding:48px 20px;text-align:center;color:#8e8e93;font-size:15px;}
+/* Especie chip on preset card header */
+.especie-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  background:#dbeafe;color:#1d4ed8;border-radius:20px;
+  padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.04em;
+  margin-left:8px;cursor:pointer;vertical-align:middle;
+  transition:background .12s;
+}
+.especie-chip:hover{background:#bfdbfe;}
+body[data-theme="dark"] .especie-chip{background:rgba(30,58,138,.6);color:#93c5fd;}
+body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
+/* iOS picker trigger button */
+.ios-picker-trigger{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:11px 14px;
+  background:var(--surface-alt);border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  cursor:pointer;font-family:var(--font);font-size:14px;
+  color:var(--text-2);transition:border-color .15s,background .15s;
+}
+.ios-picker-trigger:hover{border-color:var(--brand);background:var(--surface);}
+.ios-picker-trigger .trigger-av{
+  width:30px;height:30px;border-radius:9px;
+  background:linear-gradient(135deg,#007aff,#5856d6);
+  color:#fff;display:grid;place-items:center;
+  font-size:11px;font-weight:700;flex-shrink:0;
+}
+.ios-picker-trigger .trigger-name{flex:1;text-align:left;font-weight:600;color:var(--text);}
+.ios-picker-trigger .trigger-code{font-size:11px;color:var(--text-3);}
+.ios-picker-trigger .trigger-arrow{width:16px;height:16px;opacity:.4;flex-shrink:0;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -1260,7 +1383,7 @@ td.num{font-family:var(--mono);font-weight:600;text-align:right;}
         </div>
         <div class="form-field">
           <label class="form-label">Línea</label>
-          <select class="select" id="mRegLinea">
+          <select class="select" id="mRegLinea" onchange="renderMRegPresets();renderMRegTrab&&renderMRegTrab();">
             <option value="L1">L1 — Línea 1</option>
             <option value="L2" selected>L2 — Línea 2</option>
             <option value="L3">L3 — Línea 3</option>
@@ -3041,16 +3164,41 @@ function onMRegTrabChange(){
   const linea=document.getElementById('mRegLinea').value;
   document.getElementById('mRegWorkerMeta').innerHTML=t?`Código <span>${esc(t.codigo)}</span> · Línea <span>${esc(linea)}</span>`:`Línea <span>${esc(linea)}</span>`;
 }
+function _getMRegEspecie(){
+  // Get especie from armado of currently selected linea
+  const linea=(document.getElementById('mRegLinea')||{}).value||'';
+  if(RT.armadoMolde&&linea&&RT.armadoMolde[linea]){
+    return RT.armadoMolde[linea].especie||RT.armadoMolde[linea].producto||'';
+  }
+  return '';
+}
 function renderMRegPresets(){
   const grid=document.getElementById('mRegPresetGrid');if(!grid)return;
-  const presets=DB.data.presets.filter(p=>p.activo);
-  document.getElementById('mRegPresetCount').textContent=presets.length+' presets disponibles';
-  if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets activos — crea uno en Ajustes → Presets</div>';return;}
+  const allPresets=DB.data.presets.filter(p=>p.activo);
+  const especie=_getMRegEspecie();
+  const presets=especie?allPresets.filter(p=>p.especie===especie):allPresets;
+  const cntEl=document.getElementById('mRegPresetCount');
+  if(cntEl){
+    if(especie){
+      cntEl.innerHTML=`${presets.length} preset${presets.length!==1?'s':''} <span class="especie-chip" title="Quitar filtro de especie" onclick="_clearMRegEspecieFilter()">🐟 ${esc(especie)} ×</span>`;
+    } else {
+      cntEl.textContent=allPresets.length+' presets disponibles';
+    }
+  }
+  if(!presets.length){
+    grid.innerHTML=`<div style="color:var(--text-3);padding:20px;text-align:center;">${especie?'Sin presets para <strong>'+esc(especie)+'</strong> — asigna especie en Ajustes → Presets':'Sin presets activos — crea uno en Ajustes → Presets'}</div>`;
+    return;
+  }
   grid.innerHTML=presets.map(p=>`
     <button type="button" class="preset-card ${String(RT.selPresetM)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetM(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
       <div class="preset-meta"><span class="preset-tag ${p.tipo==='molde'?'molde':'bandeja'}">${({molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
+}
+function _clearMRegEspecieFilter(){
+  const linea=(document.getElementById('mRegLinea')||{}).value||'';
+  if(RT.armadoMolde&&linea&&RT.armadoMolde[linea]){RT.armadoMolde[linea].especie='';rtSave();}
+  renderMRegPresets();
 }
 function selectPresetM(id){
   RT.selPresetM=id;rtSave();
@@ -3143,6 +3291,7 @@ function clearMReg(){
   renderMRegPresets();mRegCalcKg();
 }
 window.mRegStep=mRegStep;window.mRegCalcKg=mRegCalcKg;window.regMolde=regMolde;window.selectPresetM=selectPresetM;window.clearMReg=clearMReg;window.onMRegTurnoChange=onMRegTurnoChange;window.onMRegTrabChange=onMRegTrabChange;
+window.renderMRegPresets=renderMRegPresets;window._clearMRegEspecieFilter=_clearMRegEspecieFilter;
 
 /* ═══ MOLDES — VER (tabla) ════════════════════════════════════ */
 function renderMoldesTable(){
@@ -4338,9 +4487,12 @@ window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.r
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
 function _ensureArmadoMolde(){
   if(!RT.armadoMolde)RT.armadoMolde={};
-  ['L1','L2','L3'].forEach(ln=>{if(!RT.armadoMolde[ln])RT.armadoMolde[ln]={planillero:null,trabajadores:[],producto:'',turno:'dia'};});
-  // heal existentes: agregar turno por defecto
-  Object.keys(RT.armadoMolde).forEach(ln=>{if(!RT.armadoMolde[ln].turno)RT.armadoMolde[ln].turno='dia';});
+  ['L1','L2','L3'].forEach(ln=>{if(!RT.armadoMolde[ln])RT.armadoMolde[ln]={planillero:null,trabajadores:[],especie:'',turno:'dia'};});
+  // heal existentes: agregar turno y especie por defecto
+  Object.keys(RT.armadoMolde).forEach(ln=>{
+    if(!RT.armadoMolde[ln].turno)RT.armadoMolde[ln].turno='dia';
+    if(!('especie' in RT.armadoMolde[ln]))RT.armadoMolde[ln].especie=RT.armadoMolde[ln].producto||'';
+  });
 }
 function renderMArmado(){
   _ensureArmadoMolde();
@@ -4348,15 +4500,15 @@ function renderMArmado(){
   const lineas=Object.keys(RT.armadoMolde).sort();
   if(!lineas.length){box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';return;}
   box.innerHTML=lineas.map(ln=>{
-    const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],producto:''};
+    const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],especie:''};
     const trabs=data.trabajadores||[];
     const p=data.planillero;
-    const producto=data.producto||'';
+    const especie=data.especie||data.producto||'';
     return `<div class="line-card" style="margin-bottom:12px;">
       <div class="line-hdr">
         <div class="line-id">${esc(ln)}</div>
         <div style="flex:1;min-width:0;">
-          <div class="line-title">Línea ${esc(ln)}${producto?' — '+esc(producto):''}</div>
+          <div class="line-title">Línea ${esc(ln)}${especie?` <span style="font-size:12px;font-weight:500;color:var(--text-3);">·</span> <span style="font-size:13px;font-weight:600;color:#0369a1;">${esc(especie)}</span>`:''}</div>
           <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)</div>
         </div>
         <div class="section-spacer"></div>
@@ -4371,7 +4523,9 @@ function renderMArmado(){
       <div class="worker-chips">
         ${trabs.length?trabs.slice(0,12).map(t=>{
           const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-          return `<div class="worker-chip"><div class="wc-av">${esc(ini)}</div>${esc(t.nombre)}</div>`;
+          const tDb=DB.data.trabajadores.find(x=>x.id===t.trabId);
+          const codigo=tDb?tDb.codigo:null;
+          return `<div class="worker-chip"><div class="wc-av">${esc(ini)}</div><span>${esc(t.nombre)}</span>${codigo?`<span style="font-size:10px;color:var(--text-3);margin-left:2px;">(${esc(codigo)})</span>`:''}  </div>`;
         }).join(''):'<div style="color:var(--text-3);font-size:12px;padding:8px 0;">Sin trabajadores — pulsa <em>Editar</em> para agregar</div>'}
         ${trabs.length>12?`<div class="worker-chip" style="background:var(--slate-100);font-weight:600;">+${trabs.length-12} más</div>`:''}
       </div>
@@ -4408,7 +4562,7 @@ function confirmMAddLinea(){
   const key=(inp.value||'').trim().toUpperCase();
   if(!key){showToast('Nombre inválido','error');inp.focus();return;}
   if(RT.armadoMolde[key]){showToast('Esa línea ya existe','error');inp.focus();return;}
-  RT.armadoMolde[key]={planillero:null,trabajadores:[],producto:'',turno:'dia'};
+  RT.armadoMolde[key]={planillero:null,trabajadores:[],especie:'',turno:'dia'};
   rtSave();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
 function removeMLinea(ln){
@@ -4429,26 +4583,133 @@ function guardarMArmadoSnapshot(){
   rtSave();showToast('Armado guardado como referencia de día anterior','success');
 }
 
-/* Editor de línea moldes: producto + planillero + trabajadores (SIN ficha) */
-let _editMLn=null;let _editMArmado=null;
+/* ── Editor de línea moldes: especie + planillero + trabajadores ── */
+let _editMLn=null,_editMArmado=null;
+// iOS Picker state
+let _iosPicker={mode:null,cb:null}; // mode: 'planillero'|'trab'
+
+/* ── Helper: unique especie values from active presets ─────────── */
+function _getEspecies(){
+  const s=new Set();
+  DB.data.presets.filter(p=>p.activo&&p.especie).forEach(p=>s.add(p.especie));
+  return [...s].sort();
+}
+
+/* ── iOS Picker open/close ─────────────────────────────────────── */
+function openIosPicker(mode,cb){
+  _iosPicker={mode,cb};
+  const trabs=DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const overlay=document.createElement('div');overlay.className='ios-picker-overlay';overlay.id='iosPicker';
+  overlay.innerHTML=`
+    <div class="ios-picker-sheet" onclick="event.stopPropagation()">
+      <div class="ios-picker-handle"></div>
+      <div class="ios-picker-hdr">
+        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':'Agregar Trabajador'}</span>
+        <button class="ios-picker-cancel" onclick="closeIosPicker()">Cancelar</button>
+      </div>
+      <div class="ios-picker-search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="Buscar por nombre o código..." autocomplete="off" oninput="filterIosPicker(this.value)">
+      </div>
+      <div class="ios-picker-list" id="iosPickerList">
+        ${_renderIosItems(trabs,'')}
+      </div>
+    </div>`;
+  overlay.addEventListener('click',closeIosPicker);
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('iosPickerSearch')&&document.getElementById('iosPickerSearch').focus(),120);
+}
+function _renderIosItems(trabs,q){
+  const qLow=q.toLowerCase().trim();
+  let filtered=trabs;
+  if(qLow){
+    filtered=trabs.filter(t=>{
+      const n=(t.nombre||'').toLowerCase();
+      const c=(t.codigo||'').toLowerCase();
+      return n.includes(qLow)||c.includes(qLow);
+    });
+  }
+  function _hi(str){
+    if(!qLow)return esc(str);
+    const i=str.toLowerCase().indexOf(qLow);
+    if(i<0)return esc(str);
+    return esc(str.slice(0,i))+'<em>'+esc(str.slice(i,i+qLow.length))+'</em>'+esc(str.slice(i+qLow.length));
+  }
+  let html='';
+  // Manual entry option
+  html+=`<div class="ios-picker-item" onclick="selectIosWorker('__manual__','','')">
+    <div class="ios-picker-av manual">✎</div>
+    <div class="ios-picker-info">
+      <div class="ios-picker-name">Ingresar nombre manualmente</div>
+      <div class="ios-picker-code">Nombre libre</div>
+    </div>
+    <svg class="ios-picker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+  </div>`;
+  if(!filtered.length){
+    html+=`<div class="ios-picker-empty">Sin resultados para "<strong>${esc(q)}</strong>"</div>`;
+    return html;
+  }
+  filtered.forEach(t=>{
+    const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+    const nombreHi=_hi(t.nombre||'');
+    const codigoHi=_hi(t.codigo||'');
+    html+=`<div class="ios-picker-item" onclick="selectIosWorker(${t.id},'${(t.nombre||'').replace(/'/g,"\\'")}','${(t.codigo||'').replace(/'/g,"\\'")}')">
+      <div class="ios-picker-av">${esc(ini)}</div>
+      <div class="ios-picker-info">
+        <div class="ios-picker-name">${nombreHi}</div>
+        <div class="ios-picker-code">Código: ${codigoHi||'—'}</div>
+      </div>
+      <svg class="ios-picker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </div>`;
+  });
+  return html;
+}
+function filterIosPicker(q){
+  const list=document.getElementById('iosPickerList');if(!list)return;
+  const trabs=DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  list.innerHTML=_renderIosItems(trabs,q);
+}
+function selectIosWorker(id,nombre,codigo){
+  const mode=_iosPicker.mode;const cb=_iosPicker.cb;
+  if(id==='__manual__'){
+    closeIosPicker();
+    // Show manual input inline
+    const manBox=document.getElementById('mArmManualBox');
+    if(manBox)manBox.style.display='block';
+    setTimeout(()=>{const inp=document.getElementById('mArmManualNombre');if(inp)inp.focus();},80);
+    return;
+  }
+  closeIosPicker();
+  if(cb)cb(id,nombre,codigo);
+}
+function closeIosPicker(){
+  const el=document.getElementById('iosPicker');if(el)el.remove();
+  _iosPicker={mode:null,cb:null};
+}
+
 function editMArmadoLinea(ln){
   _ensureArmadoMolde();
   _editMLn=ln;
-  const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],producto:''};
-  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),producto:data.producto||'',turno:data.turno||'dia'};
-  const presets=DB.data.presets.filter(p=>p.activo);
+  const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],especie:''};
+  const currentEspecie=data.especie||data.producto||'';
+  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia'};
+  const especies=_getEspecies();
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
     <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Moldes</div><button class="modal-x" onclick="closeMArmado()">×</button></div>
     <div class="modal-body">
-      <!-- PRODUCTO + TURNO -->
+      <!-- ESPECIE + TURNO -->
       <div class="form-grid cols-2" style="margin-bottom:14px;">
         <div class="form-field">
-          <label class="form-label">Producto / Referencia</label>
-          <select class="select" id="mArmProducto" onchange="_editMArmado.producto=this.value;">
-            <option value="">— Sin asignar —</option>
-            ${presets.map(p=>`<option value="${esc(p.nombre)}" ${p.nombre===_editMArmado.producto?'selected':''}>${esc(p.nombre)}</option>`).join('')}
+          <label class="form-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-.1em;margin-right:4px;"><path d="M12 3v18M5 6l7-3 7 3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/></svg>
+            Especie <span style="font-size:10px;color:var(--text-3);font-weight:400;">(filtra presets en Registrar)</span>
+          </label>
+          <select class="select" id="mArmEspecie" onchange="_editMArmado.especie=this.value;_mArmUpdatePresetHint();">
+            <option value="">— Sin filtro (todos los presets) —</option>
+            ${especies.map(e=>`<option value="${esc(e)}" ${e===_editMArmado.especie?'selected':''}>${esc(e)}</option>`).join('')}
           </select>
+          <div id="mArmPresetHint" style="margin-top:5px;font-size:11px;color:#0369a1;"></div>
         </div>
         <div class="form-field">
           <label class="form-label">Turno de la línea</label>
@@ -4467,27 +4728,25 @@ function editMArmadoLinea(ln){
 
       <!-- TRABAJADORES -->
       <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">Trabajadores asignados <span id="mArmCount" style="color:var(--text-3);font-weight:500;">(0)</span></label>
-      <div id="mArmTrabList" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
+      <div id="mArmTrabList" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
 
       <!-- AGREGAR -->
       <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
         <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
-          <div class="form-field" style="margin:0;">
-            <label class="form-label" style="font-size:11px;">Buscar persona</label>
-            <select class="select" id="mArmAddTrab" onchange="onMArmSelectChange()">
-              <option value="">— Selecciona —</option>
-              <option value="__manual__">+ Ingresar manualmente (nombre libre)</option>
-              ${DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}">${esc(t.nombre)}</option>`).join('')}
-            </select>
-          </div>
-          <button class="btn success" type="button" onclick="addMArmTrab()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            Agregar
-          </button>
-        </div>
+        <button class="ios-picker-trigger" type="button" id="mArmPickerBtn" onclick="openIosPicker('trab',function(id,nombre,codigo){_mArmAddById(id,nombre,codigo);})">
+          <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <span class="trigger-name">Buscar por nombre o código…</span>
+          <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
         <div id="mArmManualBox" style="display:none;margin-top:8px;">
-          <input class="input" id="mArmManualNombre" placeholder="Nombre completo del trabajador">
+          <label class="form-label" style="font-size:11px;">Nombre manual</label>
+          <div style="display:flex;gap:8px;">
+            <input class="input" id="mArmManualNombre" placeholder="Nombre completo del trabajador" style="flex:1;">
+            <button class="btn success" type="button" onclick="addMArmTrabManual()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              Agregar
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -4497,100 +4756,126 @@ function editMArmadoLinea(ln){
     </div>
   </div>`;
   document.body.appendChild(modal);
+  _mArmUpdatePresetHint();
   renderMArmModal();
 }
+function _mArmUpdatePresetHint(){
+  const hint=document.getElementById('mArmPresetHint');if(!hint)return;
+  const esp=_editMArmado.especie;
+  if(!esp){hint.textContent='';return;}
+  const cnt=DB.data.presets.filter(p=>p.activo&&p.especie===esp).length;
+  hint.textContent=`✓ Filtrará ${cnt} preset${cnt!==1?'s':''} de ${esp}`;
+}
 function renderMArmModal(){
+  // Planillero box
   const pBox=document.getElementById('mArmPlanilleroBox');
   if(pBox){
     if(_editMArmado.planillero){
       const p=_editMArmado.planillero;
+      const tDb=DB.data.trabajadores.find(x=>x.id===p.trabId);
+      const ini=(p.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
       pBox.innerHTML=`<div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;"><strong>${esc(p.nombre)}</strong></div>
+        <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#34c759,#30b0c7);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0;">${esc(ini)}</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:14px;">${esc(p.nombre)}</div>
+          ${tDb?`<div style="font-size:11px;color:var(--text-3);">Código: ${esc(tDb.codigo||'—')}</div>`:''}
+        </div>
         <button class="btn ghost sm" type="button" onclick="_editMArmado.planillero=null;renderMArmModal();">Cambiar</button>
       </div>`;
     } else {
-      pBox.innerHTML=`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
-        <div class="form-field" style="margin:0;">
-          <label class="form-label" style="font-size:11px;">Buscar planillero</label>
-          <select class="select" id="mArmPlanSel">
-            <option value="">— Selecciona —</option>
-            <option value="__manual__">+ Ingresar manualmente</option>
-            ${DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}">${esc(t.nombre)}</option>`).join('')}
-          </select>
-        </div>
-        <button class="btn success sm" type="button" onclick="setMArmPlanillero()">Asignar</button>
-      </div>
-      <input class="input" id="mArmPlanManual" placeholder="Nombre (si manual)" style="margin-top:8px;display:none;">`;
-      const sel=document.getElementById('mArmPlanSel');
-      if(sel)sel.addEventListener('change',()=>{const man=document.getElementById('mArmPlanManual');if(man)man.style.display=sel.value==='__manual__'?'block':'none';});
+      pBox.innerHTML=`<button class="ios-picker-trigger" type="button" onclick="openIosPicker('planillero',function(id,nombre,codigo){_mArmSetPlanillero(id,nombre,codigo);})">
+        <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span class="trigger-name" style="color:var(--text-3);">Buscar planillero…</span>
+        <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>`;
     }
   }
+  // Workers list
   const list=document.getElementById('mArmTrabList');
   const cnt=document.getElementById('mArmCount');
   if(cnt)cnt.textContent='('+_editMArmado.trabajadores.length+')';
   if(list){
     if(!_editMArmado.trabajadores.length){
-      list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px;">Sin trabajadores aún. Agrega abajo.</div>';
+      list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px;">Sin trabajadores aún. Usa el buscador de abajo.</div>';
     } else {
-      list.innerHTML=_editMArmado.trabajadores.map((t,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--slate-100);">
-        <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(t.nombre)}</div></div>
-        <button class="btn ghost sm icon" type="button" title="Eliminar" onclick="_editMArmado.trabajadores.splice(${i},1);renderMArmModal();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
-      </div>`).join('');
+      list.innerHTML=_editMArmado.trabajadores.map((t,i)=>{
+        const tDb=DB.data.trabajadores.find(x=>x.id===t.trabId);
+        const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+        const codigo=tDb?tDb.codigo:null;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--slate-100);">
+          <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#007aff,#5856d6);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0;">${esc(ini)}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${esc(t.nombre)}</div>
+            ${codigo?`<div style="font-size:11px;color:var(--text-3);">Código: ${esc(codigo)}</div>`:''}
+          </div>
+          <button class="btn ghost sm icon" type="button" title="Quitar" onclick="_editMArmado.trabajadores.splice(${i},1);renderMArmModal();">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+          </button>
+        </div>`;
+      }).join('');
     }
   }
 }
-function setMArmPlanillero(){
-  const sel=document.getElementById('mArmPlanSel');if(!sel||!sel.value){showToast('Selecciona un planillero','error');return;}
-  let nombre='';let trabId=null;
-  if(sel.value==='__manual__'){
-    const man=document.getElementById('mArmPlanManual');
-    nombre=(man&&man.value||'').trim();
-    if(!nombre){showToast('Escribe el nombre','error');return;}
-  } else {
-    const id=parseInt(sel.value);const t=DB.data.trabajadores.find(x=>x.id===id);if(!t)return;
-    nombre=t.nombre;trabId=t.id;
+function _mArmSetPlanillero(id,nombre,codigo){
+  let trabId=null,realNombre=nombre;
+  if(id!=='__manual__'){
+    const t=DB.data.trabajadores.find(x=>x.id===id);
+    if(t){realNombre=t.nombre;trabId=t.id;}
   }
-  _editMArmado.planillero={trabId,nombre};
+  _editMArmado.planillero={trabId,nombre:realNombre};
   renderMArmModal();
 }
-function onMArmSelectChange(){
-  const sel=document.getElementById('mArmAddTrab');
-  const manBox=document.getElementById('mArmManualBox');
-  if(!sel||!manBox)return;
-  manBox.style.display=sel.value==='__manual__'?'block':'none';
+function _mArmAddById(id,nombre,codigo){
+  if(id==='__manual__')return; // handled via openIosPicker
+  const t=DB.data.trabajadores.find(x=>x.id===id);
+  if(!t)return;
+  if(_editMArmado.trabajadores.some(x=>x.trabId===t.id)){showToast('Ya está agregado','error');return;}
+  _editMArmado.trabajadores.push({trabId:t.id,nombre:t.nombre});
+  renderMArmModal();
+  showToast(t.nombre+' agregado','success');
 }
-function addMArmTrab(){
-  const sel=document.getElementById('mArmAddTrab');if(!sel||!sel.value){showToast('Selecciona o ingresa un trabajador','error');return;}
-  let nombre='';let trabId=null;
-  if(sel.value==='__manual__'){
-    const man=document.getElementById('mArmManualNombre');
-    nombre=(man&&man.value||'').trim();
-    if(!nombre){showToast('Escribe el nombre','error');return;}
-  } else {
-    const id=parseInt(sel.value);const t=DB.data.trabajadores.find(x=>x.id===id);if(!t)return;
-    nombre=t.nombre;trabId=t.id;
-    if(_editMArmado.trabajadores.some(x=>x.trabId===trabId)){showToast('Ya está agregado','error');return;}
-  }
-  _editMArmado.trabajadores.push({trabId,nombre});
-  sel.value='';const man=document.getElementById('mArmManualNombre');if(man)man.value='';
+function addMArmTrabManual(){
+  const inp=document.getElementById('mArmManualNombre');
+  const nombre=(inp&&inp.value||'').trim();
+  if(!nombre){showToast('Escribe el nombre','error');inp&&inp.focus();return;}
+  _editMArmado.trabajadores.push({trabId:null,nombre});
+  inp.value='';
   document.getElementById('mArmManualBox').style.display='none';
   renderMArmModal();
+  showToast(nombre+' agregado','success');
 }
-function closeMArmado(){const m=document.getElementById('mArmadoModal');if(m)m.remove();_editMLn=null;_editMArmado=null;}
+function onMArmSelectChange(){} // legacy compat no-op
+function addMArmTrab(){} // legacy compat no-op
+function setMArmPlanillero(){} // legacy compat no-op
+function closeMArmado(){
+  const m=document.getElementById('mArmadoModal');if(m)m.remove();
+  closeIosPicker();
+  _editMLn=null;_editMArmado=null;
+}
 function saveMArmado(){
   if(!_editMLn||!_editMArmado)return;
-  RT.armadoMolde[_editMLn]={planillero:_editMArmado.planillero,trabajadores:_editMArmado.trabajadores,producto:_editMArmado.producto||'',turno:_editMArmado.turno||'dia'};
-  // Sincronizar RT.lineaProducto para compatibilidad con render de registrar
+  RT.armadoMolde[_editMLn]={
+    planillero:_editMArmado.planillero,
+    trabajadores:_editMArmado.trabajadores,
+    especie:_editMArmado.especie||'',
+    turno:_editMArmado.turno||'dia'
+  };
+  // Compat: keep lineaProducto synced for old references
   if(!RT.lineaProducto)RT.lineaProducto={};
-  RT.lineaProducto[_editMLn]=_editMArmado.producto||'';
+  RT.lineaProducto[_editMLn]=_editMArmado.especie||'';
   rtSave();
   const ln=_editMLn;
   closeMArmado();renderMArmado();
+  // Re-render preset grid so especie filter applies immediately
+  if(window.renderMRegPresets)renderMRegPresets();
   if(window.renderMRegTrab)renderMRegTrab();
   showToast('Línea '+ln+' actualizada','success');
 }
 window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;window.closeMArmado=closeMArmado;window.saveMArmado=saveMArmado;
-window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;window.copiarMArmadoDia=copiarMArmadoDia;window.guardarMArmadoSnapshot=guardarMArmadoSnapshot;window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;
+window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;window.copiarMArmadoDia=copiarMArmadoDia;window.guardarMArmadoSnapshot=guardarMArmadoSnapshot;
+window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
+window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
+window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;
 
 /* ═══ EMPAQUE — Registrar + lotes ══════════════════════════════ */
 function renderERegPresets(){
