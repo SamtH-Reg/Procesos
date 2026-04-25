@@ -122,11 +122,13 @@ tbody tr:hover{background:var(--surface-alt);}
 .modal-ftr{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;}
 
 /* Dashboard Drag & Drop */
-.dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;min-height:400px;}
-.widget{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow-sm);cursor:grab;position:relative;transition:.15s;display:flex;flex-direction:column;gap:10px;min-height:220px;}
-.widget.size-sm{grid-column:span 3;}
-.widget.size-md{grid-column:span 6;}
-.widget.size-lg{grid-column:span 12;}
+.dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;min-height:300px;grid-auto-flow:dense;}
+.widget{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow-sm);cursor:grab;position:relative;transition:.15s;display:flex;flex-direction:column;gap:8px;min-height:160px;}
+.widget.size-sm{grid-column:span 3;min-height:120px;}
+.widget.size-md{grid-column:span 6;min-height:240px;}
+.widget.size-lg{grid-column:span 12;min-height:280px;}
+.widget.size-sm .widget-body{align-items:center;justify-content:center;display:flex;}
+@media(max-width:1100px){.widget.size-sm{grid-column:span 6;}.widget.size-md{grid-column:span 12;}}
 .widget:hover{border-color:var(--accent);box-shadow:var(--shadow-md);}
 .widget.dragging{opacity:.4;cursor:grabbing;}
 .widget.drop-target{border-style:dashed;border-color:var(--accent);background:var(--surface-alt);}
@@ -145,16 +147,19 @@ tbody tr:hover{background:var(--surface-alt);}
 .dash-grid.drop-hot{outline:2px dashed var(--accent);outline-offset:4px;border-radius:12px;}
 
 /* Widget palette (drag source) */
-.wp-bar{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;box-shadow:var(--shadow-sm);}
-.wp-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.wp-bar{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;box-shadow:var(--shadow-sm);}
+.wp-hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
 .wp-title{font-weight:700;font-size:13px;}
 .wp-sub{font-size:11px;color:var(--text-3);}
-.wp-chips{display:flex;flex-wrap:wrap;gap:6px;}
-.wp-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;background:var(--surface-alt);border:1.5px solid var(--border);border-radius:999px;font-size:12px;font-weight:600;cursor:grab;user-select:none;transition:.12s;}
+.wp-chips{display:flex;flex-direction:column;gap:6px;}
+.wp-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--border);}
+.wp-row:last-child{border-bottom:0;}
+.wp-row-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);font-weight:800;width:88px;flex-shrink:0;padding-right:4px;border-right:2px solid var(--brand);}
+.wp-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--surface-alt);border:1px solid var(--border);border-radius:999px;font-size:11px;font-weight:600;cursor:grab;user-select:none;transition:.12s;}
 .wp-chip:hover{border-color:var(--accent);background:var(--surface);transform:translateY(-1px);box-shadow:var(--shadow-sm);}
 .wp-chip:active{cursor:grabbing;}
-.wp-chip .wp-icon{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;background:var(--brand);color:#fff;border-radius:4px;font-size:10px;font-weight:800;}
-.wp-chip .wp-add{background:transparent;border:none;cursor:pointer;color:var(--text-3);padding:0;font-size:14px;line-height:1;}
+.wp-chip .wp-icon{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;background:var(--brand);color:#fff;border-radius:3px;font-size:9px;font-weight:800;}
+.wp-chip .wp-add{background:transparent;border:none;cursor:pointer;color:var(--text-3);padding:0 0 0 2px;font-size:13px;line-height:1;}
 .wp-chip .wp-add:hover{color:var(--brand);}
 .wp-group{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-right:4px;}
 
@@ -723,10 +728,12 @@ const WIDGET_CATALOG=[
   {type:'kpi-pesajes',   title:'KPI · Pesajes',    size:'sm', group:'KPI', icon:'P'},
   {type:'kpi-operarios', title:'KPI · Operarios',  size:'sm', group:'KPI', icon:'O'},
   // Charts
-  {type:'chart-hora',    title:'Gráfico · Por hora',    size:'md', group:'Gráficos', icon:'▌'},
-  {type:'chart-especie', title:'Gráfico · Por especie', size:'md', group:'Gráficos', icon:'◔'},
-  {type:'chart-linea',   title:'Gráfico · Por línea',   size:'lg', group:'Gráficos', icon:'▬'},
-  {type:'chart-turno',   title:'Gráfico · Por turno',   size:'md', group:'Gráficos', icon:'◐'},
+  {type:'chart-hora',         title:'Gráfico · Por hora',           size:'md', group:'Gráficos', icon:'▌'},
+  {type:'chart-hora-linea',   title:'Gráfico · Por hora × línea',   size:'lg', group:'Gráficos', icon:'≣'},
+  {type:'chart-especie',      title:'Gráfico · Por especie',        size:'md', group:'Gráficos', icon:'◔'},
+  {type:'chart-linea',        title:'Gráfico · Por línea',          size:'md', group:'Gráficos', icon:'▬'},
+  {type:'chart-linea-especie',title:'Gráfico · Por línea × especie',size:'lg', group:'Gráficos', icon:'⫶'},
+  {type:'chart-turno',        title:'Gráfico · Por turno',          size:'md', group:'Gráficos', icon:'◐'},
   // Tablas (registros completos)
   {type:'tbl-moldes',    title:'Tabla · Ver moldes',    size:'lg', group:'Registros', icon:'≡'},
   {type:'tbl-pesaje',    title:'Tabla · Ver pesajes',   size:'lg', group:'Registros', icon:'≡'},
@@ -827,17 +834,22 @@ function _shade(hex,delta){
 }
 function renderWidgetPalette(){
   const box=document.getElementById('wpChips');if(!box)return;
-  // agrupar
+  // Agrupar por categoría con orden definido
+  const groupOrder=['KPI','Gráficos','Registros','Por hora','Consolidado','Por especie'];
   const groups={};WIDGET_CATALOG.forEach(c=>{(groups[c.group]=groups[c.group]||[]).push(c);});
-  box.innerHTML=Object.keys(groups).map(g=>
-    `<span class="wp-group">${esc(g)}:</span>`+
-    groups[g].map(c=>
-      `<div class="wp-chip" draggable="true" data-palette="1" data-wtype="${esc(c.type)}" data-wsize="${c.size}" data-wtitle="${esc(c.title)}" title="Arrastra al dashboard o pulsa +">
-        <span class="wp-icon">${c.icon}</span>${esc(c.title)}
-        <button class="wp-add" type="button" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}')" title="Agregar">+</button>
-      </div>`
-    ).join('')
-  ).join(' ');
+  // Quitar prefijos redundantes del título según el grupo
+  const cleanTitle=(c)=>c.title.replace(/^(KPI · |Gráfico · |Tabla · )/,'').replace(/Moldes · /,'M: ').replace(/Pesaje · /,'P: ');
+  box.innerHTML=groupOrder.filter(g=>groups[g]).map(g=>
+    `<div class="wp-row">
+      <div class="wp-row-label">${esc(g)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1;">${groups[g].map(c=>
+        `<div class="wp-chip" draggable="true" data-palette="1" data-wtype="${esc(c.type)}" data-wsize="${c.size}" data-wtitle="${esc(c.title)}" title="${esc(c.title)} — arrastra o pulsa +">
+          <span class="wp-icon">${c.icon}</span>${esc(cleanTitle(c))}
+          <button class="wp-add" type="button" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}')" title="Agregar">+</button>
+        </div>`
+      ).join('')}</div>
+    </div>`
+  ).join('');
   // drag handlers
   box.querySelectorAll('.wp-chip').forEach(el=>{
     el.addEventListener('dragstart',e=>{
@@ -864,13 +876,71 @@ function resetDashLayout(){
   saveDashLayout();renderDashGrid();refreshLayoutPicker();
 }
 
+/* ─── Layouts predefinidos (templates) ─── */
+const LAYOUT_TEMPLATES={
+  '🏭 Operación · Resumen':[
+    {type:'kpi-moldes',title:'Moldes',size:'sm'},
+    {type:'kpi-kg',title:'Kg producidos',size:'sm'},
+    {type:'kpi-pesajes',title:'Pesajes',size:'sm'},
+    {type:'kpi-operarios',title:'Operarios',size:'sm'},
+    {type:'chart-hora-linea',title:'Producción por hora × línea',size:'lg'},
+    {type:'chart-especie',title:'Distribución por especie',size:'md'},
+    {type:'chart-linea-especie',title:'Línea × especie',size:'md'},
+  ],
+  '👤 Planillero · Día':[
+    {type:'kpi-moldes',title:'Moldes hoy',size:'sm'},
+    {type:'kpi-kg',title:'Kg hoy',size:'sm'},
+    {type:'pv-hora-mol',title:'Moldes por hora',size:'lg'},
+    {type:'pv-hora-pes',title:'Pesaje por hora',size:'lg'},
+    {type:'tbl-moldes',title:'Últimos moldes',size:'lg'},
+    {type:'tbl-pesaje',title:'Últimos pesajes',size:'lg'},
+  ],
+  '👔 Supervisor · Análisis':[
+    {type:'kpi-moldes',title:'Moldes',size:'sm'},
+    {type:'kpi-kg',title:'Kg totales',size:'sm'},
+    {type:'kpi-pesajes',title:'Pesajes',size:'sm'},
+    {type:'kpi-operarios',title:'Operarios',size:'sm'},
+    {type:'chart-hora',title:'Por hora',size:'md'},
+    {type:'chart-linea',title:'Por línea',size:'md'},
+    {type:'chart-turno',title:'Por turno',size:'md'},
+    {type:'pv-consol-mol',title:'Consolidado moldes',size:'lg'},
+    {type:'pv-esp-pes',title:'Pesaje por especie',size:'lg'},
+  ],
+  '📊 Gerencia · KPI':[
+    {type:'kpi-kg',title:'Kg producidos',size:'sm'},
+    {type:'kpi-moldes',title:'Moldes',size:'sm'},
+    {type:'kpi-pesajes',title:'Pesajes',size:'sm'},
+    {type:'kpi-operarios',title:'Operarios',size:'sm'},
+    {type:'chart-hora-linea',title:'Producción horaria',size:'lg'},
+    {type:'chart-especie',title:'Mix de especies',size:'md'},
+    {type:'chart-turno',title:'Día vs Noche',size:'md'},
+  ],
+  '🐟 Por especie':[
+    {type:'kpi-kg',title:'Kg producidos',size:'sm'},
+    {type:'chart-especie',title:'Distribución',size:'md'},
+    {type:'chart-linea-especie',title:'Especie × línea',size:'lg'},
+    {type:'pv-esp-mol',title:'Moldes por especie',size:'lg'},
+    {type:'pv-esp-pes',title:'Pesajes por especie',size:'lg'},
+  ],
+  '⏱ Por hora detalle':[
+    {type:'chart-hora-linea',title:'Hora × línea',size:'lg'},
+    {type:'pv-hora-mol',title:'Moldes — hora × línea × especie × operario',size:'lg'},
+    {type:'pv-hora-pes',title:'Pesaje — hora × línea × especie × operario',size:'lg'},
+    {type:'pv-consol-mol',title:'Consolidado por línea',size:'lg'},
+  ],
+};
+
 /* ─── Layouts guardados ─── */
 function refreshLayoutPicker(){
   const sel=document.getElementById('layoutPicker');if(!sel)return;
   const keys=Object.keys(dashLayouts).sort();
+  const tplKeys=Object.keys(LAYOUT_TEMPLATES);
   const cur=sel.value;
-  sel.innerHTML='<option value="">— Cargar layout —</option>'+keys.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('');
-  if(keys.includes(cur))sel.value=cur;
+  let opts='<option value="">— Cargar layout —</option>';
+  opts+='<optgroup label="✨ Predefinidos">'+tplKeys.map(k=>`<option value="tpl::${esc(k)}">${esc(k)}</option>`).join('')+'</optgroup>';
+  if(keys.length)opts+='<optgroup label="💾 Guardados">'+keys.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')+'</optgroup>';
+  sel.innerHTML=opts;
+  if(cur)sel.value=cur;
 }
 function saveLayoutAs(){
   const name=prompt('Nombre del layout (ej: "Planillero día", "Supervisor noche"):');
@@ -882,14 +952,24 @@ function saveLayoutAs(){
 }
 function loadLayout(name){
   if(!name)return;
-  const l=dashLayouts[name];if(!l)return;
-  dashWidgets=JSON.parse(JSON.stringify(l.widgets));
+  let widgets=null;
+  if(name.startsWith('tpl::')){
+    const tplName=name.substring(5);
+    const tpl=LAYOUT_TEMPLATES[tplName];if(!tpl){toast('Template no encontrado','warn');return;}
+    widgets=tpl.map((w,i)=>({id:'w'+(Date.now()+i),...w}));
+    toast('Template cargado: '+tplName,'success');
+  } else {
+    const l=dashLayouts[name];if(!l)return;
+    widgets=JSON.parse(JSON.stringify(l.widgets));
+    toast('Layout cargado: '+name,'info');
+  }
+  dashWidgets=widgets;
   saveDashLayout();renderDashGrid();
-  toast('Layout cargado: '+name,'info');
 }
 function deleteCurrentLayout(){
   const sel=document.getElementById('layoutPicker');const name=sel.value;
   if(!name){toast('Selecciona un layout','warn');return;}
+  if(name.startsWith('tpl::')){toast('No se pueden eliminar templates predefinidos','warn');return;}
   if(!confirm('¿Eliminar layout "'+name+'"?'))return;
   delete dashLayouts[name];saveDashLayouts();refreshLayoutPicker();
   sel.value='';toast('Layout eliminado','success');
@@ -980,45 +1060,63 @@ function renderDashGrid(){
   setupDragDrop();
   dashWidgets.forEach(w=>drawWidget(w));
 }
+let _draggingEl=null;
+let _gridListenersAttached=false;
+let _lastDropTime=0;
+function _guardDrop(){const now=Date.now();if(now-_lastDropTime<150)return false;_lastDropTime=now;return true;}
 function setupDragDrop(){
-  const grid=document.getElementById('dashGrid');
-  const widgets=grid.querySelectorAll('.widget');
-  let draggingEl=null;
-  widgets.forEach(el=>{
-    el.addEventListener('dragstart',e=>{draggingEl=el;el.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/widget-reorder',el.dataset.id);});
-    el.addEventListener('dragend',()=>{el.classList.remove('dragging');grid.querySelectorAll('.widget').forEach(w=>w.classList.remove('drop-target'));});
-    el.addEventListener('dragover',e=>{e.preventDefault();if(el!==draggingEl)el.classList.add('drop-target');});
+  const grid=document.getElementById('dashGrid');if(!grid)return;
+  // Listeners por widget (se reasignan en cada render porque los widgets son nuevos nodos)
+  grid.querySelectorAll('.widget').forEach(el=>{
+    el.addEventListener('dragstart',e=>{
+      _draggingEl=el;el.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/widget-reorder',el.dataset.id);
+    });
+    el.addEventListener('dragend',()=>{el.classList.remove('dragging');_draggingEl=null;grid.querySelectorAll('.widget').forEach(w=>w.classList.remove('drop-target'));});
+    el.addEventListener('dragover',e=>{
+      e.preventDefault();
+      const types=e.dataTransfer.types;
+      if(types.includes('text/widget-type'))e.dataTransfer.dropEffect='copy';
+      else e.dataTransfer.dropEffect='move';
+      if(el!==_draggingEl)el.classList.add('drop-target');
+    });
     el.addEventListener('dragleave',()=>el.classList.remove('drop-target'));
     el.addEventListener('drop',e=>{
-      e.preventDefault();el.classList.remove('drop-target');
+      e.preventDefault();e.stopPropagation();  // evita que burbuje al grid
+      el.classList.remove('drop-target');
+      if(!_guardDrop())return;
       const pType=e.dataTransfer.getData('text/widget-type');
       if(pType){
-        // drop desde paleta → insertar antes del widget target
         const size=e.dataTransfer.getData('text/widget-size')||'md';
         const title=e.dataTransfer.getData('text/widget-title')||pType;
         const idx=dashWidgets.findIndex(w=>w.id===el.dataset.id);
         dashWidgets.splice(Math.max(0,idx),0,{id:'w'+Date.now(),type:pType,title,size});
         saveDashLayout();renderDashGrid();toast('Widget agregado','success');return;
       }
-      if(el===draggingEl)return;
-      // reorder
-      const from=dashWidgets.findIndex(w=>w.id===draggingEl.dataset.id);
+      if(!_draggingEl||el===_draggingEl)return;
+      const from=dashWidgets.findIndex(w=>w.id===_draggingEl.dataset.id);
       const to=dashWidgets.findIndex(w=>w.id===el.dataset.id);
+      if(from<0||to<0)return;
       const [moved]=dashWidgets.splice(from,1);
       dashWidgets.splice(to,0,moved);
       saveDashLayout();renderDashGrid();
     });
   });
-  // Drop sobre el grid vacío o al final
+  // Listeners del grid: SOLO se atacan una vez (sino se duplican)
+  if(_gridListenersAttached)return;
+  _gridListenersAttached=true;
   grid.addEventListener('dragover',e=>{
-    if(e.dataTransfer.types.includes('text/widget-type')){e.preventDefault();e.dataTransfer.dropEffect='copy';}
+    if(e.dataTransfer.types.includes('text/widget-type')){e.preventDefault();e.dataTransfer.dropEffect='copy';grid.classList.add('drop-hot');}
   });
+  grid.addEventListener('dragleave',e=>{if(e.target===grid)grid.classList.remove('drop-hot');});
   grid.addEventListener('drop',e=>{
+    grid.classList.remove('drop-hot');
     const pType=e.dataTransfer.getData('text/widget-type');
     if(!pType)return;
-    // Si el drop fue directamente sobre el grid (no sobre un widget hijo)
-    if(e.target.closest('.widget'))return;
+    if(e.target.closest('.widget'))return; // ya manejado por widget drop
     e.preventDefault();
+    if(!_guardDrop())return;
     const size=e.dataTransfer.getData('text/widget-size')||'md';
     const title=e.dataTransfer.getData('text/widget-title')||pType;
     dashWidgets.push({id:'w'+Date.now(),type:pType,title,size});
@@ -1074,6 +1172,30 @@ function drawWidget(w){
     const labels=Object.keys(map).sort();
     data={labels,datasets:[{label:'kg',data:labels.map(l=>map[l]),backgroundColor:col||'#16a34a'}]};
     opts={type:'bar',indexAxis:'y'};
+  } else if(w.type==='chart-hora-linea'){
+    // Barras agrupadas por hora, separadas por línea
+    const hoursSet=new Set();const lineSet=new Set();
+    all.forEach(r=>{const h=(r.hora||'').slice(0,2);if(h){hoursSet.add(h);lineSet.add(r.linea||'—');}});
+    const hours=[...hoursSet].sort();const lines=[...lineSet].sort();
+    const palette=['#3b6fb8','#16a34a','#f59e0b','#dc2626','#8b5cf6','#06b6d4','#ec4899','#1e3a66'];
+    const datasets=lines.map((l,i)=>{
+      const dat=hours.map(h=>{let s=0;all.forEach(r=>{if((r.hora||'').slice(0,2)===h&&(r.linea||'—')===l)s+=+r.kg||0;});return s;});
+      return{label:l,data:dat,backgroundColor:col?_shade(col,(i-2)*15):palette[i%palette.length]};
+    });
+    data={labels:hours.map(h=>h+'h'),datasets};
+    opts={type:'bar'};
+  } else if(w.type==='chart-linea-especie'){
+    // Stacked bar por línea, color por especie
+    const lineSet=new Set();const espSet=new Set();
+    all.forEach(r=>{lineSet.add(r.linea||'—');espSet.add(r.especie||'—');});
+    const lines=[...lineSet].sort();const esps=[...espSet].sort();
+    const palette=['#3b6fb8','#16a34a','#f59e0b','#dc2626','#8b5cf6','#06b6d4','#ec4899','#1e3a66'];
+    const datasets=esps.map((e,i)=>{
+      const dat=lines.map(l=>{let s=0;all.forEach(r=>{if((r.linea||'—')===l&&(r.especie||'—')===e)s+=+r.kg||0;});return s;});
+      return{label:e,data:dat,backgroundColor:col?_shade(col,(i-2)*15):palette[i%palette.length]};
+    });
+    data={labels:lines,datasets};
+    opts={type:'bar',stacked:true};
   } else if(w.type==='chart-turno'){
     const map={dia:0,noche:0};all.forEach(r=>{if(r.turno==='noche')map.noche+=(r.kg||0);else map.dia+=(r.kg||0);});
     data={labels:['Día','Noche'],datasets:[{data:[map.dia,map.noche],backgroundColor:col?[_shade(col,0),_shade(col,-25)]:['#f59e0b','#1e3a66']}]};
@@ -1081,7 +1203,16 @@ function drawWidget(w){
   } else if(w.type.startsWith('tbl-')||w.type.startsWith('pv-')){
     drawTableWidget(w,moldes,pesajes);return;
   } else {return;}
-  _charts[w.id]=new Chart(cv,{type:opts.type,data,options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:opts.type!=='bar'}},scales:opts.type==='bar'?{x:{},y:{beginAtZero:true}}:undefined,indexAxis:opts.indexAxis}});
+  const stacked=!!opts.stacked;
+  _charts[w.id]=new Chart(cv,{
+    type:opts.type,data,
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:opts.type!=='bar'||data.datasets.length>1,position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
+      scales:opts.type==='bar'?{x:{stacked:stacked,grid:{display:false}},y:{beginAtZero:true,stacked:stacked}}:undefined,
+      indexAxis:opts.indexAxis
+    }
+  });
 }
 
 /* ─── Helpers de tabla/pivot para widgets ─── */
@@ -1105,12 +1236,45 @@ function drawTableWidget(w,moldes,pesajes){
     if(!src.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin registros</div>';return;}
     const hoursSet=new Set();src.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
     const hours=[...hoursSet].sort((a,b)=>a-b);
-    const map={};src.forEach(r=>{const k=(r.nombre||'—');if(!map[k])map[k]={byH:{},tot:0};const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;const v=+r.kg||0;if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+v;map[k].tot+=v;});
-    const rows=Object.keys(map).sort().map(k=>({n:k,...map[k]}));
+    // Clave compuesta: linea | especie | nombre — para mostrar agrupado
+    const map={};
+    src.forEach(r=>{
+      const lin=r.linea||'—', esp=r.especie||'—', nom=r.nombre||'—';
+      const k=lin+'\u0001'+esp+'\u0001'+nom;
+      if(!map[k])map[k]={lin,esp,nom,byH:{},tot:0,cant:0};
+      const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
+      const v=+r.kg||0;
+      if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+v;
+      map[k].tot+=v;
+      if(w.type==='pv-hora-mol')map[k].cant+=(+r.cant||0);
+    });
+    // Ordenar por línea, después especie, después nombre
+    const rows=Object.values(map).sort((a,b)=>(a.lin+a.esp+a.nom).localeCompare(b.lin+b.esp+b.nom));
     const totCol={};let gt=0;rows.forEach(r=>{hours.forEach(h=>totCol[h]=(totCol[h]||0)+(r.byH[h]||0));gt+=r.tot;});
-    html=`<table><thead><tr><th>Operario</th>${hours.map(h=>`<th class="num">${String(h).padStart(2,'0')}h</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>`+
-      rows.map(r=>`<tr><td>${esc(r.n)}</td>${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}<td class="num"><strong>${_fmt(r.tot)}</strong></td></tr>`).join('')+
-      `</tbody><tfoot><tr><td>Total</td>${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}<td class="num">${_fmt(gt)}</td></tr></tfoot></table>`;
+    const cantHdr=w.type==='pv-hora-mol'?'<th class="num">Cant</th>':'';
+    const cantTot=w.type==='pv-hora-mol'?`<th class="num">${_fmtInt(rows.reduce((s,r)=>s+r.cant,0))}</th>`:'';
+    html=`<table>
+      <thead><tr>
+        <th>Línea</th><th>Especie</th><th>Operario</th>
+        ${hours.map(h=>`<th class="num">${String(h).padStart(2,'0')}h</th>`).join('')}
+        ${cantHdr}<th class="num">Total kg</th>
+      </tr></thead>
+      <tbody>`+
+      rows.map(r=>`<tr>
+        <td><strong>${esc(r.lin)}</strong></td>
+        <td>${esc(r.esp)}</td>
+        <td>${esc(r.nom)}</td>
+        ${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}
+        ${w.type==='pv-hora-mol'?`<td class="num">${_fmtInt(r.cant)}</td>`:''}
+        <td class="num"><strong>${_fmt(r.tot)}</strong></td>
+      </tr>`).join('')+
+      `</tbody>
+      <tfoot><tr>
+        <td colspan="3">TOTAL</td>
+        ${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}
+        ${cantTot}
+        <td class="num">${_fmt(gt)}</td>
+      </tr></tfoot></table>`;
   } else if(w.type==='pv-consol-mol'){
     if(!moldes.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
     const hoursSet=new Set();const linSet=new Set();
@@ -1797,21 +1961,27 @@ function sbSubscribeRealtime(){
   });
   sbLog('Realtime: '+subs.length+' canales activos');
 }
-/* Re-render de la página actualmente visible */
+/* Re-render con debounce (evita 16 redraws en ráfaga de realtime) */
+let _rerenderTimer=null;
 function sbRerenderCurrent(){
-  try{
-    const active=document.querySelector('.page.active, .page[style*="block"]');
-    const id=active?active.id:'';
-    if(typeof renderDashGrid==='function')renderDashGrid();
-    if(id==='page-reportes'&&typeof renderReportes==='function')renderReportes();
-    if(id==='page-analisis'&&typeof renderAnalisis==='function')renderAnalisis();
-    if(id==='page-presets'&&typeof renderPresets==='function')renderPresets();
-    if(id==='page-trabajadores'&&typeof renderTrabs==='function')renderTrabs();
-    if(id==='page-turnos'&&typeof renderTurnos==='function')renderTurnos();
-    if(id==='page-equipos'&&typeof renderEquipos==='function')renderEquipos();
-    if(id==='page-roles'&&typeof renderRoles==='function')renderRoles();
-    if(id==='page-tuneles'&&typeof renderTunReport==='function')renderTunReport();
-  }catch(e){console.warn('[rerender]',e);}
+  if(_rerenderTimer)clearTimeout(_rerenderTimer);
+  _rerenderTimer=setTimeout(()=>{
+    _rerenderTimer=null;
+    try{
+      const active=document.querySelector('.page.active, .page[style*="block"]');
+      const id=active?active.id:'';
+      if(typeof renderKPIs==='function')renderKPIs();
+      if(typeof renderDashGrid==='function')renderDashGrid();
+      if(id==='page-reportes'&&typeof renderReportes==='function')renderReportes();
+      if(id==='page-analisis'&&typeof renderAnalisis==='function')renderAnalisis();
+      if(id==='page-presets'&&typeof renderPresets==='function')renderPresets();
+      if(id==='page-trabajadores'&&typeof renderTrabs==='function')renderTrabs();
+      if(id==='page-turnos'&&typeof renderTurnos==='function')renderTurnos();
+      if(id==='page-equipos'&&typeof renderEquipos==='function')renderEquipos();
+      if(id==='page-roles'&&typeof renderRoles==='function')renderRoles();
+      if(id==='page-tuneles'&&typeof renderTunReport==='function')renderTunReport();
+    }catch(e){console.warn('[rerender]',e);}
+  },350);
 }
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
 async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}try{const{data,error}=await _sb.from('presets').select('*').limit(1);if(error)throw error;toast('Conexión OK ('+data.length+' fila)','success');sbLog('Test OK: '+data.length+' filas');}catch(e){toast('Error: '+e.message,'err');sbLog('Test fallo: '+e.message,false);}}
