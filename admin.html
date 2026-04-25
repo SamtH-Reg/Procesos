@@ -2017,11 +2017,12 @@ function _doRender(dirty){
     const active=document.querySelector('.page.active');
     const id=active?active.id:'page-dashboard';
     const dataChanged=!dirty||dirty.has('moldes')||dirty.has('pesajes');
-    // Dashboard: siempre actualiza KPIs + grid
+    // KPIs siempre (están en la barra superior, siempre visibles)
     if(typeof renderKPIs==='function')renderKPIs();
-    if(id==='page-dashboard'&&typeof renderDashGrid==='function'){
+    // Dashboard grid: renderizar siempre (no solo cuando está activo)
+    // porque el usuario puede estar en otra pestaña del admin y volver
+    if(typeof renderDashGrid==='function'){
       renderDashGrid();
-      // flash verde en los widgets para indicar actualización
       const grid=document.getElementById('dashGrid');
       if(grid)grid.querySelectorAll('.widget').forEach(w=>{w.classList.remove('rt-flash');void w.offsetWidth;w.classList.add('rt-flash');});
     }
@@ -2045,34 +2046,49 @@ function sbRerenderCurrent(tbl){
     _doRender(dirty);
   },100);
 }
-/* Polling de respaldo: verifica Supabase cada 8s, re-renderiza si hay cambios */
+/* ── Polling activo: consulta Supabase cada 5s y re-renderiza si hay datos nuevos ── */
+let _pollCounts={moldes:0,pesajes:0};
 async function _pollFresh(){
   if(!_sb||!_currentUser)return;
-  try{
-    const ts=[];
-    for(const t of['moldes','pesajes']){
-      const{data,error}=await _sb.from(t).select('id').order('id',{ascending:false}).limit(1);
-      if(!error&&data&&data[0])ts.push(t+':'+data[0].id);
-    }
-    const sig=ts.join('|');
-    if(sig&&sig!==_lastPollData){
-      _lastPollData=sig;
-      // Hay cambios — descarga datos frescos y re-renderiza
-      for(const t of['moldes','pesajes']){
-        const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
-        if(!error&&data){if(!RT.data)RT.data={};RT.data[t]=_sbParse(t,data);}
+  let changed=false;
+  for(const t of['moldes','pesajes']){
+    try{
+      // Pedir count total de filas
+      const{count,error}=await _sb.from(t).select('*',{count:'exact',head:true});
+      if(error){sbLog('poll '+t+' error: '+error.message,false);continue;}
+      const n=count||0;
+      if(n!==_pollCounts[t]){
+        _pollCounts[t]=n;
+        // Descarga datos frescos
+        const{data:rows,error:e2}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+        if(!e2&&rows){
+          if(!RT.data)RT.data={};
+          RT.data[t]=_sbParse(t,rows);
+          changed=true;
+          sbLog('↺ poll '+t+': '+n+' filas (cambio detectado)');
+        }
       }
-      RT.save();
-      rtPulse('poll');
-      _doRender(new Set(['moldes','pesajes']));
-      sbLog('↺ poll detectó cambios → actualizado');
-    }
-  }catch(e){/* silencioso — no es crítico */}
+    }catch(ex){sbLog('poll ex: '+ex.message,false);}
+  }
+  if(changed){
+    RT.save();
+    rtPulse('poll');
+    _doRender(new Set(['moldes','pesajes']));
+  }
 }
 function sbStartPoll(){
   if(_pollInterval)clearInterval(_pollInterval);
-  _pollInterval=setInterval(_pollFresh,8000);
-  sbLog('Polling de respaldo activo (8s)');
+  // Inicializar counts actuales para no disparar render al arrancar
+  (async()=>{
+    for(const t of['moldes','pesajes']){
+      try{
+        const{count}=await _sb.from(t).select('*',{count:'exact',head:true});
+        _pollCounts[t]=count||0;
+      }catch(e){}
+    }
+    sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes);
+  })();
+  _pollInterval=setInterval(_pollFresh,5000);
 }
 function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
