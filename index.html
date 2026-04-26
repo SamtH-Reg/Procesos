@@ -1353,7 +1353,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
       <button class="tab" onclick="setMoldTab(this,'mVer')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/></svg>
         Ver Registros
-        <span class="tab-badge">48</span>
+        <span class="tab-badge" id="moldVerBadge">0</span>
       </button>
       <button class="tab" onclick="setMoldTab(this,'mGeneral')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>
@@ -1464,6 +1464,8 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
               Limpiar
             </button>
           </div>
+          <!-- Banner éxito registro -->
+          <div id="mRegSuccessBanner" style="display:none;align-items:center;gap:10px;margin-top:14px;padding:14px 18px;background:#dcfce7;border:1.5px solid #16a34a;border-radius:var(--radius);color:#15803d;font-weight:600;font-size:14px;"></div>
         </div>
       </div>
     </div>
@@ -2450,6 +2452,7 @@ function setMoldTab(el,id){
   document.getElementById(id).classList.remove('hidden');
   if(id==='mArmado'&&window.renderMArmado)renderMArmado();
   if(id==='mGeneral'&&window.renderGRegPresets){renderGRegPresets();renderGeneralesTable();}
+  if(id==='mVer'&&window.renderMoldesTable)renderMoldesTable();
   if(id==='mResumen'&&window.renderMResumen)renderMResumen();
   if(id==='mConsol'&&window.renderMConsol)renderMConsol();
   if(id==='mEspecie'&&window.renderMEspecie)renderMEspecie();
@@ -2568,6 +2571,9 @@ const DB={
       });
       // Migración: bandeja → pallet
       if(p.tipo==='bandeja')p.tipo='pallet';
+      // Normalizar kgRef: si falta o es NaN asignar 7.5 por defecto
+      if(p.kgRef==null||isNaN(+p.kgRef)||+p.kgRef<=0)p.kgRef=7.5;
+      else p.kgRef=+p.kgRef;
     });
     // Migración equipos: P-A..P-F → P-01..P-06
     const letterMap={'P-A':'P-01','P-B':'P-02','P-C':'P-03','P-D':'P-04','P-E':'P-05','P-F':'P-06'};
@@ -3117,6 +3123,7 @@ window.RT=RT;
 rtLoad();
 
 const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+const nowDate=()=>new Date().toISOString().slice(0,10);
 const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
 
 /* ═══ MOLDES — REGISTRAR ═══════════════════════════════════════ */
@@ -3298,7 +3305,7 @@ function regMolde(){
   if(!guia){showToast('N° Guía es obligatorio','error');document.getElementById('mRegGuia').focus();return;}
   const kg=Math.round(cant*p.kgRef*10)/10;
   const rec={
-    id:nextId(RT.moldes),hora:nowHM(),
+    id:nextId(RT.moldes),hora:nowHM(),fecha:nowDate(),
     turno:document.getElementById('mRegTurno').value,
     linea:document.getElementById('mRegLinea').value,
     codigo:codigoTrab,nombre:nombreTrab,ficha:fichaTrab,
@@ -3308,12 +3315,21 @@ function regMolde(){
   };
   RT.moldes.unshift(rec);rtSave();
   renderMoldesTable();renderPorCargar();renderAnalisis();
-  // Reset cantidad + kg, mantener guia y preset
+  // Reset cantidad + kg, mantener guia y preset — limpiar trabajador para el siguiente
   document.getElementById('mRegCant').value='';
   document.getElementById('mRegKg').value='';
   document.getElementById('mRegKg').classList.remove('filled');
   mRegCalcKg();
-  showToast('Conteo registrado · '+cant+' moldes · '+kg+' kg','success');
+  clearRegPicker('mRegTrab','onMRegTrabChange');
+  // Banner de éxito dentro del formulario
+  const banner=document.getElementById('mRegSuccessBanner');
+  if(banner){
+    banner.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> <strong>Registro listo</strong> — '+esc(nombreTrab)+' · '+cant+' moldes · '+kg.toString().replace('.',',')+' kg';
+    banner.style.display='flex';
+    clearTimeout(banner._t);
+    banner._t=setTimeout(()=>{banner.style.display='none';},4000);
+  }
+  showToast('✅ '+nombreTrab+' · '+cant+' moldes · '+kg+' kg','success');
 }
 function clearMReg(){
   document.getElementById('mRegCant').value='';
@@ -3329,6 +3345,7 @@ window.renderMRegPresets=renderMRegPresets;window._clearMRegEspecieFilter=_clear
 /* ═══ MOLDES — VER (tabla) ════════════════════════════════════ */
 function renderMoldesTable(){
   const tb=document.getElementById('tbMoldes');if(!tb)return;
+  const badge=document.getElementById('moldVerBadge');if(badge)badge.textContent=RT.moldes.length;
   if(!RT.moldes.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin registros aún. Registra un conteo desde la pestaña "Registrar".</td></tr>';return;}
   tb.innerHTML=RT.moldes.map(r=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
@@ -3933,7 +3950,7 @@ function regPesaje(){
   const guia=document.getElementById('pRegGuia').value.trim();
   if(!guia){showToast('N° Guía es obligatorio','error');document.getElementById('pRegGuia').focus();return;}
   const rec={
-    id:nextId(RT.pesajes),hora:nowHM(),
+    id:nextId(RT.pesajes),hora:nowHM(),fecha:nowDate(),
     turno:document.getElementById('pRegTurno').value,
     linea:document.getElementById('pRegLinea').value,
     trabId:t.id,codigo:t.codigo,nombre:t.nombre,ficha:t.ficha,
@@ -4136,8 +4153,10 @@ function renderPConsol(){
 function renderMResumen(){
   const wrap=document.getElementById('mResumenWrap');if(!wrap)return;
   const sub=document.getElementById('mResumenSub');
-  const mol=(RT.moldes||[]).filter(r=>!r.esGeneral);
-  if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados aún.</div>';if(sub)sub.textContent='0 moldes';return;}
+  const today=nowDate();
+  const hoyStr=today.split('-').reverse().join('/');
+  const mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(!r.fecha||r.fecha===today));
+  if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados hoy ('+hoyStr+').</div>';if(sub)sub.textContent='0 moldes · '+hoyStr;return;}
   const hoursSet=new Set();
   mol.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
   const hours=[...hoursSet].sort((a,b)=>a-b);
@@ -4183,8 +4202,10 @@ function renderMResumen(){
 function renderMConsol(){
   const wrap=document.getElementById('mConsolWrap');if(!wrap)return;
   const sub=document.getElementById('mConsolSub');
-  const mol=RT.moldes||[];
-  if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados aún.</div>';if(sub)sub.textContent='0 moldes';return;}
+  const _todayC=nowDate();
+  const mol=(RT.moldes||[]).filter(r=>!r.fecha||r.fecha===_todayC);
+  const hoyStrC=_todayC.split('-').reverse().join('/');
+  if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados hoy ('+hoyStrC+').</div>';if(sub)sub.textContent='0 moldes · '+hoyStrC;return;}
   const hoursSet=new Set();const linSet=new Set();
   mol.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));linSet.add(r.linea||'—');});
   const hours=[...hoursSet].sort((a,b)=>a-b);
@@ -5211,12 +5232,16 @@ function renderAnalisis(){
   const esps=Object.entries(espMap).sort((a,b)=>b[1].kg-a[1].kg);
   if(esps.length){setEl('analEspTop',esps[0][0]);setEl('analEspTopSub',esps[0][1].kg.toLocaleString('es-CL',{maximumFractionDigits:0})+' kg');}
   else {setEl('analEspTop','—');setEl('analEspTopSub','—');}
-  // Chart por hora (kg moldes)
+  // Filtrar por fecha de hoy para gráfico y tabla por hora
+  const _today=nowDate();
+  const moldesHoy=moldes.filter(r=>!r.fecha||r.fecha===_today);
+  const pesajesHoy=pesajes.filter(r=>!r.fecha||r.fecha===_today);
+  // Chart por hora (kg moldes — solo hoy)
   const chart=document.getElementById('analHoraChart');
   if(chart){
     const horas={};
     for(let h=6;h<=22;h++)horas[h]=0;
-    moldes.forEach(r=>{const h=_hourOf(r.hora);if(h!=null&&horas[h]!=null)horas[h]+=(r.kg||0);});
+    moldesHoy.forEach(r=>{const h=_hourOf(r.hora);if(h!=null&&horas[h]!=null)horas[h]+=(r.kg||0);});
     const max=Math.max(1,...Object.values(horas));
     const topHour=Object.entries(horas).reduce((a,b)=>b[1]>a[1]?b:a,[0,0])[0];
     chart.innerHTML=`<div style="height:220px;display:flex;align-items:flex-end;gap:6px;padding:10px 0;">${
@@ -5250,15 +5275,17 @@ function renderAnalisis(){
       </div>`;
     }).join('');
   }
-  // Tabla resumen por hora
+  // Tabla resumen por hora (solo hoy)
   const tblH=document.getElementById('analHoraTable');
   if(tblH){
     const horas={};
     for(let h=6;h<=22;h++)horas[h]={mol:0,kgMol:0,pes:0,kgPes:0};
-    moldes.forEach(r=>{const h=_hourOf(r.hora);if(h!=null&&horas[h]){horas[h].mol+=(r.cant||0);horas[h].kgMol+=(r.kg||0);}});
-    pesajes.forEach(r=>{const h=_hourOf(r.hora);if(h!=null&&horas[h]){horas[h].pes++;horas[h].kgPes+=(r.kg||0);}});
+    moldesHoy.forEach(r=>{const h=_hourOf(r.hora);if(h!=null&&horas[h]){horas[h].mol+=(r.cant||0);horas[h].kgMol+=(r.kg||0);}});
+    pesajesHoy.forEach(r=>{const h=_hourOf(r.hora);if(h!=null&&horas[h]){horas[h].pes++;horas[h].kgPes+=(r.kg||0);}});
     const rows=Object.entries(horas).filter(([_,v])=>v.mol||v.pes);
-    if(!rows.length){tblH.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-3);">Sin registros del turno</td></tr>';}
+    const hoyFmt=_today.split('-').reverse().join('/');
+    const subEl=document.querySelector('#analHora .card-sub');if(subEl)subEl.textContent='Hoy '+hoyFmt+' — hora por hora';
+    if(!rows.length){tblH.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-3);">Sin registros de hoy ('+hoyFmt+')</td></tr>';}
     else tblH.innerHTML=rows.map(([h,v])=>`<tr>
       <td class="mono" style="font-weight:700;">${String(h).padStart(2,'0')}:00</td>
       <td class="num">${v.mol||'—'}</td>
@@ -5267,11 +5294,14 @@ function renderAnalisis(){
       <td class="num">${v.kgPes?v.kgPes.toLocaleString('es-CL',{maximumFractionDigits:1}):'—'}</td>
       <td class="num" style="font-weight:700;">${(v.kgMol+v.kgPes).toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
     </tr>`).join('');
+    const cantMolHoy=moldesHoy.reduce((s,r)=>s+(r.cant||0),0);
+    const kgMolHoy=moldesHoy.reduce((s,r)=>s+(r.kg||0),0);
+    const kgPesHoy=pesajesHoy.reduce((s,r)=>s+(r.kg||0),0);
     const foot=document.getElementById('analHoraFoot');
     if(foot)foot.innerHTML=`<tr style="background:var(--surface-alt);font-weight:700;">
-      <td>TOTAL</td><td class="num">${cantMol}</td><td class="num">${kgMol.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
-      <td class="num">${pesajes.length}</td><td class="num">${kgPes.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
-      <td class="num">${(kgMol+kgPes).toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
+      <td>TOTAL HOY</td><td class="num">${cantMolHoy}</td><td class="num">${kgMolHoy.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
+      <td class="num">${pesajesHoy.length}</td><td class="num">${kgPesHoy.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
+      <td class="num">${(kgMolHoy+kgPesHoy).toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
     </tr>`;
   }
   // Moldes por trabajador
