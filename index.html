@@ -4183,8 +4183,14 @@ function regPesaje(){
   const t={id:trabIdResolved,nombre:nombreTrab,codigo:codigoTrab,ficha:fichaTrab};
   const ficha=document.getElementById('pRegFicha').value.trim();
   if(!ficha){showToast('N° Ficha es obligatorio','error');document.getElementById('pRegFicha').focus();return;}
-  // Si hay ficha maestra del trabajador y difiere de la ingresada, pedir confirmación.
-  const fichaMaestra=(t.ficha||'').toString().trim();
+  // Validar contra la ficha efectiva del flujo de pesaje (armado/selección), no contra código maestro.
+  const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
+  const armadoLinea=(RT.armadoPesaje&&lineaSel&&RT.armadoPesaje[lineaSel])?RT.armadoPesaje[lineaSel]:null;
+  const entryArmado=armadoLinea?(armadoLinea.trabajadores||[]).find(e=>String(e.trabId)===String(t.id)):null;
+  const optSel=selT.options[selT.selectedIndex];
+  const fichaMaestra=((optSel&&optSel.dataset&&optSel.dataset.ficha)
+    || (entryArmado&&entryArmado.ficha)
+    || (t.ficha||'')).toString().trim();
   if(fichaMaestra&&ficha!==fichaMaestra){
     const ok=confirm(`La ficha ingresada (${ficha}) no coincide con la ficha del trabajador (${fichaMaestra}). ¿Deseas continuar?`);
     if(!ok){
