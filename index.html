@@ -4171,6 +4171,15 @@ function regPesaje(){
   const t={id:trabIdResolved,nombre:nombreTrab,codigo:codigoTrab,ficha:fichaTrab};
   const ficha=document.getElementById('pRegFicha').value.trim();
   if(!ficha){showToast('N° Ficha es obligatorio','error');document.getElementById('pRegFicha').focus();return;}
+  // Si hay ficha maestra del trabajador y difiere de la ingresada, pedir confirmación.
+  const fichaMaestra=(t.ficha||'').toString().trim();
+  if(fichaMaestra&&ficha!==fichaMaestra){
+    const ok=confirm(`La ficha ingresada (${ficha}) no coincide con la ficha del trabajador (${fichaMaestra}). ¿Deseas continuar?`);
+    if(!ok){
+      document.getElementById('pRegFicha').focus();
+      return;
+    }
+  }
   const kgRaw=document.getElementById('pRegKg').value.trim().replace(',','.');
   const kg=parseFloat(kgRaw);
   if(!kgRaw||isNaN(kg)||kg<=0){showToast('Ingresa kilos válidos','error');document.getElementById('pRegKg').focus();return;}
@@ -5046,7 +5055,8 @@ function _renderIosItems(trabs,q){
     filtered=trabs.filter(t=>{
       const n=(t.nombre||'').toLowerCase();
       const c=(t.codigo||'').toLowerCase();
-      return n.includes(qLow)||c.includes(qLow);
+      const f=(t.ficha||'').toString().toLowerCase();
+      return n.includes(qLow)||c.includes(qLow)||f.includes(qLow);
     });
   }
   function _hi(str){
