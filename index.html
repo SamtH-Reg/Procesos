@@ -4010,23 +4010,26 @@ function renderPRegLinea(){
   renderPRegTrab();
 }
 function onPRegLineaChange(){
+  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
+  clearRegPicker('pRegPlanillero','onPRegPlanilleroChange');
   if(window.renderPRegTrab)renderPRegTrab();
   clearRegPicker('pRegTrab','onPRegTrabChange');
 }
 function _getPRegPickerPlanilleros(){
+  // Solo muestra el planillero de la línea seleccionada (igual que _getMRegPickerPlanilleros)
+  const linea=(document.getElementById('pRegLinea')||{}).value||'';
+  if(!RT.armadoPesaje||!linea)return null;
+  const data=RT.armadoPesaje[linea];
+  if(!data||!data.planillero)return null;
+  const p=data.planillero;
   const workers=[];
-  const arm=RT.armadoPesaje||{};
-  Object.values(arm).forEach(d=>{
-    if(!d||!d.planillero)return;
-    const p=d.planillero;
-    if(p.trabId){
-      const t=DB.data.trabajadores.find(x=>x.id===p.trabId);
-      if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
-    } else if(p.nombre){
-      if(!workers.find(w=>w.nombre===p.nombre))workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:''});
-    }
-  });
-  return workers.length?workers.sort((a,b)=>a.nombre.localeCompare(b.nombre)):null;
+  if(p.trabId){
+    const t=DB.data.trabajadores.find(x=>x.id===p.trabId);
+    if(t)workers.push(t);
+  } else if(p.nombre){
+    workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:''});
+  }
+  return workers.length?workers:null;
 }
 function _getPRegPickerWorkers(){
   // Copia de _getMRegPickerWorkers adaptada a pesaje
@@ -4164,7 +4167,7 @@ function regPesaje(){
   showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
-window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
+window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window.renderPRegPlanilleros=renderPRegPlanilleros;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
 function renderPesajeTable(){
