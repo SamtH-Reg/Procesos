@@ -1390,8 +1390,8 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
           </select>
         </div>
         <div class="form-field">
-          <label class="form-label">Trabajador</label>
-          <button class="ios-picker-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange')">
+          <label class="form-label">Trabajador <span id="mRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
+          <button class="ios-picker-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange',true,_getMRegPickerWorkers)">
             <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
             <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
             <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -3151,6 +3151,18 @@ function renderMRegTrab(){
   sel.innerHTML='<option value="">— Selecciona trabajador —</option>'
     +'<option value="__manual__">+ Ingresar manualmente</option>'
     +items.map(t=>`<option value="${t.id||'n_'+esc(t.nombre)}" data-nombre="${esc(t.nombre)}">${esc(t.nombre)}</option>`).join('');
+  // Badge informativo: mostrar cuántas personas tiene el armado de la línea y su fecha
+  const info=document.getElementById('mRegArmadoInfo');
+  if(info){
+    const armData=linea&&RT.armadoMolde&&RT.armadoMolde[linea];
+    if(armData&&fromArmado.length){
+      const fechaStr=armData.fecha?(' · 📅 '+armData.fecha.split('-').reverse().join('/')):'';
+      info.textContent=fromArmado.length+' en armado'+fechaStr;
+      info.style.display='';
+    } else {
+      info.style.display='none';
+    }
+  }
   onMRegTrabChange();
 }
 function onMRegTurnoChange(){renderMRegTrab();}
@@ -4547,11 +4559,12 @@ window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.r
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
 function _ensureArmadoMolde(){
   if(!RT.armadoMolde)RT.armadoMolde={};
-  ['L1','L2','L3'].forEach(ln=>{if(!RT.armadoMolde[ln])RT.armadoMolde[ln]={planillero:null,trabajadores:[],especie:'',turno:'dia'};});
-  // heal existentes: agregar turno y especie por defecto
+  ['L1','L2','L3'].forEach(ln=>{if(!RT.armadoMolde[ln])RT.armadoMolde[ln]={planillero:null,trabajadores:[],especie:'',turno:'dia',fecha:''};});
+  // heal existentes: agregar campos por defecto
   Object.keys(RT.armadoMolde).forEach(ln=>{
     if(!RT.armadoMolde[ln].turno)RT.armadoMolde[ln].turno='dia';
     if(!('especie' in RT.armadoMolde[ln]))RT.armadoMolde[ln].especie=RT.armadoMolde[ln].producto||'';
+    if(!('fecha' in RT.armadoMolde[ln]))RT.armadoMolde[ln].fecha='';
   });
 }
 function renderMArmado(){
@@ -4564,14 +4577,16 @@ function renderMArmado(){
     const trabs=data.trabajadores||[];
     const p=data.planillero;
     const especie=data.especie||data.producto||'';
+    const fechaStr=data.fecha?data.fecha.split('-').reverse().join('/'):'';
     return `<div class="line-card" style="margin-bottom:12px;">
       <div class="line-hdr">
         <div class="line-id">${esc(ln)}</div>
         <div style="flex:1;min-width:0;">
           <div class="line-title">Línea ${esc(ln)}${especie?` <span style="font-size:12px;font-weight:500;color:var(--text-3);">·</span> <span style="font-size:13px;font-weight:600;color:#0369a1;">${esc(especie)}</span>`:''}</div>
-          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)</div>
+          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}</div>
         </div>
         <div class="section-spacer"></div>
+        ${fechaStr?`<span class="badge slate" style="font-size:10px;"><span class="badge-dot"></span>${esc(fechaStr)}</span>`:''}
         <span class="badge ${data.turno==='noche'?'navy':'amber'}" title="Turno"><span class="badge-dot"></span>${data.turno==='noche'?'Noche':'Día'}</span>
         <span class="badge ${p&&trabs.length?'green':'amber'}"><span class="badge-dot"></span>${p&&trabs.length?'Armada':'Pendiente'}</span>
         <button class="btn ghost sm" type="button" onclick="editMArmadoLinea('${esc(ln)}')">
@@ -4645,8 +4660,36 @@ function guardarMArmadoSnapshot(){
 
 /* ── Editor de línea moldes: especie + planillero + trabajadores ── */
 let _editMLn=null,_editMArmado=null;
-// iOS Picker state
-let _iosPicker={mode:null,cb:null}; // mode: 'planillero'|'trab'
+// iOS Picker state (trabsList: lista filtrada opcional para el picker)
+let _iosPicker={mode:null,cb:null,trabsList:null};
+
+/* ── Retorna los trabajadores del armado de la línea/turno actual (para filtrar picker) ── */
+function _getMRegPickerWorkers(){
+  const linea=(document.getElementById('mRegLinea')||{}).value||'';
+  const turno=(document.getElementById('mRegTurno')||{}).value||'';
+  if(!RT.armadoMolde||!linea)return null;
+  const data=RT.armadoMolde[linea];
+  if(!data)return null;
+  // Si el turno del armado no coincide con el turno actual, devolver null (sin filtro)
+  if(turno&&data.turno&&data.turno!==turno)return null;
+  const workers=[];
+  // Planillero
+  if(data.planillero&&data.planillero.trabId){
+    const t=DB.data.trabajadores.find(x=>x.id===data.planillero.trabId);
+    if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
+  }
+  // Trabajadores asignados
+  (data.trabajadores||[]).forEach(entry=>{
+    if(entry.trabId){
+      const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
+      if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
+    }
+  });
+  // Si no hay nadie en el armado, no filtrar (mostrar todos)
+  if(!workers.length)return null;
+  return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+}
+window._getMRegPickerWorkers=_getMRegPickerWorkers;
 
 /* ── Helper: unique especie values from active presets ─────────── */
 function _getEspecies(){
@@ -4656,20 +4699,22 @@ function _getEspecies(){
 }
 
 /* ── iOS Picker open/close ─────────────────────────────────────── */
-function openIosPicker(mode,cb){
-  _iosPicker={mode,cb};
-  const trabs=DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+function openIosPicker(mode,cb,trabsList){
+  // trabsList: lista filtrada de trabajadores; null = mostrar todos
+  const trabs=trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  _iosPicker={mode,cb,trabsList:trabs};
+  const filteredBadge=trabsList?`<span style="font-size:11px;font-weight:600;color:#0369a1;margin-left:6px;background:#dbeafe;border-radius:10px;padding:1px 8px;">${trabs.length} personas</span>`:'';
   const overlay=document.createElement('div');overlay.className='ios-picker-overlay';overlay.id='iosPicker';
   overlay.innerHTML=`
     <div class="ios-picker-sheet" onclick="event.stopPropagation()">
       <div class="ios-picker-handle"></div>
       <div class="ios-picker-hdr">
-        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}</span>
+        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}${filteredBadge}</span>
         <button class="ios-picker-cancel" onclick="closeIosPicker()">Cancelar</button>
       </div>
       <div class="ios-picker-search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="Buscar por nombre o código..." autocomplete="off" oninput="filterIosPicker(this.value)">
+        <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="${trabsList?'Buscar entre los asignados…':'Buscar por nombre o código...'}" autocomplete="off" oninput="filterIosPicker(this.value)" enterkeyhint="search">
       </div>
       <div class="ios-picker-list" id="iosPickerList">
         ${_renderIosItems(trabs,'')}
@@ -4677,7 +4722,26 @@ function openIosPicker(mode,cb){
     </div>`;
   overlay.addEventListener('click',closeIosPicker);
   document.body.appendChild(overlay);
-  setTimeout(()=>document.getElementById('iosPickerSearch')&&document.getElementById('iosPickerSearch').focus(),120);
+  // ── Fix teclado virtual: el sheet sube con el viewport ──────────
+  if(window.visualViewport){
+    const _vpAdj=()=>{
+      const vp=window.visualViewport;
+      overlay.style.height=vp.height+'px';
+      overlay.style.top=vp.offsetTop+'px';
+      overlay.style.bottom='auto';
+    };
+    window.visualViewport.addEventListener('resize',_vpAdj);
+    window.visualViewport.addEventListener('scroll',_vpAdj);
+    _iosPicker._vpAdj=_vpAdj;
+    _vpAdj(); // inicial
+  }
+  // Enfocar buscador y hacer scroll al input cuando aparezca el teclado
+  setTimeout(()=>{
+    const inp=document.getElementById('iosPickerSearch');
+    if(!inp)return;
+    inp.focus();
+    inp.addEventListener('focus',()=>setTimeout(()=>inp.scrollIntoView({block:'start',behavior:'smooth'}),350),{once:true});
+  },120);
 }
 function _renderIosItems(trabs,q){
   const qLow=q.toLowerCase().trim();
@@ -4726,7 +4790,8 @@ function _renderIosItems(trabs,q){
 }
 function filterIosPicker(q){
   const list=document.getElementById('iosPickerList');if(!list)return;
-  const trabs=DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  // Usar la lista filtrada del picker actual (ej: solo trabajadores del armado)
+  const trabs=_iosPicker.trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
   list.innerHTML=_renderIosItems(trabs,q);
 }
 function selectIosWorker(id,nombre,codigo){
@@ -4743,8 +4808,13 @@ function selectIosWorker(id,nombre,codigo){
   if(cb)cb(id,nombre,codigo);
 }
 function closeIosPicker(){
+  // Limpiar listener de teclado virtual
+  if(window.visualViewport&&_iosPicker._vpAdj){
+    window.visualViewport.removeEventListener('resize',_iosPicker._vpAdj);
+    window.visualViewport.removeEventListener('scroll',_iosPicker._vpAdj);
+  }
   const el=document.getElementById('iosPicker');if(el)el.remove();
-  _iosPicker={mode:null,cb:null};
+  _iosPicker={mode:null,cb:null,trabsList:null};
 }
 
 /* ── Generic Registration-Form Picker ───────────────────────────── */
@@ -4753,8 +4823,10 @@ function closeIosPicker(){
 // title: sheet title string
 // changeFnName: name of global function to call after selection
 // allowManual: whether to show manual-entry option
-function openRegPicker(selectId, title, changeFnName, allowManual){
+function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
   if(allowManual===undefined)allowManual=true;
+  // workersFn: función que devuelve lista filtrada de trabajadores (o null = mostrar todos)
+  const trabsList=(typeof workersFn==='function')?workersFn():null;
   openIosPicker(title, function(id, nombre, codigo){
     if(id==='__manual__'){
       // Show manual overlay (fallback prompt)
@@ -4790,7 +4862,7 @@ function openRegPicker(selectId, title, changeFnName, allowManual){
     }
     _updateRegPickerDisplay(selectId,nombre,codigo);
     if(changeFnName&&window[changeFnName])window[changeFnName]();
-  });
+  }, trabsList);  // pasa lista filtrada al picker
 }
 function _updateRegPickerDisplay(selectId,nombre,codigo){
   const btn=document.getElementById(selectId+'Picker');
@@ -4822,21 +4894,21 @@ function editMArmadoLinea(ln){
   _editMLn=ln;
   const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],especie:''};
   const currentEspecie=data.especie||data.producto||'';
-  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia'};
+  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia',fecha:data.fecha||''};
   const especies=_getEspecies();
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
     <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Moldes</div><button class="modal-x" onclick="closeMArmado()">×</button></div>
     <div class="modal-body">
-      <!-- ESPECIE + TURNO -->
-      <div class="form-grid cols-2" style="margin-bottom:14px;">
+      <!-- ESPECIE + TURNO + FECHA -->
+      <div class="form-grid cols-3" style="margin-bottom:14px;">
         <div class="form-field">
           <label class="form-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-.1em;margin-right:4px;"><path d="M12 3v18M5 6l7-3 7 3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/></svg>
-            Especie <span style="font-size:10px;color:var(--text-3);font-weight:400;">(filtra presets en Registrar)</span>
+            Especie <span style="font-size:10px;color:var(--text-3);font-weight:400;">(filtra presets)</span>
           </label>
           <select class="select" id="mArmEspecie" onchange="_editMArmado.especie=this.value;_mArmUpdatePresetHint();">
-            <option value="">— Sin filtro (todos los presets) —</option>
+            <option value="">— Sin filtro —</option>
             ${especies.map(e=>`<option value="${esc(e)}" ${e===_editMArmado.especie?'selected':''}>${esc(e)}</option>`).join('')}
           </select>
           <div id="mArmPresetHint" style="margin-top:5px;font-size:11px;color:#0369a1;"></div>
@@ -4847,6 +4919,10 @@ function editMArmadoLinea(ln){
             <option value="dia" ${_editMArmado.turno==='dia'?'selected':''}>Día (07:00–19:00)</option>
             <option value="noche" ${_editMArmado.turno==='noche'?'selected':''}>Noche (19:00–07:00)</option>
           </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">📅 Fecha inicio <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+          <input type="date" class="input" id="mArmFecha" value="${_editMArmado.fecha||''}" onchange="_editMArmado.fecha=this.value;">
         </div>
       </div>
 
@@ -4988,7 +5064,8 @@ function saveMArmado(){
     planillero:_editMArmado.planillero,
     trabajadores:_editMArmado.trabajadores,
     especie:_editMArmado.especie||'',
-    turno:_editMArmado.turno||'dia'
+    turno:_editMArmado.turno||'dia',
+    fecha:_editMArmado.fecha||''
   };
   // Compat: keep lineaProducto synced for old references
   if(!RT.lineaProducto)RT.lineaProducto={};
