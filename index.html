@@ -4866,7 +4866,11 @@ function openIosPicker(mode,cb,trabsList){
         <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="${trabsList?'Buscar entre los asignados…':'Buscar por nombre o código...'}" autocomplete="off" oninput="filterIosPicker(this.value)" enterkeyhint="search">
       </div>
       <div class="ios-picker-list" id="iosPickerList">
-        ${_renderIosItems(trabs,'')}
+        <div style="padding:40px 20px;text-align:center;color:var(--slate-400,#94a3b8);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;margin-bottom:10px;opacity:.4;display:block;margin-inline:auto;"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <div style="font-size:13px;font-weight:500;">Escribe para buscar</div>
+          <div style="font-size:11px;margin-top:4px;opacity:.7;">${trabs.length} persona${trabs.length!==1?'s':''} disponible${trabs.length!==1?'s':''}</div>
+        </div>
       </div>
     </div>`;
   overlay.addEventListener('click',closeIosPicker);
@@ -4939,9 +4943,18 @@ function _renderIosItems(trabs,q){
 }
 function filterIosPicker(q){
   const list=document.getElementById('iosPickerList');if(!list)return;
-  // Usar la lista filtrada del picker actual (ej: solo trabajadores del armado)
   const trabs=_iosPicker.trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
-  list.innerHTML=_renderIosItems(trabs,q);
+  const trimQ=(q||'').trim();
+  if(!trimQ){
+    list.innerHTML=`<div style="padding:40px 20px;text-align:center;color:var(--slate-400,#94a3b8);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;margin-bottom:10px;opacity:.4;display:block;margin-inline:auto;"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <div style="font-size:13px;font-weight:500;">Escribe para buscar</div>
+      <div style="font-size:11px;margin-top:4px;opacity:.7;">${trabs.length} persona${trabs.length!==1?'s':''} disponible${trabs.length!==1?'s':''}</div>
+    </div>`;
+    return;
+  }
+  const html=_renderIosItems(trabs,trimQ);
+  list.innerHTML=html||`<div style="padding:40px 20px;text-align:center;color:var(--slate-400,#94a3b8);font-size:13px;">Sin resultados para "<strong>${esc(trimQ)}</strong>"</div>`;
 }
 function selectIosWorker(id,nombre,codigo){
   const mode=_iosPicker.mode;const cb=_iosPicker.cb;
@@ -5633,9 +5646,8 @@ const TBSync={
           if(typeof renderMRegLinea==='function')renderMRegLinea();
           if(typeof renderMRegTrab==='function')renderMRegTrab();
         }else{
-          // Tabla vacía → subir datos locales como primera sincronización
-          console.log('[sb] armado_lineas vacía, subiendo estado local...');
-          setTimeout(()=>this.pushAll(),500);
+          // Tabla vacía en Supabase: NO sobreescribir — el admin debe guardar manualmente
+          console.log('[sb] armado_lineas vacía en Supabase.');
         }
       }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
       this.setStatus('☁ Sync','#16a34a');
@@ -5769,8 +5781,9 @@ async function tbApplySession(session){
     _tbUser={id:session.user.id,email:session.user.email,rol:(data&&data.rol)||'operario',nombre:(data&&data.nombre)||session.user.email.split('@')[0]};
   }catch(e){_tbUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
   tbUpdateUserBadge();
-  // Arranca sync con sesión autenticada
-  TBSync.pullCatalogs();TBSync.subscribe();TBSync.pushAll();
+  // Arranca sync: pull primero, luego suscribir (NO pushAll en login — evita sobreescribir otros dispositivos)
+  await TBSync.pullCatalogs();
+  TBSync.subscribe();
 }
 async function tbDoLogin(){
   const email=document.getElementById('tbAuthEmail').value.trim();
