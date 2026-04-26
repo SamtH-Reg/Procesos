@@ -5602,7 +5602,27 @@ const TBSync={
       if(typeof renderTrabajadores==='function')renderTrabajadores();
       if(typeof renderTurnos==='function')renderTurnos();
       if(typeof renderEquiposCfg==='function')renderEquiposCfg();
-      if(typeof renderEquipos==='function')renderEquipos(); // refrescar tiles túneles/placas
+      if(typeof renderEquipos==='function')renderEquipos();
+      // ── Pull armado de línea ──────────────────────────────────
+      try{
+        const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
+        if(!armErr&&armData&&armData.length){
+          if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+          armData.forEach(row=>{
+            RT.armadoMolde[row.linea]={
+              planillero:row.planillero||null,
+              trabajadores:row.trabajadores||[],
+              especie:row.especie||'',
+              turno:row.turno||'dia',
+              fecha:row.fecha||''
+            };
+          });
+          _rtSaveOrig&&_rtSaveOrig();// local only, sin re-push
+          if(typeof renderMArmado==='function')renderMArmado();
+          if(typeof renderMRegLinea==='function')renderMRegLinea();
+          if(typeof renderMRegTrab==='function')renderMRegTrab();
+        }
+      }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
   },
@@ -5642,6 +5662,23 @@ const TBSync={
         const{error}=await _tbSb.from('pesajes').upsert(pesajesRows,{onConflict:'id'});
         if(error)console.warn('[sb push pesajes]',error.message);
       }
+      // ── Push armado de línea ──────────────────────────────────
+      if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+      const armadoRows=Object.entries(RT.armadoMolde||{})
+        .filter(([,d])=>d)
+        .map(([linea,d])=>({
+          linea,
+          planillero:d.planillero||null,
+          trabajadores:d.trabajadores||[],
+          especie:d.especie||'',
+          turno:d.turno||'dia',
+          fecha:d.fecha||'',
+          updated_at:new Date().toISOString()
+        }));
+      if(armadoRows.length){
+        const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea'});
+        if(armErr)console.warn('[sb push armado_lineas]',armErr.message);
+      }
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pushAll]',e);this.setStatus('⚠ Error','#dc2626');}
   },
@@ -5666,6 +5703,30 @@ const TBSync={
       else{if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);}
       rtSave();
       if(typeof renderPesajesTable==='function')renderPesajesTable();
+    }).subscribe();
+    // ── Realtime armado de línea ──────────────────────────────
+    _tbSb.channel('tb-armado-lineas').on('postgres_changes',{event:'*',schema:'public',table:'armado_lineas'},(p)=>{
+      const rec=p.new||p.old;if(!rec)return;
+      if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+      if(p.eventType==='DELETE'){
+        if(RT.armadoMolde)delete RT.armadoMolde[rec.linea];
+      }else{
+        RT.armadoMolde[rec.linea]={
+          planillero:rec.planillero||null,
+          trabajadores:rec.trabajadores||[],
+          especie:rec.especie||'',
+          turno:rec.turno||'dia',
+          fecha:rec.fecha||''
+        };
+      }
+      // Guardar local sin disparar re-push (evita loop infinito)
+      _rtSaveOrig&&_rtSaveOrig();
+      // Refrescar UI
+      if(typeof renderMArmado==='function')renderMArmado();
+      if(typeof renderMRegLinea==='function')renderMRegLinea();
+      if(typeof renderMRegTrab==='function')renderMRegTrab();
+      if(typeof renderMRegPresets==='function')renderMRegPresets();
+      showToast('🔄 Armado de línea actualizado desde otro dispositivo','info');
     }).subscribe();
   }
 };
