@@ -1795,7 +1795,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
                 </div>
                 <div class="form-field">
                   <label class="form-label">Línea</label>
-                  <select class="select filled" id="pRegLinea" onchange="renderPRegTrab()"></select>
+                  <select class="select filled" id="pRegLinea" onchange="onPRegLineaChange()"></select>
                 </div>
                 <div class="form-field">
                   <label class="form-label">Planillero</label>
@@ -1839,7 +1839,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
             <div class="card-body">
               <div class="form-grid cols-2">
                 <div class="form-field span-2">
-                  <label class="form-label">Trabajador <span class="required">*</span></label>
+                  <label class="form-label">Trabajador <span class="required">*</span> <span id="pRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
                   <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                     <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
@@ -3991,23 +3991,29 @@ function renderPRegTurnos(){
   const code=(h>=7&&h<19)?'dia':'noche';
   if(activos.find(t=>t.codigo===code))sel.value=code;
 }
+/* ─ Copia exacta de la lógica de Moldes Registrar, adaptada a Pesaje ─ */
 function renderPRegLinea(){
-  // Solo líneas que tienen armado de pesaje activo
   const sel=document.getElementById('pRegLinea');if(!sel)return;
-  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+  _ensureArmadoPesaje&&_ensureArmadoPesaje();
   const arm=RT.armadoPesaje||{};
-  const mapa={'L1':'Línea 1','L2':'Línea 2','L3':'Línea 3','L4':'Línea 4','L5':'Línea 5','L6':'Línea 6'};
   const lineasActivas=Object.keys(arm).filter(ln=>{
     const d=arm[ln];
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
   }).sort();
+  const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3',L4:'L4 — Línea 4',L5:'L5 — Línea 5',L6:'L6 — Línea 6'};
+  const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
     ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(mapa[ln]||ln)}</option>`).join('')
     :'<option value="">— Sin líneas armadas —</option>';
+  if(lineasActivas.includes(prevVal))sel.value=prevVal;
+  else if(lineasActivas.length)sel.value=lineasActivas[0];
   renderPRegTrab();
 }
+function onPRegLineaChange(){
+  if(window.renderPRegTrab)renderPRegTrab();
+  clearRegPicker('pRegTrab','onPRegTrabChange');
+}
 function _getPRegPickerPlanilleros(){
-  // Solo planilleros del armadoPesaje
   const workers=[];
   const arm=RT.armadoPesaje||{};
   Object.values(arm).forEach(d=>{
@@ -4020,64 +4026,68 @@ function _getPRegPickerPlanilleros(){
       if(!workers.find(w=>w.nombre===p.nombre))workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:''});
     }
   });
-  // Siempre retorna array (nunca null) para que el picker quede en modo registro
-  return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  return workers.length?workers.sort((a,b)=>a.nombre.localeCompare(b.nombre)):null;
 }
 function _getPRegPickerWorkers(){
-  // Solo trabajadores del armadoPesaje para la línea seleccionada (sin planillero)
-  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
-  const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
-  const arm=RT.armadoPesaje||{};
+  // Copia de _getMRegPickerWorkers adaptada a pesaje
+  const linea=(document.getElementById('pRegLinea')||{}).value||'';
+  if(!RT.armadoPesaje||!linea)return null;
+  const data=RT.armadoPesaje[linea];
+  if(!data)return null;
   const workers=[];
-  const processLine=(d)=>{
-    (d.trabajadores||[]).forEach(entry=>{
-      if(entry.trabId){
-        const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
-        if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
-      } else if(entry.nombre){
-        if(!workers.find(w=>w.nombre===entry.nombre))workers.push({id:'m_'+entry.nombre,nombre:entry.nombre,codigo:'',ficha:entry.ficha||''});
-      }
-    });
-  };
-  if(linea&&arm[linea]){
-    processLine(arm[linea]);
-  } else {
-    Object.values(arm).forEach(d=>{if(d)processLine(d);});
-  }
-  // Siempre retorna array (nunca null) para que el picker quede en modo registro
+  (data.trabajadores||[]).forEach(entry=>{
+    if(entry.trabId){
+      const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
+      if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
+    }
+  });
+  if(!workers.length)return null; // null → fallback a todos (igual que moldes)
   return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
 }
 function renderPRegPlanilleros(){
-  // Actualiza el hidden select (modo fallback), el picker usa _getPRegPickerPlanilleros
   const sel=document.getElementById('pRegPlanillero');if(!sel)return;
   const workers=_getPRegPickerPlanilleros()||[];
   sel.innerHTML='<option value="">— Selecciona —</option>'
     +workers.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
 }
 function renderPRegTrab(){
-  // Solo trabajadores del armadoPesaje para la línea seleccionada
+  // Copia de renderMRegTrab adaptada a pesaje (con ficha)
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
-  const workers=[];
-  const arm=RT.armadoPesaje||{};
-  if(linea&&arm[linea]){
-    (arm[linea].trabajadores||[]).forEach(entry=>{
+  let fromArmado=[];
+  if(RT.armadoPesaje&&linea&&RT.armadoPesaje[linea]){
+    const d=RT.armadoPesaje[linea];
+    (d.trabajadores||[]).forEach(entry=>{
       if(entry.trabId){
         const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
-        if(t&&!workers.find(w=>w.id===t.id))workers.push({...t,ficha:entry.ficha||t.ficha||''});
-      } else if(entry.nombre){
-        if(!workers.find(w=>w.nombre===entry.nombre))
-          workers.push({id:'m_'+entry.nombre,nombre:entry.nombre,codigo:'',ficha:entry.ficha||''});
+        const nom=t?t.nombre:(entry.nombre||'');
+        const id=t?t.id:entry.trabId;
+        if(nom&&!fromArmado.find(w=>w.id===id))
+          fromArmado.push({id,nombre:nom,ficha:entry.ficha||'',__fromArmado:true});
       }
     });
   }
-  const placeholder=linea&&!workers.length?'— Sin armado en esta línea —':'— Selecciona trabajador —';
+  const tieneArmado=linea&&RT.armadoPesaje&&RT.armadoPesaje[linea]&&
+    ((RT.armadoPesaje[linea].trabajadores||[]).length>0||RT.armadoPesaje[linea].planillero);
+  const placeholder=linea&&!tieneArmado
+    ?'— Sin armado en esta línea —'
+    :(fromArmado.length?'— Selecciona trabajador —':'— Selecciona línea primero —');
   sel.innerHTML=`<option value="">${esc(placeholder)}</option>`
-    +workers.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
-  if(!sel.value)onPRegTrabChange();
+    +'<option value="__manual__">+ Ingresar manualmente</option>'
+    +fromArmado.map(t=>`<option value="${t.id||'n_'+esc(t.nombre)}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
+  // Badge con cantidad en armado
+  const info=document.getElementById('pRegArmadoInfo');
+  if(info){
+    const armData=linea&&RT.armadoPesaje&&RT.armadoPesaje[linea];
+    if(armData&&fromArmado.length){
+      info.textContent=fromArmado.length+' en armado';
+      info.style.display='';
+    } else { info.style.display='none'; }
+  }
+  onPRegTrabChange();
 }
 function onPRegTurnoChange(){renderPRegLinea();renderPRegPlanilleros();}
-function onPRegEspecieChange(){/* placeholder, could filter types */}
+function onPRegEspecieChange(){/* placeholder */}
 function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const val=sel.value;
@@ -4154,7 +4164,7 @@ function regPesaje(){
   showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
-window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;
+window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
 function renderPesajeTable(){
