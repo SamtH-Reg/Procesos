@@ -1383,10 +1383,8 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
         </div>
         <div class="form-field">
           <label class="form-label">Línea</label>
-          <select class="select" id="mRegLinea" onchange="renderMRegPresets();renderMRegTrab&&renderMRegTrab();">
-            <option value="L1">L1 — Línea 1</option>
-            <option value="L2" selected>L2 — Línea 2</option>
-            <option value="L3">L3 — Línea 3</option>
+          <select class="select" id="mRegLinea" onchange="onMRegLineaChange()">
+            <option value="">— Sin líneas armadas —</option>
           </select>
         </div>
         <div class="form-field">
@@ -3148,6 +3146,28 @@ const nowDate=()=>new Date().toISOString().slice(0,10);
 const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
 
 /* ═══ MOLDES — REGISTRAR ═══════════════════════════════════════ */
+function renderMRegLinea(){
+  const sel=document.getElementById('mRegLinea');if(!sel)return;
+  _ensureArmadoMolde&&_ensureArmadoMolde();
+  const arm=RT.armadoMolde||{};
+  // Solo líneas con planillero O al menos 1 trabajador asignado
+  const lineasActivas=Object.keys(arm).filter(ln=>{
+    const d=arm[ln];
+    return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
+  }).sort();
+  const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3'};
+  const prevVal=sel.value;
+  sel.innerHTML=lineasActivas.length
+    ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(mapa[ln]||ln)}</option>`).join('')
+    :'<option value="">— Sin líneas armadas —</option>';
+  // Mantener selección si sigue disponible; si no, elegir la primera
+  if(lineasActivas.includes(prevVal))sel.value=prevVal;
+  else if(lineasActivas.length)sel.value=lineasActivas[0];
+}
+function onMRegLineaChange(){
+  renderMRegPresets();
+  if(window.renderMRegTrab)renderMRegTrab();
+}
 function renderMRegTurnos(){
   const sel=document.getElementById('mRegTurno');if(!sel)return;
   const activos=DB.data.turnos.filter(t=>t.activo);
@@ -3161,22 +3181,35 @@ function renderMRegTrab(){
   const sel=document.getElementById('mRegTrab');if(!sel)return;
   const turno=document.getElementById('mRegTurno').value;
   const linea=document.getElementById('mRegLinea')?document.getElementById('mRegLinea').value:'';
-  // 1) Fuente primaria: trabajadores asignados en RT.armadoMolde para el turno (y línea si aplica)
+  // Solo trabajadores del armado de la línea seleccionada
   let fromArmado=[];
-  if(RT.armadoMolde){
-    Object.keys(RT.armadoMolde).forEach(ln=>{
-      const d=RT.armadoMolde[ln];if(!d)return;
-      if(turno&&d.turno&&d.turno!==turno)return;
-      if(linea&&ln!==linea)return;
-      (d.trabajadores||[]).forEach(t=>{fromArmado.push({id:t.trabId||null,nombre:t.nombre,__fromArmado:true,__linea:ln});});
-      if(d.planillero)fromArmado.push({id:d.planillero.trabId||null,nombre:d.planillero.nombre+' (Planillero)',__fromArmado:true,__linea:ln});
+  if(RT.armadoMolde&&linea&&RT.armadoMolde[linea]){
+    const d=RT.armadoMolde[linea];
+    // Planillero al inicio de la lista
+    if(d.planillero&&d.planillero.trabId){
+      const t=DB.data.trabajadores.find(x=>x.id===d.planillero.trabId);
+      const nom=t?t.nombre:(d.planillero.nombre||'');
+      const id=t?t.id:d.planillero.trabId;
+      if(nom)fromArmado.push({id,nombre:nom+' (Plan.)',__fromArmado:true});
+    }
+    (d.trabajadores||[]).forEach(entry=>{
+      if(entry.trabId){
+        const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
+        const nom=t?t.nombre:(entry.nombre||'');
+        const id=t?t.id:entry.trabId;
+        if(nom&&!fromArmado.find(w=>w.id===id))
+          fromArmado.push({id,nombre:nom,__fromArmado:true});
+      }
     });
   }
-  // 2) Fallback: trabajadores de DB con área moldes y turno coincidente
-  const dbItems=DB.data.trabajadores.filter(t=>t.activo&&t.area==='moldes'&&(!turno||t.turno===turno));
-  const fallback=dbItems.length?dbItems:DB.data.trabajadores.filter(t=>t.activo&&(!turno||t.turno===turno));
-  const items=fromArmado.length?fromArmado:fallback;
-  sel.innerHTML='<option value="">— Selecciona trabajador —</option>'
+  const tieneArmado=linea&&RT.armadoMolde&&RT.armadoMolde[linea]&&
+    ((RT.armadoMolde[linea].trabajadores||[]).length>0||RT.armadoMolde[linea].planillero);
+  // Si hay línea seleccionada pero sin armado: no mostrar ningún trabajador
+  const items=fromArmado.length?fromArmado:(linea&&!tieneArmado?[]:[]);
+  const placeholder=linea&&!tieneArmado
+    ?'— Sin armado en esta línea —'
+    :(fromArmado.length?'— Selecciona trabajador —':'— Selecciona línea primero —');
+  sel.innerHTML=`<option value="">${esc(placeholder)}</option>`
     +'<option value="__manual__">+ Ingresar manualmente</option>'
     +items.map(t=>`<option value="${t.id||'n_'+esc(t.nombre)}" data-nombre="${esc(t.nombre)}">${esc(t.nombre)}</option>`).join('');
   // Badge informativo: mostrar cuántas personas tiene el armado de la línea y su fecha
@@ -3362,6 +3395,7 @@ function clearMReg(){
 }
 window.mRegStep=mRegStep;window.mRegCalcKg=mRegCalcKg;window.regMolde=regMolde;window.selectPresetM=selectPresetM;window.clearMReg=clearMReg;window.onMRegTurnoChange=onMRegTurnoChange;window.onMRegTrabChange=onMRegTrabChange;
 window.renderMRegPresets=renderMRegPresets;window._clearMRegEspecieFilter=_clearMRegEspecieFilter;
+window.renderMRegLinea=renderMRegLinea;window.onMRegLineaChange=onMRegLineaChange;
 
 /* ═══ MOLDES — VER (tabla) ════════════════════════════════════ */
 function _mVerFillSelects(){
@@ -5200,6 +5234,7 @@ function saveMArmado(){
   const ln=_editMLn;
   closeMArmado();renderMArmado();
   // Re-render preset grid so especie filter applies immediately
+  if(window.renderMRegLinea)renderMRegLinea();
   if(window.renderMRegPresets)renderMRegPresets();
   if(window.renderMRegTrab)renderMRegTrab();
   showToast('Línea '+ln+' actualizada','success');
@@ -5511,6 +5546,7 @@ window.renderAnalisis=renderAnalisis;window.navAnal=navAnal;window.exportarAnali
 function _safeRun(fn,name){try{fn();}catch(e){console.warn('[initRuntime] '+name+' falló:',e);}}
 function initRuntime(){
   _safeRun(renderMRegTurnos,'renderMRegTurnos');
+  _safeRun(renderMRegLinea,'renderMRegLinea');
   _safeRun(renderMRegTrab,'renderMRegTrab');
   _safeRun(renderMRegPresets,'renderMRegPresets');
   _safeRun(mRegCalcKg,'mRegCalcKg');
