@@ -1496,16 +1496,37 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
 
     <!-- TAB CONTENT: VER REGISTROS -->
     <div id="mVer" class="mold-tab hidden">
-      <div class="row" style="margin-bottom:14px;">
-        <div class="form-field" style="min-width:180px;"><label class="form-label">Turno</label><select class="select"><option>Todos</option><option>Día</option><option>Noche</option></select></div>
-        <div class="form-field" style="min-width:140px;"><label class="form-label">Línea</label><select class="select"><option>Todas</option></select></div>
-        <div class="form-field" style="min-width:220px;"><label class="form-label">Buscar</label><input class="input" placeholder="Nombre..."></div>
+      <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;">
+        <div class="form-field" style="min-width:160px;">
+          <label class="form-label">Turno</label>
+          <select class="select" id="mVerTurno" onchange="renderMoldesTable()">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="form-field" style="min-width:160px;">
+          <label class="form-label">Línea</label>
+          <select class="select" id="mVerLinea" onchange="renderMoldesTable()">
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="form-field" style="min-width:200px;">
+          <label class="form-label">Fecha</label>
+          <input type="date" class="input" id="mVerFecha" onchange="renderMoldesTable()">
+        </div>
+        <div class="form-field" style="min-width:200px;">
+          <label class="form-label">Buscar trabajador</label>
+          <input class="input" id="mVerBuscar" placeholder="Nombre..." oninput="renderMoldesTable()">
+        </div>
         <div class="spacer"></div>
-        <button class="btn ghost">Exportar Excel</button>
+        <button class="btn ghost" onclick="exportarMoldesExcel()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar Excel
+        </button>
       </div>
+      <div id="mVerInfo" style="font-size:12px;color:var(--text-3);padding:0 2px 10px;display:none;"></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Hora</th><th>L.</th><th>Trabajador</th><th>Producto</th><th class="num">Cant.</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Hora</th><th>L.</th><th>Trabajador</th><th>Producto</th><th class="num">Cant.</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
           <tbody id="tbMoldes"></tbody>
         </table>
       </div>
@@ -3343,20 +3364,84 @@ window.mRegStep=mRegStep;window.mRegCalcKg=mRegCalcKg;window.regMolde=regMolde;w
 window.renderMRegPresets=renderMRegPresets;window._clearMRegEspecieFilter=_clearMRegEspecieFilter;
 
 /* ═══ MOLDES — VER (tabla) ════════════════════════════════════ */
+function _mVerFillSelects(){
+  // Turno
+  const selT=document.getElementById('mVerTurno');
+  if(selT&&selT.options.length<=1){
+    const ts=(DB.data.turnos||[]).filter(t=>t.activo!==false);
+    ts.forEach(t=>{const o=document.createElement('option');o.value=t.codigo||t.nombre;o.textContent=t.nombre||t.codigo;selT.appendChild(o);});
+  }
+  // Línea — solo las que tienen trabajadores en armado de molde
+  const selL=document.getElementById('mVerLinea');
+  if(selL){
+    _ensureArmadoMolde&&_ensureArmadoMolde();
+    const arm=RT.armadoMolde||{};
+    const lineasConDatos=Object.keys(arm).filter(ln=>{
+      const d=arm[ln];
+      return (d.trabajadores&&d.trabajadores.length>0)||d.planillero;
+    }).sort();
+    // Reconstruir opciones solo si cambió la lista
+    const actuals=[...selL.options].slice(1).map(o=>o.value).join(',');
+    const nuevas=lineasConDatos.join(',');
+    if(actuals!==nuevas){
+      while(selL.options.length>1)selL.remove(1);
+      lineasConDatos.forEach(ln=>{
+        const o=document.createElement('option');
+        o.value=ln;
+        // etiqueta amigable
+        const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3'};
+        o.textContent=mapa[ln]||ln;
+        selL.appendChild(o);
+      });
+    }
+  }
+  // Fecha — por defecto hoy si no hay valor
+  const fd=document.getElementById('mVerFecha');
+  if(fd&&!fd.value)fd.value=nowDate();
+}
 function renderMoldesTable(){
   const tb=document.getElementById('tbMoldes');if(!tb)return;
   const badge=document.getElementById('moldVerBadge');if(badge)badge.textContent=RT.moldes.length;
-  if(!RT.moldes.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin registros aún. Registra un conteo desde la pestaña "Registrar".</td></tr>';return;}
-  tb.innerHTML=RT.moldes.map(r=>{
+  _mVerFillSelects();
+  // Leer filtros
+  const fTurno=(document.getElementById('mVerTurno')||{}).value||'';
+  const fLinea=(document.getElementById('mVerLinea')||{}).value||'';
+  const fFecha=(document.getElementById('mVerFecha')||{}).value||'';
+  const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
+  let rows=RT.moldes.slice();
+  if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')=== fTurno);
+  if(fLinea)rows=rows.filter(r=>(r.linea||'')===fLinea);
+  if(fFecha)rows=rows.filter(r=>r.fecha===fFecha||(!r.fecha&&fFecha===nowDate()));
+  if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
+  // Info badge
+  const info=document.getElementById('mVerInfo');
+  if(info){
+    const totMol=rows.reduce((s,r)=>s+(r.cant||0),0);
+    const totKg=rows.reduce((s,r)=>s+(r.kg||0),0);
+    if(rows.length){
+      info.textContent=rows.length+' registros · '+totMol+' moldes · '+totKg.toLocaleString('es-CL',{maximumFractionDigits:1})+' kg';
+      info.style.display='';
+    } else {
+      info.style.display='none';
+    }
+  }
+  if(!rows.length){
+    tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-3);">'+(RT.moldes.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde la pestaña "Registrar".')+'</td></tr>';
+    return;
+  }
+  tb.innerHTML=rows.map(r=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
     const pendBadge=pend===0?'<span class="badge slate" style="font-size:10px;">Cargado</span>':pend<r.cant?`<span class="badge amber" style="font-size:10px;">${pend}/${r.cant} pend.</span>`:'';
+    const kg=r.kg||0;
+    const fechaDisp=r.fecha?r.fecha.split('-').reverse().join('/'):'—';
     return `<tr>
+    <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(fechaDisp)}</td>
     <td class="mono">${esc(r.hora)}</td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
     <td>${esc(r.producto)} ${pendBadge}</td>
-    <td class="num">${r.cant}</td>
-    <td class="num">${r.kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
+    <td class="num">${r.cant||0}</td>
+    <td class="num">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
     <td style="white-space:nowrap;">
       <button class="row-icon-btn" onclick="editMolde(${r.id})" aria-label="Editar" style="margin-right:4px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -3364,6 +3449,7 @@ function renderMoldesTable(){
     </td>
   </tr>`;}).join('');
 }
+window._mVerFillSelects=_mVerFillSelects;
 function editMolde(id){
   const r=RT.moldes.find(x=>x.id===id);if(!r)return;
   const presetsOpt=DB.data.presets.filter(p=>p.activo).map(p=>`<option value="${p.id}" ${p.id===r.presetId?'selected':''}>${esc(p.nombre)} (${p.kgRef} kg/u)</option>`).join('');
@@ -3416,6 +3502,24 @@ function delMolde(id){
   RT.moldes=RT.moldes.filter(r=>r.id!==id);rtSave();renderMoldesTable();renderPorCargar();renderAnalisis();showToast('Registro eliminado','success');
 }
 window.delMolde=delMolde;window.renderMoldesTable=renderMoldesTable;
+function exportarMoldesExcel(){
+  const fTurno=(document.getElementById('mVerTurno')||{}).value||'';
+  const fLinea=(document.getElementById('mVerLinea')||{}).value||'';
+  const fFecha=(document.getElementById('mVerFecha')||{}).value||'';
+  const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
+  let rows=RT.moldes.slice();
+  if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')===fTurno);
+  if(fLinea)rows=rows.filter(r=>(r.linea||'')===fLinea);
+  if(fFecha)rows=rows.filter(r=>r.fecha===fFecha||(!r.fecha&&fFecha===nowDate()));
+  if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
+  const hdr=['Fecha','Hora','Turno','Línea','Trabajador','Ficha','Producto','Especie','Cantidad','Kg','Guía'];
+  const body=rows.map(r=>[r.fecha||'',r.hora||'',r.turno||'',r.linea||'',r.nombre||'',r.ficha||'',r.producto||'',r.especie||'',r.cant||0,(r.kg||0).toFixed(1),r.guia||'']);
+  const csv=[hdr,...body].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='moldes_'+(fFecha||nowDate())+'.csv';a.click();
+}
+window.exportarMoldesExcel=exportarMoldesExcel;
 
 /* ═══ REGISTRO GENERAL (pallet / carro / castillo) ═════════════ */
 function renderGRegTurnos(){
@@ -4711,6 +4815,7 @@ function _getMRegPickerWorkers(){
   return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
 }
 window._getMRegPickerWorkers=_getMRegPickerWorkers;
+window._ensureArmadoMolde=_ensureArmadoMolde;
 
 /* ── Helper: unique especie values from active presets ─────────── */
 function _getEspecies(){
