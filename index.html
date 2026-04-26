@@ -4591,7 +4591,7 @@ function editPArmadoLinea(ln){
 
       <!-- LISTA DE TRABAJADORES -->
       <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">Trabajadores asignados <span id="pArmCount" style="color:var(--text-3);font-weight:500;">(0)</span></label>
-      <div id="pArmTrabList" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
+      <div id="pArmTrabList" style="border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
 
       <!-- AGREGAR NUEVO -->
       <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
@@ -4677,7 +4677,7 @@ function renderPArmModal(){
             <div style="font-size:11px;color:var(--text-3);">${codigo?'Código: '+esc(codigo)+' · ':''}<span style="color:#0369a1;font-weight:600;">Ficha: ${esc(t.ficha||'—')}</span></div>
           </div>
           <label style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;font-weight:700;white-space:nowrap;">Ficha</label>
-          <input class="input" style="max-width:88px;" value="${esc(t.ficha||'')}" inputmode="numeric" placeholder="101" oninput="_editPArmado.trabajadores[${i}].ficha=this.value.trim();">
+          <input class="input" style="max-width:88px;" value="${esc(t.ficha||'')}" type="text" inputmode="numeric" placeholder="101" onclick="this.select()" oninput="_setPArmFicha(${i},this.value)">
           <button class="btn ghost sm icon" type="button" title="Quitar" onclick="_editPArmado.trabajadores.splice(${i},1);renderPArmModal();">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
           </button>
@@ -4737,6 +4737,11 @@ function clearPArmSelection(){
   const fichaIn=document.getElementById('pArmAddFicha');
   if(fichaIn){fichaIn.value='';delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;}
 }
+function _setPArmFicha(i,val){
+  // Actualiza ficha del trabajador en memoria; seguro aunque renderPArmModal rehaga el DOM
+  if(_editPArmado&&_editPArmado.trabajadores[i]!=null)
+    _editPArmado.trabajadores[i].ficha=(val||'').trim();
+}
 function setPArmPlanillero(){} // legacy compat no-op
 function onPArmSelectChange(){} // legacy compat no-op
 function addPArmTrab(){
@@ -4750,12 +4755,13 @@ function addPArmTrab(){
     if(t){nombre=t.nombre;trabId=t.id;}
     delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;
   } else {
-    // Try manual name box
     const manNom=(document.getElementById('pArmManualNombre')||{}).value||'';
     nombre=manNom.trim();
     if(!nombre){showToast('Selecciona o ingresa un trabajador','error');return;}
   }
-  if(_editPArmado.trabajadores.some(x=>x.ficha===ficha)){showToast('Esa ficha ya está asignada en esta línea','error');return;}
+  // Ficha duplicada — indica a quién pertenece
+  const dup=_editPArmado.trabajadores.find(x=>x.ficha===ficha);
+  if(dup){showToast('⚠️ Ficha '+ficha+' ya fue asignada a '+dup.nombre,'error');fichaIn&&fichaIn.focus();return;}
   _editPArmado.trabajadores.push({trabId,nombre:nombre.toUpperCase(),ficha});
   clearPArmSelection(); // oculta preview y ficha row, limpia campos
   const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';const mn=document.getElementById('pArmManualNombre');if(mn)mn.value='';}
@@ -4787,7 +4793,7 @@ function savePArmado(){
 }
 window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.copiarPArmadoDia=copiarPArmadoDia;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
 window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
-window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;
+window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
 
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
