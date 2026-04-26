@@ -2572,6 +2572,8 @@ const DB={
     // Migración equipos: P-A..P-F → P-01..P-06
     const letterMap={'P-A':'P-01','P-B':'P-02','P-C':'P-03','P-D':'P-04','P-E':'P-05','P-F':'P-06'};
     (this.data.equipos||[]).forEach(e=>{
+      // Asegurar campo activo (puede llegar null desde Supabase)
+      if(e.activo==null)e.activo=true;
       if(letterMap[e.codigo]){
         const num=letterMap[e.codigo].slice(2);
         e.codigo=letterMap[e.codigo];
@@ -3153,9 +3155,10 @@ function renderMRegTrab(){
 }
 function onMRegTurnoChange(){renderMRegTrab();}
 function onMRegTrabChange(){
-  const sel=document.getElementById('mRegTrab');
+  const sel=document.getElementById('mRegTrab');if(!sel)return;
   const val=sel.value;
   const badge=document.getElementById('mRegWorkerBadge');
+  if(!badge)return;
   if(!val){badge.style.display='none';return;}
   // Manual
   if(val==='__manual__'){
@@ -3524,9 +3527,11 @@ function renderEqTile(eq){
 function renderEquipos(){
   const tG=document.getElementById('tunelesGrid');
   const pG=document.getElementById('placasGrid');
-  if(!tG&&!pG){const g=document.getElementById('eqGrid');if(g){g.innerHTML=DB.data.equipos.filter(e=>e.activo).map(renderEqTile).join('');}return;}
-  const tuneles=DB.data.equipos.filter(e=>e.activo&&e.tipo==='tunel');
-  const placas=DB.data.equipos.filter(e=>e.activo&&e.tipo==='placa');
+  // activo!==false: equipos sin campo activo (p.ej. desde Supabase) se muestran igual
+  const isActivo=e=>e.activo!==false;
+  if(!tG&&!pG){const g=document.getElementById('eqGrid');if(g){g.innerHTML=DB.data.equipos.filter(isActivo).map(renderEqTile).join('');}return;}
+  const tuneles=DB.data.equipos.filter(e=>isActivo(e)&&e.tipo==='tunel');
+  const placas=DB.data.equipos.filter(e=>isActivo(e)&&e.tipo==='placa');
   if(tG)tG.innerHTML=tuneles.map(renderEqTile).join('');
   if(pG)pG.innerHTML=placas.map(renderEqTile).join('');
   const ts=document.getElementById('tunelesSub');if(ts)ts.textContent=tuneles.length+' túneles';
@@ -3581,7 +3586,7 @@ function updateEqStats(){
   const panel=document.getElementById('panelTuneles');if(!panel)return;
   const stats=panel.querySelectorAll('.stat-value');if(stats.length<4)return;
   let libres=0,cargando=0,congelando=0,listos=0;
-  DB.data.equipos.filter(e=>e.activo).forEach(eq=>{
+  DB.data.equipos.filter(e=>e.activo!==false).forEach(eq=>{
     const rt=getEqRT(eq.codigo);
     if(rt.estado==='libre')libres++;
     else if(rt.estado==='cargando')cargando++;
@@ -3861,8 +3866,10 @@ function renderPRegTrab(){
 function onPRegTurnoChange(){renderPRegPlanilleros();renderPRegTrab();}
 function onPRegEspecieChange(){/* placeholder, could filter types */}
 function onPRegTrabChange(){
-  const sel=document.getElementById('pRegTrab');const val=sel.value;
+  const sel=document.getElementById('pRegTrab');if(!sel)return;
+  const val=sel.value;
   const badge=document.getElementById('pRegWorkerBadge');
+  if(!badge)return;
   if(!val){badge.style.display='none';return;}
   if(val==='__manual__'){
     const nom=prompt('Nombre completo del trabajador:');
@@ -5289,30 +5296,31 @@ function exportarAnalisis(){
 window.renderAnalisis=renderAnalisis;window.navAnal=navAnal;window.exportarAnalisis=exportarAnalisis;
 
 /* ═══ INIT RUNTIME ════════════════════════════════════════════ */
+function _safeRun(fn,name){try{fn();}catch(e){console.warn('[initRuntime] '+name+' falló:',e);}}
 function initRuntime(){
-  renderMRegTurnos();
-  renderMRegTrab();
-  renderMRegPresets();
-  mRegCalcKg();
-  renderMoldesTable();
-  renderEquipos();
-  renderPorCargar();
-  renderPRegTurnos();
-  renderPRegPlanilleros();
-  renderPRegTrab();
-  renderPesajeTable();
-  renderERegPresets();
-  eRegCalcKg();
-  renderEmpaqueLotes();
-  renderGRegTurnos();
-  renderGRegPresets();
-  renderGeneralesTable();
-  gRegCalcKg();
-  renderMArmado();
-  renderPArmado();
-  renderPResumen();
-  renderPConsol();
-  renderAnalisis();
+  _safeRun(renderMRegTurnos,'renderMRegTurnos');
+  _safeRun(renderMRegTrab,'renderMRegTrab');
+  _safeRun(renderMRegPresets,'renderMRegPresets');
+  _safeRun(mRegCalcKg,'mRegCalcKg');
+  _safeRun(renderMoldesTable,'renderMoldesTable');
+  _safeRun(renderEquipos,'renderEquipos');          // ← túneles/placas SIEMPRE corre
+  _safeRun(renderPorCargar,'renderPorCargar');
+  _safeRun(renderPRegTurnos,'renderPRegTurnos');
+  _safeRun(renderPRegPlanilleros,'renderPRegPlanilleros');
+  _safeRun(renderPRegTrab,'renderPRegTrab');
+  _safeRun(renderPesajeTable,'renderPesajeTable');
+  _safeRun(renderERegPresets,'renderERegPresets');
+  _safeRun(eRegCalcKg,'eRegCalcKg');
+  _safeRun(renderEmpaqueLotes,'renderEmpaqueLotes');
+  _safeRun(renderGRegTurnos,'renderGRegTurnos');
+  _safeRun(renderGRegPresets,'renderGRegPresets');
+  _safeRun(renderGeneralesTable,'renderGeneralesTable');
+  _safeRun(gRegCalcKg,'gRegCalcKg');
+  _safeRun(renderMArmado,'renderMArmado');
+  _safeRun(renderPArmado,'renderPArmado');
+  _safeRun(renderPResumen,'renderPResumen');
+  _safeRun(renderPConsol,'renderPConsol');
+  _safeRun(renderAnalisis,'renderAnalisis');
   if(window.renderUserChip)renderUserChip();
 }
 initRuntime();
@@ -5357,6 +5365,7 @@ const TBSync={
       if(typeof renderTrabajadores==='function')renderTrabajadores();
       if(typeof renderTurnos==='function')renderTurnos();
       if(typeof renderEquiposCfg==='function')renderEquiposCfg();
+      if(typeof renderEquipos==='function')renderEquipos(); // refrescar tiles túneles/placas
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
   },
