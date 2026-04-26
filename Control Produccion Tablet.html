@@ -5587,7 +5587,16 @@ const TBSync={
       return b;
     }catch(e){return null;}
   },
-  setStatus(msg,color){const b=this.onlineBadge();if(b){b.textContent=msg;b.style.background=color||'#16a34a';}},
+  setStatus(msg,color){
+    const b=this.onlineBadge();
+    if(b){
+      b.textContent=msg;
+      b.style.background=color||'#16a34a';
+      b.title='Click para forzar sincronización';
+      b.style.cursor='pointer';
+      b.onclick=()=>{this.pullCatalogs();this.pushAll();showToast&&showToast('Sincronizando…','info');};
+    }
+  },
   async pullCatalogs(){
     if(!_tbSb)return;
     try{
@@ -5606,7 +5615,9 @@ const TBSync={
       // ── Pull armado de línea ──────────────────────────────────
       try{
         const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
-        if(!armErr&&armData&&armData.length){
+        if(armErr){console.warn('[sb pull armado_lineas]',armErr.message);}
+        else if(armData&&armData.length){
+          // Supabase tiene datos → aplicar localmente
           if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
           armData.forEach(row=>{
             RT.armadoMolde[row.linea]={
@@ -5617,10 +5628,14 @@ const TBSync={
               fecha:row.fecha||''
             };
           });
-          _rtSaveOrig&&_rtSaveOrig();// local only, sin re-push
+          _rtSaveOrig&&_rtSaveOrig();
           if(typeof renderMArmado==='function')renderMArmado();
           if(typeof renderMRegLinea==='function')renderMRegLinea();
           if(typeof renderMRegTrab==='function')renderMRegTrab();
+        }else{
+          // Tabla vacía → subir datos locales como primera sincronización
+          console.log('[sb] armado_lineas vacía, subiendo estado local...');
+          setTimeout(()=>this.pushAll(),500);
         }
       }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
       this.setStatus('☁ Sync','#16a34a');
