@@ -385,6 +385,12 @@ input,select,textarea{font-family:inherit;}
 .tab svg{width:18px;height:18px;stroke-width:2;}
 .tab:active{background:var(--surface-alt);}
 .tab.active{background:var(--brand);color:white;box-shadow:0 2px 8px rgba(0,0,0,.2);}
+/* Pesaje — color teal diferenciado del módulo Moldes (verde) */
+#panelPesaje .tab.active{background:#0891b2;box-shadow:0 2px 8px rgba(8,145,178,.32);}
+.tab-nav.tab-nav-pesaje.active{color:#0891b2;}
+.tab-nav.tab-nav-pesaje.active::before{background:#0891b2;}
+.btn.teal{background:#0891b2;color:#fff;border:1.5px solid #0891b2;}
+.btn.teal:active{background:#0e7490;}
 .tab .tab-badge{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:22px;height:22px;padding:0 6px;
@@ -1789,15 +1795,11 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
                 </div>
                 <div class="form-field">
                   <label class="form-label">Línea</label>
-                  <select class="select filled" id="pRegLinea">
-                    <option value="L1">L1 — Línea 1</option>
-                    <option value="L2" selected>L2 — Línea 2</option>
-                    <option value="L3">L3 — Línea 3</option>
-                  </select>
+                  <select class="select filled" id="pRegLinea" onchange="renderPRegTrab()"></select>
                 </div>
                 <div class="form-field">
                   <label class="form-label">Planillero</label>
-                  <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false)">
+                  <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false,_getPRegPickerPlanilleros)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                     <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -1838,7 +1840,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
               <div class="form-grid cols-2">
                 <div class="form-field span-2">
                   <label class="form-label">Trabajador <span class="required">*</span></label>
-                  <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange')">
+                  <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                     <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -1857,13 +1859,17 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
                 </button>
               </div>
               <div class="form-field">
+                <label class="form-label">N° Ficha <span class="required">*</span></label>
+                <input class="input" id="pRegFicha" type="text" inputmode="numeric" placeholder="Ingresa número de ficha" autocomplete="off">
+              </div>
+              <div class="form-field">
                 <label class="form-label">Kilos procesados <span class="required">*</span> <span class="hint">rango 0,2 – 20 kg</span></label>
                 <div class="input-suffix">
                   <input class="input big-input" id="pRegKg" type="text" placeholder="0,0" inputmode="decimal">
                   <span class="suffix">kg</span>
                 </div>
               </div>
-              <button class="btn success block lg" style="margin-top:16px;" onclick="regPesaje()">
+              <button class="btn teal block lg" style="margin-top:16px;" onclick="regPesaje()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
                 Guardar pesaje
               </button>
@@ -2409,7 +2415,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
     <span class="tab-nav-label">Túneles</span>
     <span class="tab-count" id="tabnavTunelesBadge" style="display:none;">0</span>
   </button>
-  <button class="tab-nav" onclick="navTo(this,'panelPesaje')">
+  <button class="tab-nav tab-nav-pesaje" onclick="navTo(this,'panelPesaje')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 6l7-3 7 3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/></svg>
     <span class="tab-nav-label">Pesaje</span>
   </button>
@@ -3985,46 +3991,88 @@ function renderPRegTurnos(){
   const code=(h>=7&&h<19)?'dia':'noche';
   if(activos.find(t=>t.codigo===code))sel.value=code;
 }
-function renderPRegPlanilleros(){
-  const sel=document.getElementById('pRegPlanillero');if(!sel)return;
-  const turno=document.getElementById('pRegTurno').value;
-  // Primario: planilleros registrados en RT.armadoPesaje del turno actual
-  const fromArm=[];
-  if(RT.armadoPesaje){
-    Object.keys(RT.armadoPesaje).forEach(ln=>{
-      const d=RT.armadoPesaje[ln];if(!d||!d.planillero)return;
-      if(turno&&d.turno&&d.turno!==turno)return;
-      fromArm.push({id:d.planillero.trabId||'p_'+ln,nombre:d.planillero.nombre,ficha:'',__linea:ln});
+function renderPRegLinea(){
+  // Solo líneas que tienen armado de pesaje activo
+  const sel=document.getElementById('pRegLinea');if(!sel)return;
+  const arm=RT.armadoPesaje||{};
+  const mapa={'L1':'Línea 1','L2':'Línea 2','L3':'Línea 3','L4':'Línea 4','L5':'Línea 5','L6':'Línea 6'};
+  const lineasActivas=Object.keys(arm).filter(ln=>{
+    const d=arm[ln];
+    return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
+  }).sort();
+  sel.innerHTML=lineasActivas.length
+    ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(mapa[ln]||ln)}</option>`).join('')
+    :'<option value="">— Sin líneas armadas —</option>';
+  renderPRegTrab();
+}
+function _getPRegPickerPlanilleros(){
+  // Solo planilleros del armadoPesaje
+  const workers=[];
+  const arm=RT.armadoPesaje||{};
+  Object.values(arm).forEach(d=>{
+    if(!d||!d.planillero)return;
+    const p=d.planillero;
+    if(p.trabId){
+      const t=DB.data.trabajadores.find(x=>x.id===p.trabId);
+      if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
+    } else if(p.nombre){
+      if(!workers.find(w=>w.nombre===p.nombre))workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:''});
+    }
+  });
+  return workers.length?workers.sort((a,b)=>a.nombre.localeCompare(b.nombre)):null;
+}
+function _getPRegPickerWorkers(){
+  // Solo trabajadores del armadoPesaje para la línea seleccionada (sin planillero)
+  const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
+  const arm=RT.armadoPesaje||{};
+  const workers=[];
+  const processLine=(d)=>{
+    (d.trabajadores||[]).forEach(entry=>{
+      if(entry.trabId){
+        const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
+        if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
+      } else if(entry.nombre){
+        if(!workers.find(w=>w.nombre===entry.nombre))workers.push({id:'m_'+entry.nombre,nombre:entry.nombre,codigo:'',ficha:entry.ficha||''});
+      }
     });
+  };
+  if(linea&&arm[linea]){
+    processLine(arm[linea]);
+  } else {
+    Object.values(arm).forEach(d=>{if(d)processLine(d);});
   }
-  const items=fromArm.length?fromArm:DB.data.trabajadores.filter(t=>t.activo&&(!turno||t.turno===turno));
-  sel.innerHTML='<option value="__manual__">+ Ingresar manualmente</option>'+items.map(t=>`<option value="${t.id}">${esc(t.nombre)}${t.ficha?' · Ficha '+esc(t.ficha):''}${t.__linea?' · '+esc(t.__linea):''}</option>`).join('');
+  return workers.length?workers.sort((a,b)=>a.nombre.localeCompare(b.nombre)):null;
+}
+function renderPRegPlanilleros(){
+  // Actualiza el hidden select (modo fallback), el picker usa _getPRegPickerPlanilleros
+  const sel=document.getElementById('pRegPlanillero');if(!sel)return;
+  const workers=_getPRegPickerPlanilleros()||[];
+  sel.innerHTML='<option value="">— Selecciona —</option>'
+    +workers.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
 }
 function renderPRegTrab(){
+  // Solo trabajadores del armadoPesaje para la línea seleccionada
   const sel=document.getElementById('pRegTrab');if(!sel)return;
-  const turno=document.getElementById('pRegTurno').value;
   const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
-  // 1) Primario: trabajadores en RT.armadoPesaje filtrado por turno/línea (con ficha del armado)
-  let fromArm=[];
-  if(RT.armadoPesaje){
-    Object.keys(RT.armadoPesaje).forEach(ln=>{
-      const d=RT.armadoPesaje[ln];if(!d)return;
-      if(turno&&d.turno&&d.turno!==turno)return;
-      if(linea&&ln!==linea)return;
-      (d.trabajadores||[]).forEach(t=>{fromArm.push({id:t.trabId||('a_'+ln+'_'+t.nombre),nombre:t.nombre,ficha:t.ficha||'',__linea:ln});});
+  const workers=[];
+  const arm=RT.armadoPesaje||{};
+  if(linea&&arm[linea]){
+    (arm[linea].trabajadores||[]).forEach(entry=>{
+      if(entry.trabId){
+        const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
+        if(t&&!workers.find(w=>w.id===t.id))workers.push({...t,ficha:entry.ficha||t.ficha||''});
+      } else if(entry.nombre){
+        if(!workers.find(w=>w.nombre===entry.nombre))
+          workers.push({id:'m_'+entry.nombre,nombre:entry.nombre,codigo:'',ficha:entry.ficha||''});
+      }
     });
   }
-  // 2) Fallback
-  const dbItems=DB.data.trabajadores.filter(t=>t.activo&&t.area==='pesaje'&&(!turno||t.turno===turno));
-  const fallback=dbItems.length?dbItems:DB.data.trabajadores.filter(t=>t.activo&&(!turno||t.turno===turno));
-  const items=fromArm.length?fromArm:fallback;
-  sel.innerHTML='<option value="">— Selecciona trabajador —</option>'
-    +'<option value="__manual__">+ Ingresar manualmente</option>'
-    +items.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
-  // Only update badge if a value was already selected (don't hide it on repopulate)
+  const placeholder=linea&&!workers.length?'— Sin armado en esta línea —':'— Selecciona trabajador —';
+  sel.innerHTML=`<option value="">${esc(placeholder)}</option>`
+    +workers.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
   if(!sel.value)onPRegTrabChange();
 }
-function onPRegTurnoChange(){renderPRegPlanilleros();renderPRegTrab();}
+function onPRegTurnoChange(){renderPRegLinea();renderPRegPlanilleros();}
 function onPRegEspecieChange(){/* placeholder, could filter types */}
 function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
@@ -4075,6 +4123,8 @@ function regPesaje(){
   }
   // Compat con código existente abajo
   const t={id:trabIdResolved,nombre:nombreTrab,codigo:codigoTrab,ficha:fichaTrab};
+  const ficha=document.getElementById('pRegFicha').value.trim();
+  if(!ficha){showToast('N° Ficha es obligatorio','error');document.getElementById('pRegFicha').focus();return;}
   const kgRaw=document.getElementById('pRegKg').value.trim().replace(',','.');
   const kg=parseFloat(kgRaw);
   if(!kgRaw||isNaN(kg)||kg<=0){showToast('Ingresa kilos válidos','error');document.getElementById('pRegKg').focus();return;}
@@ -4085,7 +4135,7 @@ function regPesaje(){
     id:nextId(RT.pesajes),hora:nowHM(),fecha:nowDate(),
     turno:document.getElementById('pRegTurno').value,
     linea:document.getElementById('pRegLinea').value,
-    trabId:t.id,codigo:t.codigo,nombre:t.nombre,ficha:t.ficha,
+    trabId:t.id,codigo:t.codigo,nombre:t.nombre,ficha,
     especie:document.getElementById('pRegEspecie').value,
     tipo:document.getElementById('pRegTipo').value,
     kg:Math.round(kg*100)/100,guia,
@@ -4095,10 +4145,12 @@ function regPesaje(){
   if(window.renderPResumen)renderPResumen();
   if(window.renderPConsol)renderPConsol();
   document.getElementById('pRegKg').value='';
+  document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
   showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
+window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
 function renderPesajeTable(){
@@ -5558,8 +5610,8 @@ function initRuntime(){
   _safeRun(renderEquipos,'renderEquipos');          // ← túneles/placas SIEMPRE corre
   _safeRun(renderPorCargar,'renderPorCargar');
   _safeRun(renderPRegTurnos,'renderPRegTurnos');
+  _safeRun(renderPRegLinea,'renderPRegLinea');
   _safeRun(renderPRegPlanilleros,'renderPRegPlanilleros');
-  _safeRun(renderPRegTrab,'renderPRegTrab');
   _safeRun(renderPesajeTable,'renderPesajeTable');
   _safeRun(renderERegPresets,'renderERegPresets');
   _safeRun(eRegCalcKg,'eRegCalcKg');
