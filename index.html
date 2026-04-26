@@ -4748,22 +4748,27 @@ function addPArmTrab(){
   const fichaIn=document.getElementById('pArmAddFicha');
   const ficha=(fichaIn&&fichaIn.value||'').trim();
   if(!ficha){showToast('Ficha obligatoria','error');fichaIn&&fichaIn.focus();return;}
-  // Check if we have a pending selection from iOS picker
-  let nombre='',trabId=null;
-  if(fichaIn&&fichaIn.dataset.pendingId){
+  // Resolver nombre y trabId (sin borrar pendingId aún — se borra solo si no hay duplicado)
+  let nombre='',trabId=null,hasPending=!!(fichaIn&&fichaIn.dataset.pendingId);
+  if(hasPending){
     const t=DB.data.trabajadores.find(x=>x.id===parseInt(fichaIn.dataset.pendingId));
     if(t){nombre=t.nombre;trabId=t.id;}
-    delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;
   } else {
     const manNom=(document.getElementById('pArmManualNombre')||{}).value||'';
     nombre=manNom.trim();
     if(!nombre){showToast('Selecciona o ingresa un trabajador','error');return;}
   }
-  // Ficha duplicada — indica a quién pertenece
-  const dup=_editPArmado.trabajadores.find(x=>x.ficha===ficha);
-  if(dup){showToast('⚠️ Ficha '+ficha+' ya fue asignada a '+dup.nombre,'error');fichaIn&&fichaIn.focus();return;}
+  // Chequeo duplicado — comparación robusta String() para evitar number vs string
+  const dup=_editPArmado.trabajadores.find(x=>String(x.ficha)===String(ficha));
+  if(dup){
+    showToast('⚠️ Ficha '+ficha+' ya fue asignada a '+dup.nombre,'error');
+    fichaIn&&fichaIn.select();
+    return; // NO borramos pendingId para que el usuario pueda corregir y reintentar
+  }
+  // Sin duplicado: ahora sí limpiamos pendingId y guardamos
+  if(hasPending&&fichaIn){delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;}
   _editPArmado.trabajadores.push({trabId,nombre:nombre.toUpperCase(),ficha});
-  clearPArmSelection(); // oculta preview y ficha row, limpia campos
+  clearPArmSelection();
   const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';const mn=document.getElementById('pArmManualNombre');if(mn)mn.value='';}
   renderPArmModal();
   showToast(nombre.toUpperCase()+' agregado · Ficha '+ficha,'success');
@@ -4773,7 +4778,8 @@ function addPArmTrabManual(){
   if(!nombre){showToast('Escribe el nombre','error');return;}
   const ficha=(document.getElementById('pArmAddFicha')||{value:''}).value.trim();
   if(!ficha){showToast('Ficha obligatoria','error');document.getElementById('pArmAddFicha')&&document.getElementById('pArmAddFicha').focus();return;}
-  if(_editPArmado.trabajadores.some(x=>x.ficha===ficha)){showToast('Esa ficha ya está asignada','error');return;}
+  const dupM=_editPArmado.trabajadores.find(x=>String(x.ficha)===String(ficha));
+  if(dupM){showToast('⚠️ Ficha '+ficha+' ya fue asignada a '+dupM.nombre,'error');document.getElementById('pArmAddFicha')&&document.getElementById('pArmAddFicha').select();return;}
   _editPArmado.trabajadores.push({trabId:null,nombre:nombre.toUpperCase(),ficha});
   document.getElementById('pArmAddFicha').value='';
   const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';document.getElementById('pArmManualNombre').value='';}
