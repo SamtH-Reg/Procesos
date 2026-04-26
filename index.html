@@ -1186,6 +1186,8 @@ body[data-theme="dark"] .ios-picker-name{color:#f2f2f7;}
 .ios-picker-name em{font-style:normal;background:rgba(255,214,10,.7);color:#1c1c1e;border-radius:3px;padding:0 1px;}
 .ios-picker-code{font-size:12px;font-weight:500;color:#8e8e93;letter-spacing:.02em;margin-top:2px;}
 body[data-theme="dark"] .ios-picker-code{color:#636366;}
+.ios-picker-ficha{color:#dc2626;font-weight:700;}
+body[data-theme="dark"] .ios-picker-ficha{color:#f87171;}
 .ios-picker-chevron{width:18px;height:18px;flex-shrink:0;opacity:.3;}
 body[data-theme="dark"] .ios-picker-chevron{opacity:.4;}
 .ios-picker-empty{padding:48px 20px;text-align:center;color:#8e8e93;font-size:15px;}
@@ -1218,6 +1220,8 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
 .ios-picker-trigger .trigger-name{flex:1;text-align:left;font-weight:600;color:var(--text);}
 .ios-picker-trigger .trigger-code{font-size:11px;color:var(--text-3);}
 .ios-picker-trigger .trigger-arrow{width:16px;height:16px;opacity:.4;flex-shrink:0;}
+.input.ficha-autofill-alert{border-color:#dc2626 !important;background:#fef2f2;color:#991b1b;font-weight:700;}
+body[data-theme="dark"] .input.ficha-autofill-alert{border-color:#f87171 !important;background:rgba(220,38,38,.14);color:#fecaca;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -4095,11 +4099,26 @@ function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const val=sel.value;
   const badge=document.getElementById('pRegWorkerBadge');
+  const fichaInp=document.getElementById('pRegFicha');
   if(!badge)return;
-  if(!val){badge.style.display='none';return;}
+  if(!val){
+    badge.style.display='none';
+    if(fichaInp){
+      fichaInp.value='';
+      fichaInp.classList.remove('ficha-autofill-alert');
+    }
+    return;
+  }
   if(val==='__manual__'){
     const nom=prompt('Nombre completo del trabajador:');
-    if(!nom||!nom.trim()){sel.value='';badge.style.display='none';return;}
+    if(!nom||!nom.trim()){
+      sel.value='';badge.style.display='none';
+      if(fichaInp){
+        fichaInp.value='';
+        fichaInp.classList.remove('ficha-autofill-alert');
+      }
+      return;
+    }
     const ficha=prompt('Número de ficha (opcional):','')||'';
     const opt=document.createElement('option');opt.value='__m_'+Date.now();opt.textContent=nom.trim()+(ficha?' · F'+ficha:'');opt.dataset.nombre=nom.trim();opt.dataset.ficha=ficha.trim();opt.dataset.manual='1';
     sel.appendChild(opt);sel.value=opt.value;
@@ -4108,6 +4127,11 @@ function onPRegTrabChange(){
     document.getElementById('pRegWorkerInit').textContent=ini;
     document.getElementById('pRegWorkerName').textContent=nom.trim();
     document.getElementById('pRegWorkerMeta').innerHTML=`<em style="color:var(--safety-amber-dark);">Manual</em>${ficha?' · Ficha <span>'+esc(ficha)+'</span>':''}`;
+    if(fichaInp){
+      const fichaVal=ficha.trim();
+      fichaInp.value=fichaVal;
+      fichaInp.classList.toggle('ficha-autofill-alert',Boolean(fichaVal));
+    }
     return;
   }
   const id=parseInt(val)||0;
@@ -4123,6 +4147,11 @@ function onPRegTrabChange(){
   const hoy=RT.pesajes.filter(r=>r.trabId===id||r.nombre===nombreDisp);
   const totKg=hoy.reduce((s,r)=>s+(r.kg||0),0);
   document.getElementById('pRegWorkerMeta').innerHTML=`Ficha <span>${esc(fichaDisp||'—')}</span> · ${hoy.length} pesajes hoy · <span>${totKg.toFixed(1).replace('.',',')} kg</span> acumulado`;
+  if(fichaInp){
+    const fichaVal=(fichaDisp||'').toString().trim();
+    fichaInp.value=fichaVal;
+    fichaInp.classList.toggle('ficha-autofill-alert',Boolean(fichaVal));
+  }
 }
 function regPesaje(){
   const selT=document.getElementById('pRegTrab');const valT=selT.value;
@@ -5046,11 +5075,12 @@ function _renderIosItems(trabs,q){
     const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
     const nombreHi=_hi(t.nombre||'');
     const codigoHi=_hi(t.codigo||'');
+    const fichaHi=_hi((t.ficha||'').toString());
     html+=`<div class="ios-picker-item" onclick="selectIosWorker(${t.id},'${(t.nombre||'').replace(/'/g,"\\'")}','${(t.codigo||'').replace(/'/g,"\\'")}')">
       <div class="ios-picker-av">${esc(ini)}</div>
       <div class="ios-picker-info">
         <div class="ios-picker-name">${nombreHi}</div>
-        <div class="ios-picker-code">Código: ${codigoHi||'—'}</div>
+        <div class="ios-picker-code">Código: ${codigoHi||'—'} · Ficha: <span class="ios-picker-ficha">${fichaHi||'—'}</span></div>
       </div>
       <svg class="ios-picker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
     </div>`;
@@ -5117,26 +5147,32 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
         opt.dataset.nombre=nom;opt.dataset.ficha=fich;opt.dataset.manual='1';
         sel.appendChild(opt);sel.value=uid;
       }
-      _updateRegPickerDisplay(selectId,nom,fich?'F'+fich:'');
+      _updateRegPickerDisplay(selectId,nom,fich?('Ficha '+fich):'');
       if(changeFnName&&window[changeFnName])window[changeFnName]();
       return;
     }
     const sel=document.getElementById(selectId);
+    let displayMeta=codigo;
     if(sel){
       // Ensure option exists in the hidden select
       let opt=Array.from(sel.options).find(o=>String(o.value)===String(id));
+      let tDb=DB.data.trabajadores.find(t=>t.id===id);
       if(!opt){
         opt=document.createElement('option');
-        const tDb=DB.data.trabajadores.find(t=>t.id===id);
         opt.value=String(id);
         opt.textContent=nombre;
         opt.dataset.nombre=nombre;
         opt.dataset.ficha=(tDb&&tDb.ficha)||'';
         sel.appendChild(opt);
       }
+      if(!tDb)tDb=DB.data.trabajadores.find(t=>String(t.id)===String(id));
+      if(selectId==='pRegTrab'){
+        const fichaTxt=(opt&&opt.dataset&&opt.dataset.ficha)||((tDb&&tDb.ficha)||'');
+        displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
+      }
       sel.value=String(id);
     }
-    _updateRegPickerDisplay(selectId,nombre,codigo);
+    _updateRegPickerDisplay(selectId,nombre,displayMeta);
     if(changeFnName&&window[changeFnName])window[changeFnName]();
   }, trabsList);  // pasa lista filtrada al picker
 }
