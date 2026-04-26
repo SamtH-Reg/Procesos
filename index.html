@@ -1220,8 +1220,8 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
 .ios-picker-trigger .trigger-name{flex:1;text-align:left;font-weight:600;color:var(--text);}
 .ios-picker-trigger .trigger-code{font-size:11px;color:var(--text-3);}
 .ios-picker-trigger .trigger-arrow{width:16px;height:16px;opacity:.4;flex-shrink:0;}
-.input.ficha-autofill-alert{border-color:#dc2626 !important;background:#fef2f2;color:#991b1b;font-weight:700;}
-body[data-theme="dark"] .input.ficha-autofill-alert{border-color:#f87171 !important;background:rgba(220,38,38,.14);color:#fecaca;}
+.input.ficha-fixed{border-color:#16a34a !important;background:#ecfdf3;color:#166534;font-weight:700;}
+body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;background:rgba(34,197,94,.16);color:#bbf7d0;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -1864,7 +1864,7 @@ body[data-theme="dark"] .input.ficha-autofill-alert{border-color:#f87171 !import
               </div>
               <div class="form-field">
                 <label class="form-label">N° Ficha <span class="required">*</span></label>
-                <input class="input" id="pRegFicha" type="text" inputmode="numeric" placeholder="Ingresa número de ficha" autocomplete="off">
+                <input class="input ficha-fixed" id="pRegFicha" type="text" inputmode="numeric" placeholder="Autoasignada por trabajador" autocomplete="off" readonly>
               </div>
               <div class="form-field">
                 <label class="form-label">Kilos procesados <span class="required">*</span> <span class="hint">rango 0,2 – 20 kg</span></label>
@@ -4111,7 +4111,7 @@ function onPRegTrabChange(){
     badge.style.display='none';
     if(fichaInp){
       fichaInp.value='';
-      fichaInp.classList.remove('ficha-autofill-alert');
+      fichaInp.classList.add('ficha-fixed');
     }
     return;
   }
@@ -4121,7 +4121,7 @@ function onPRegTrabChange(){
       sel.value='';badge.style.display='none';
       if(fichaInp){
         fichaInp.value='';
-        fichaInp.classList.remove('ficha-autofill-alert');
+        fichaInp.classList.add('ficha-fixed');
       }
       return;
     }
@@ -4136,7 +4136,7 @@ function onPRegTrabChange(){
     if(fichaInp){
       const fichaVal=ficha.trim();
       fichaInp.value=fichaVal;
-      fichaInp.classList.toggle('ficha-autofill-alert',Boolean(fichaVal));
+      fichaInp.classList.add('ficha-fixed');
     }
     return;
   }
@@ -4162,7 +4162,7 @@ function onPRegTrabChange(){
   if(fichaInp){
     const fichaVal=(fichaDisp||'').toString().trim();
     fichaInp.value=fichaVal;
-    fichaInp.classList.toggle('ficha-autofill-alert',Boolean(fichaVal));
+    fichaInp.classList.add('ficha-fixed');
   }
 }
 function regPesaje(){
