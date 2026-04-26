@@ -4848,29 +4848,38 @@ function _getEspecies(){
 }
 
 /* ── iOS Picker open/close ─────────────────────────────────────── */
+function _pickRandom5(arr){
+  // Devuelve hasta 5 elementos aleatorios de un array (sin mutar el original)
+  const copy=[...arr];
+  for(let i=copy.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[copy[i],copy[j]]=[copy[j],copy[i]];}
+  return copy.slice(0,5);
+}
 function openIosPicker(mode,cb,trabsList){
-  // trabsList: lista filtrada de trabajadores; null = mostrar todos
-  const trabs=trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
-  _iosPicker={mode,cb,trabsList:trabs};
-  const filteredBadge=trabsList?`<span style="font-size:11px;font-weight:600;color:#0369a1;margin-left:6px;background:#dbeafe;border-radius:10px;padding:1px 8px;">${trabs.length} personas</span>`:'';
+  // trabsList: lista ya filtrada (modo registro) → mostrar todos
+  // null      : modo armado → mostrar 5 aleatorios, buscar en todos
+  const allTrabs=trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const isRegistro=!!trabsList; // registro = tiene trabsList; armado = null
+  // Lista inicial: registro→todos ; armado→5 aleatorios
+  const initialTrabs=isRegistro?allTrabs:_pickRandom5(allTrabs);
+  _iosPicker={mode,cb,trabsList:allTrabs,isRegistro};
+  const badge=isRegistro
+    ?`<span style="font-size:11px;font-weight:600;color:#0369a1;margin-left:6px;background:#dbeafe;border-radius:10px;padding:1px 8px;">${allTrabs.length} personas</span>`
+    :'';
+  const placeholder=isRegistro?'Buscar entre los asignados…':'Buscar por nombre o código…';
   const overlay=document.createElement('div');overlay.className='ios-picker-overlay';overlay.id='iosPicker';
   overlay.innerHTML=`
     <div class="ios-picker-sheet" onclick="event.stopPropagation()">
       <div class="ios-picker-handle"></div>
       <div class="ios-picker-hdr">
-        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}${filteredBadge}</span>
+        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}${badge}</span>
         <button class="ios-picker-cancel" onclick="closeIosPicker()">Cancelar</button>
       </div>
       <div class="ios-picker-search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="${trabsList?'Buscar entre los asignados…':'Buscar por nombre o código...'}" autocomplete="off" oninput="filterIosPicker(this.value)" enterkeyhint="search">
+        <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="${placeholder}" autocomplete="off" oninput="filterIosPicker(this.value)" enterkeyhint="search">
       </div>
       <div class="ios-picker-list" id="iosPickerList">
-        <div style="padding:40px 20px;text-align:center;color:var(--slate-400,#94a3b8);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;margin-bottom:10px;opacity:.4;display:block;margin-inline:auto;"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <div style="font-size:13px;font-weight:500;">Escribe para buscar</div>
-          <div style="font-size:11px;margin-top:4px;opacity:.7;">${trabs.length} persona${trabs.length!==1?'s':''} disponible${trabs.length!==1?'s':''}</div>
-        </div>
+        ${_renderIosItems(initialTrabs,'')}
       </div>
     </div>`;
   overlay.addEventListener('click',closeIosPicker);
@@ -4886,15 +4895,10 @@ function openIosPicker(mode,cb,trabsList){
     window.visualViewport.addEventListener('resize',_vpAdj);
     window.visualViewport.addEventListener('scroll',_vpAdj);
     _iosPicker._vpAdj=_vpAdj;
-    _vpAdj(); // inicial
+    _vpAdj();
   }
-  // Enfocar buscador y hacer scroll al input cuando aparezca el teclado
-  setTimeout(()=>{
-    const inp=document.getElementById('iosPickerSearch');
-    if(!inp)return;
-    inp.focus();
-    inp.addEventListener('focus',()=>setTimeout(()=>inp.scrollIntoView({block:'start',behavior:'smooth'}),350),{once:true});
-  },120);
+  // NO auto-focus: evita que el teclado virtual aparezca durante la animación
+  // El usuario toca el buscador si quiere escribir
 }
 function _renderIosItems(trabs,q){
   const qLow=q.toLowerCase().trim();
@@ -4946,15 +4950,13 @@ function filterIosPicker(q){
   const trabs=_iosPicker.trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const trimQ=(q||'').trim();
   if(!trimQ){
-    list.innerHTML=`<div style="padding:40px 20px;text-align:center;color:var(--slate-400,#94a3b8);">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;margin-bottom:10px;opacity:.4;display:block;margin-inline:auto;"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <div style="font-size:13px;font-weight:500;">Escribe para buscar</div>
-      <div style="font-size:11px;margin-top:4px;opacity:.7;">${trabs.length} persona${trabs.length!==1?'s':''} disponible${trabs.length!==1?'s':''}</div>
-    </div>`;
+    // Registro: mostrar todos los asignados ; Armado: volver a 5 aleatorios
+    const initial=_iosPicker.isRegistro?trabs:_pickRandom5(trabs);
+    list.innerHTML=_renderIosItems(initial,'');
     return;
   }
-  const html=_renderIosItems(trabs,trimQ);
-  list.innerHTML=html||`<div style="padding:40px 20px;text-align:center;color:var(--slate-400,#94a3b8);font-size:13px;">Sin resultados para "<strong>${esc(trimQ)}</strong>"</div>`;
+  // Con texto: siempre busca en la lista completa
+  list.innerHTML=_renderIosItems(trabs,trimQ);
 }
 function selectIosWorker(id,nombre,codigo){
   const mode=_iosPicker.mode;const cb=_iosPicker.cb;
