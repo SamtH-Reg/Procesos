@@ -4596,15 +4596,20 @@ function editPArmadoLinea(ln){
       <!-- AGREGAR NUEVO -->
       <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
         <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
-        <button class="ios-picker-trigger" type="button" onclick="openIosPicker('trab',function(id,nombre,codigo){_pArmAddById(id,nombre);})" style="margin-bottom:10px;">
+        <button class="ios-picker-trigger" type="button" id="pArmPickerBtn" onclick="openIosPicker('trab',function(id,nombre,codigo){_pArmAddById(id,nombre);})">
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <span class="trigger-name">Buscar por nombre o código…</span>
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
+        <!-- Persona seleccionada — se muestra tras elegir del picker -->
+        <div id="pArmSelectedPreview" style="display:none;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;background:var(--surface);border:1.5px solid #0891b2;border-radius:var(--radius-sm);">
+          <!-- rellenado por _pArmAddById -->
+        </div>
+        <!-- Fila ficha + botón — aparece solo tras seleccionar persona -->
+        <div id="pArmFichaRow" style="display:none;margin-top:10px;grid-template-columns:1fr auto;gap:8px;align-items:end;">
           <div class="form-field" style="margin:0;">
             <label class="form-label" style="font-size:11px;">Nº Ficha <span class="required">*</span></label>
-            <input class="input" id="pArmAddFicha" placeholder="101" inputmode="numeric">
+            <input class="input" id="pArmAddFicha" placeholder="Ingresa número de ficha" inputmode="numeric" autocomplete="off">
           </div>
           <button class="btn success" type="button" onclick="addPArmTrab()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -4692,21 +4697,45 @@ function _pArmSetPlanillero(id,nombre){
 }
 function _pArmAddById(id,nombre){
   if(id==='__manual__'){
-    // Show manual box
     const mb=document.getElementById('pArmManualBox');if(mb)mb.style.display='block';
     setTimeout(()=>{const inp=document.getElementById('pArmManualNombre');if(inp)inp.focus();},80);
     return;
   }
   const t=DB.data.trabajadores.find(x=>x.id===id);
   if(!t)return;
-  // Pre-fill ficha input
+  // Mostrar preview de la persona seleccionada
+  const preview=document.getElementById('pArmSelectedPreview');
+  if(preview){
+    const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+    preview.innerHTML=`
+      <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0;">${esc(ini)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.nombre)}</div>
+        <div style="font-size:11px;color:var(--text-3);">Código: ${esc(t.codigo||'—')}</div>
+      </div>
+      <button type="button" onclick="clearPArmSelection()" style="background:none;border:none;padding:4px;cursor:pointer;color:var(--text-3);line-height:0;" title="Cambiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:16px;height:16px;"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>`;
+    preview.style.display='flex';
+  }
+  // Mostrar fila de ficha (en blanco — el usuario ingresa el número manualmente)
+  const fichaRow=document.getElementById('pArmFichaRow');
+  if(fichaRow)fichaRow.style.display='grid';
   const fichaIn=document.getElementById('pArmAddFicha');
-  if(fichaIn&&t.ficha)fichaIn.value=t.ficha;
-  if(fichaIn)fichaIn.focus();
-  // Store pending selection
-  if(fichaIn)fichaIn.dataset.pendingId=String(t.id);
-  if(fichaIn)fichaIn.dataset.pendingNombre=t.nombre;
-  showToast('Verifica/edita el N° Ficha y pulsa Agregar','success');
+  if(fichaIn){
+    fichaIn.value=''; // siempre en blanco — ficha se asigna al armar la línea
+    fichaIn.dataset.pendingId=String(t.id);
+    fichaIn.dataset.pendingNombre=t.nombre;
+    setTimeout(()=>fichaIn.focus(),80);
+  }
+}
+function clearPArmSelection(){
+  const preview=document.getElementById('pArmSelectedPreview');
+  if(preview){preview.innerHTML='';preview.style.display='none';}
+  const fichaRow=document.getElementById('pArmFichaRow');
+  if(fichaRow)fichaRow.style.display='none';
+  const fichaIn=document.getElementById('pArmAddFicha');
+  if(fichaIn){fichaIn.value='';delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;}
 }
 function setPArmPlanillero(){} // legacy compat no-op
 function onPArmSelectChange(){} // legacy compat no-op
@@ -4728,10 +4757,10 @@ function addPArmTrab(){
   }
   if(_editPArmado.trabajadores.some(x=>x.ficha===ficha)){showToast('Esa ficha ya está asignada en esta línea','error');return;}
   _editPArmado.trabajadores.push({trabId,nombre:nombre.toUpperCase(),ficha});
-  if(fichaIn)fichaIn.value='';
+  clearPArmSelection(); // oculta preview y ficha row, limpia campos
   const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';const mn=document.getElementById('pArmManualNombre');if(mn)mn.value='';}
   renderPArmModal();
-  showToast(nombre.toUpperCase()+' agregado','success');
+  showToast(nombre.toUpperCase()+' agregado · Ficha '+ficha,'success');
 }
 function addPArmTrabManual(){
   const nombre=(document.getElementById('pArmManualNombre')||{value:''}).value.trim();
@@ -4758,7 +4787,7 @@ function savePArmado(){
 }
 window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.copiarPArmadoDia=copiarPArmadoDia;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
 window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
-window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;
+window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
 
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
