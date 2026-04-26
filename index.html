@@ -3994,6 +3994,7 @@ function renderPRegTurnos(){
 function renderPRegLinea(){
   // Solo líneas que tienen armado de pesaje activo
   const sel=document.getElementById('pRegLinea');if(!sel)return;
+  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   const arm=RT.armadoPesaje||{};
   const mapa={'L1':'Línea 1','L2':'Línea 2','L3':'Línea 3','L4':'Línea 4','L5':'Línea 5','L6':'Línea 6'};
   const lineasActivas=Object.keys(arm).filter(ln=>{
@@ -4019,10 +4020,12 @@ function _getPRegPickerPlanilleros(){
       if(!workers.find(w=>w.nombre===p.nombre))workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:''});
     }
   });
-  return workers.length?workers.sort((a,b)=>a.nombre.localeCompare(b.nombre)):null;
+  // Siempre retorna array (nunca null) para que el picker quede en modo registro
+  return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
 }
 function _getPRegPickerWorkers(){
   // Solo trabajadores del armadoPesaje para la línea seleccionada (sin planillero)
+  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
   const arm=RT.armadoPesaje||{};
   const workers=[];
@@ -4041,7 +4044,8 @@ function _getPRegPickerWorkers(){
   } else {
     Object.values(arm).forEach(d=>{if(d)processLine(d);});
   }
-  return workers.length?workers.sort((a,b)=>a.nombre.localeCompare(b.nombre)):null;
+  // Siempre retorna array (nunca null) para que el picker quede en modo registro
+  return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
 }
 function renderPRegPlanilleros(){
   // Actualiza el hidden select (modo fallback), el picker usa _getPRegPickerPlanilleros
@@ -4950,8 +4954,8 @@ function _pickRandom5(arr){
 function openIosPicker(mode,cb,trabsList){
   // trabsList: lista ya filtrada (modo registro) → mostrar todos
   // null      : modo armado → mostrar 5 aleatorios, buscar en todos
-  const allTrabs=trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
-  const isRegistro=!!trabsList; // registro = tiene trabsList; armado = null
+  const allTrabs=Array.isArray(trabsList)?trabsList:DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const isRegistro=Array.isArray(trabsList); // registro = array (incluso vacío); armado = null
   // Lista inicial: registro→todos ; armado→5 aleatorios
   const initialTrabs=isRegistro?allTrabs:_pickRandom5(allTrabs);
   _iosPicker={mode,cb,trabsList:allTrabs,isRegistro};
@@ -5020,7 +5024,9 @@ function _renderIosItems(trabs,q){
     <svg class="ios-picker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
   </div>`;
   if(!filtered.length){
-    html+=`<div class="ios-picker-empty">Sin resultados para "<strong>${esc(q)}</strong>"</div>`;
+    html+=qLow
+      ?`<div class="ios-picker-empty">Sin resultados para "<strong>${esc(q)}</strong>"</div>`
+      :`<div class="ios-picker-empty">Sin trabajadores asignados en esta línea</div>`;
     return html;
   }
   filtered.forEach(t=>{
