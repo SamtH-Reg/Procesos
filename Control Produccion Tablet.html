@@ -3185,13 +3185,7 @@ function renderMRegTrab(){
   let fromArmado=[];
   if(RT.armadoMolde&&linea&&RT.armadoMolde[linea]){
     const d=RT.armadoMolde[linea];
-    // Planillero al inicio de la lista
-    if(d.planillero&&d.planillero.trabId){
-      const t=DB.data.trabajadores.find(x=>x.id===d.planillero.trabId);
-      const nom=t?t.nombre:(d.planillero.nombre||'');
-      const id=t?t.id:d.planillero.trabId;
-      if(nom)fromArmado.push({id,nombre:nom+' (Plan.)',__fromArmado:true});
-    }
+    // Solo trabajadores (sin planillero)
     (d.trabajadores||[]).forEach(entry=>{
       if(entry.trabId){
         const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
@@ -4832,12 +4826,7 @@ function _getMRegPickerWorkers(){
   // Si el turno del armado no coincide con el turno actual, devolver null (sin filtro)
   if(turno&&data.turno&&data.turno!==turno)return null;
   const workers=[];
-  // Planillero
-  if(data.planillero&&data.planillero.trabId){
-    const t=DB.data.trabajadores.find(x=>x.id===data.planillero.trabId);
-    if(t&&!workers.find(w=>w.id===t.id))workers.push(t);
-  }
-  // Trabajadores asignados
+  // Solo trabajadores asignados (sin planillero)
   (data.trabajadores||[]).forEach(entry=>{
     if(entry.trabId){
       const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
