@@ -1460,7 +1460,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       </div>
 
       <div class="alert info" style="margin-bottom:12px;padding:10px 14px;font-size:12px;">
-        <strong>Orden sugerido:</strong> trabajador de la línea → preset → cantidad de moldes. Tras <strong>Registrar conteo</strong> se borran trabajador, preset y cantidad; el <strong>N° Guía</strong> queda igual hasta que lo cambies a mano.
+        <strong>Secuencia al registrar:</strong> trabajador de la línea → preset → cantidad de moldes → <strong>Registrar conteo</strong>. Los presets siguen visibles siempre; al guardar el registro se limpian trabajador, preset y cantidad para el siguiente ingreso. El <strong>N° Guía</strong> no se borra (solo lo cambias a mano o con Limpiar).
       </div>
 
       <div class="card">
@@ -3266,6 +3266,12 @@ function _mRegArmadoWorkersListForLinea(linea){
 }
 function renderMRegTrab(){
   const sel=document.getElementById('mRegTrab');if(!sel)return;
+  const prevVal=sel.value;
+  let prevManual=null;
+  if(prevVal&&String(prevVal).startsWith('__m_')&&sel.selectedIndex>=0){
+    const o=sel.options[sel.selectedIndex];
+    if(o)prevManual={v:o.value,n:o.dataset.nombre||'',t:o.textContent||''};
+  }
   const linea=document.getElementById('mRegLinea')?document.getElementById('mRegLinea').value:'';
   const fromArmado=_mRegArmadoWorkersListForLinea(linea);
   const tieneArmado=linea&&RT.armadoMolde&&RT.armadoMolde[linea]&&
@@ -3279,6 +3285,12 @@ function renderMRegTrab(){
   sel.innerHTML=`<option value="">${esc(placeholder)}</option>`
     +(items.length?'' :'<option value="__manual__">+ Ingresar manualmente</option>')
     +items.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}</option>`).join('');
+  if(items.some(t=>String(t.id)===String(prevVal)))sel.value=String(prevVal);
+  else if(prevManual){
+    const o=document.createElement('option');
+    o.value=prevManual.v;o.textContent=prevManual.t||prevManual.n;o.dataset.nombre=prevManual.n;o.dataset.manual='1';
+    sel.appendChild(o);sel.value=prevManual.v;
+  }
   // Badge informativo: mostrar cuántas personas tiene el armado de la línea y su fecha
   const info=document.getElementById('mRegArmadoInfo');
   if(info){
@@ -3299,18 +3311,31 @@ function onMRegTrabChange(){
   const val=sel.value;
   const badge=document.getElementById('mRegWorkerBadge');
   if(!badge)return;
-  if(!val){badge.style.display='none';if(window.renderMRegPresets)renderMRegPresets();return;}
+  if(!val){
+    badge.style.display='none';
+    const btn=document.getElementById('mRegTrabPicker');
+    if(btn){
+      btn.innerHTML=`
+      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+    }
+    if(window.renderMRegPresets)renderMRegPresets();
+    return;
+  }
   // Manual
   if(val==='__manual__'){
     const nom=prompt('Nombre completo del trabajador:');
-    if(!nom||!nom.trim()){sel.value='';badge.style.display='none';if(window.renderMRegPresets)renderMRegPresets();return;}
+    if(!nom||!nom.trim()){sel.value='';onMRegTrabChange();return;}
     const opt=document.createElement('option');opt.value='__m_'+Date.now();opt.textContent=nom.trim();opt.dataset.nombre=nom.trim();opt.dataset.manual='1';
     sel.appendChild(opt);sel.value=opt.value;
     badge.style.display='';
     const ini=nom.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     document.getElementById('mRegWorkerInit').textContent=ini;
     document.getElementById('mRegWorkerName').textContent=nom.trim();
-    document.getElementById('mRegWorkerMeta').innerHTML=`<em style="color:var(--safety-amber-dark);">Manual</em> · Línea <span>${esc(document.getElementById('mRegLinea').value)}</span>`;
+    const lineaM=document.getElementById('mRegLinea').value;
+    document.getElementById('mRegWorkerMeta').innerHTML=`<em style="color:var(--safety-amber-dark);">Manual</em> · Línea <span>${esc(lineaM)}</span>`;
+    _updateRegPickerDisplay('mRegTrab',nom.trim(),'Manual · Línea '+lineaM);
     if(window.renderMRegPresets)renderMRegPresets();
     return;
   }
@@ -3325,6 +3350,14 @@ function onMRegTrabChange(){
   document.getElementById('mRegWorkerName').textContent=nombreDisp;
   const linea=document.getElementById('mRegLinea').value;
   document.getElementById('mRegWorkerMeta').innerHTML=t?`Código <span>${esc(t.codigo)}</span> · Línea <span>${esc(linea)}</span>`:`Línea <span>${esc(linea)}</span>`;
+  let pickMeta='';
+  if(t){
+    pickMeta='Código: '+String(t.codigo||'—');
+    if(t.ficha!=null&&String(t.ficha).trim()!=='')pickMeta+=' · Ficha '+String(t.ficha);
+  } else if(opt&&opt.dataset.ficha&&String(opt.dataset.ficha).trim()!==''){
+    pickMeta='Ficha: '+String(opt.dataset.ficha);
+  }
+  _updateRegPickerDisplay('mRegTrab',nombreDisp,pickMeta);
   if(window.renderMRegPresets)renderMRegPresets();
 }
 function _getMRegEspecie(){
@@ -3337,24 +3370,16 @@ function _getMRegEspecie(){
 }
 function renderMRegPresets(){
   const grid=document.getElementById('mRegPresetGrid');if(!grid)return;
-  const trabSel=document.getElementById('mRegTrab');
-  const trabOk=trabSel&&trabSel.value&&trabSel.value!=='__manual__';
   const allPresets=DB.data.presets.filter(p=>p.activo);
   const especie=_getMRegEspecie();
   const presets=especie?allPresets.filter(p=>p.especie===especie):allPresets;
   const cntEl=document.getElementById('mRegPresetCount');
   if(cntEl){
-    if(!trabOk){
-      cntEl.innerHTML='<span style="color:#92400e;">Primero elige trabajador</span>';
-    } else if(especie){
+    if(especie){
       cntEl.innerHTML=`${presets.length} preset${presets.length!==1?'s':''} <span class="especie-chip" title="Quitar filtro de especie" onclick="_clearMRegEspecieFilter()">🐟 ${esc(especie)} ×</span>`;
     } else {
-      cntEl.textContent=allPresets.length+' presets disponibles';
+      cntEl.textContent=presets.length+' presets disponibles';
     }
-  }
-  if(!trabOk){
-    grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Selecciona primero al <strong>trabajador</strong> de la línea (solo aparecen quienes están en el armado).</div>';
-    return;
   }
   if(!presets.length){
     grid.innerHTML=`<div style="color:var(--text-3);padding:20px;text-align:center;">${especie?'Sin presets para <strong>'+esc(especie)+'</strong> — asigna especie en Ajustes → Presets':'Sin presets activos — crea uno en Ajustes → Presets'}</div>`;
@@ -3372,8 +3397,6 @@ function _clearMRegEspecieFilter(){
   renderMRegPresets();
 }
 function selectPresetM(id){
-  const trabSel=document.getElementById('mRegTrab');
-  if(!trabSel||!trabSel.value||trabSel.value==='__manual__'){showToast('Primero selecciona el trabajador de la línea','error');return;}
   RT.selPresetM=id;rtSave();
   // Actualizar clases SIN reconstruir el DOM (evita que el listener genérico pise el selected)
   const grid=document.getElementById('mRegPresetGrid');
@@ -3384,9 +3407,6 @@ function selectPresetM(id){
 }
 let _mRegStepLast=0;
 function mRegStep(delta){
-  const trabSel=document.getElementById('mRegTrab');
-  if(!trabSel||!trabSel.value||trabSel.value==='__manual__'){showToast('Primero selecciona el trabajador','error');return;}
-  if(!RT.selPresetM){showToast('Primero selecciona el preset','error');return;}
   const now=Date.now();
   if(now-_mRegStepLast<80)return; // solo anti-rebote muy rápido
   _mRegStepLast=now;
@@ -5380,7 +5400,7 @@ function clearRegPicker(selectId,changeFnName){
   }
   if(changeFnName&&window[changeFnName])window[changeFnName]();
 }
-window.openRegPicker=openRegPicker;window.clearRegPicker=clearRegPicker;
+window.openRegPicker=openRegPicker;window.clearRegPicker=clearRegPicker;window._updateRegPickerDisplay=_updateRegPickerDisplay;
 
 function editMArmadoLinea(ln){
   _ensureArmadoMolde();
