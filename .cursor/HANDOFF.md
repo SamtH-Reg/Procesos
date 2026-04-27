@@ -13,6 +13,16 @@ Copia este archivo o su resumen al inicio de un chat nuevo y adjunta `@index.htm
 
 - Cambios **acotados** al pedido; al terminar: **`git commit` + `git push`** a `main` (sin pedir permiso).
 
+## Cuándo cambiar de chat (Cursor)
+
+El asistente **avisará en el chat** cuando convenga abrir una **conversación nueva**, por ejemplo si:
+
+- El **contexto/memoria** del chat va muy alto o el hilo es muy largo con muchos archivos.
+- Hay **pérdida de coherencia** con decisiones previas (y no están referenciadas con `@` o en este archivo).
+- Encaja un **bloque grande nuevo** (refactor, auditoría amplia, varias features): arrancar limpio suele reducir errores.
+
+No hace falta cambiar de chat para cambios pequeños mientras el contexto siga cómodo.
+
 ## Estado reciente (últimos commits útiles)
 
 Revisar `git log` para el detalle; referencia aproximada:
