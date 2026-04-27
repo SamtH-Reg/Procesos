@@ -1180,26 +1180,23 @@ body[data-theme="dark"] .ios-picker-item{border-color:rgba(235,235,245,.08);}
 }
 .ios-picker-av.manual{background:linear-gradient(135deg,#30b0c7 0%,#007aff 100%);box-shadow:0 2px 8px rgba(0,122,255,.22);}
 .ios-picker-av.green{background:linear-gradient(135deg,#34c759 0%,#30b0c7 100%);box-shadow:0 2px 8px rgba(52,199,89,.28);}
-.ios-picker-info{flex:1;min-width:0;}
-.ios-picker-row-main{display:flex;align-items:center;gap:10px;min-width:0;}
-.ios-picker-name{font-size:15px;font-weight:600;color:#1c1c1e;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-body[data-theme="dark"] .ios-picker-name{color:#f2f2f7;}
+.ios-picker-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;min-width:0;}
+.ios-picker-line-ficha{display:flex;align-items:baseline;gap:6px;flex-wrap:nowrap;min-width:0;}
+.ios-picker-ficha-label{font-size:12px;font-weight:700;color:#9ca3af;letter-spacing:.02em;flex-shrink:0;}
+body[data-theme="dark"] .ios-picker-ficha-label{color:#8e8e93;}
+.ios-picker-line-ficha .ios-picker-ficha{font-size:17px;font-weight:800;line-height:1.1;}
+.ios-picker-line-name-code{display:flex;align-items:center;gap:8px;min-width:0;margin-top:1px;}
+.ios-picker-line-name-code .ios-picker-name{font-size:14px;font-weight:600;color:#1c1c1e;letter-spacing:-.01em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body[data-theme="dark"] .ios-picker-line-name-code .ios-picker-name{color:#f2f2f7;}
+.ios-picker-info>.ios-picker-name{font-size:15px;font-weight:600;color:#1c1c1e;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body[data-theme="dark"] .ios-picker-info>.ios-picker-name{color:#f2f2f7;}
 .ios-picker-name em{font-style:normal;background:rgba(255,214,10,.7);color:#1c1c1e;border-radius:3px;padding:0 1px;}
 .ios-picker-code{font-size:12px;font-weight:500;color:#8e8e93;letter-spacing:.02em;margin-top:2px;}
 body[data-theme="dark"] .ios-picker-code{color:#636366;}
+.ios-picker-code-inline{font-size:12px;font-weight:600;color:#8e8e93;letter-spacing:.02em;flex-shrink:0;white-space:nowrap;}
+body[data-theme="dark"] .ios-picker-code-inline{color:#636366;}
 .ios-picker-ficha{color:#dc2626;font-weight:700;}
 body[data-theme="dark"] .ios-picker-ficha{color:#f87171;}
-.ios-picker-ficha-lead{
-  font-size:18px;
-  font-weight:800;
-  letter-spacing:-.02em;
-  color:#9ca3af;
-  white-space:nowrap;
-  flex-shrink:0;
-  min-width:132px;
-}
-.ios-picker-ficha-lead .ios-picker-ficha{font-size:32px;line-height:.9;}
-body[data-theme="dark"] .ios-picker-ficha-lead{color:#9ca3af;}
 .ios-picker-chevron{width:18px;height:18px;flex-shrink:0;opacity:.3;}
 body[data-theme="dark"] .ios-picker-chevron{opacity:.4;}
 .ios-picker-empty{padding:48px 20px;text-align:center;color:#8e8e93;font-size:15px;}
@@ -5119,11 +5116,11 @@ function _renderIosItems(trabs,q){
     html+=`<div class="ios-picker-item" onclick="selectIosWorker(${t.id},'${(t.nombre||'').replace(/'/g,"\\'")}','${(t.codigo||'').replace(/'/g,"\\'")}')">
       <div class="ios-picker-av">${esc(ini)}</div>
       <div class="ios-picker-info">
-        <div class="ios-picker-row-main">
-          <div class="ios-picker-ficha-lead">Ficha: <span class="ios-picker-ficha">${fichaHi||'—'}</span></div>
+        <div class="ios-picker-line-ficha"><span class="ios-picker-ficha-label">Ficha:</span><span class="ios-picker-ficha">${fichaHi||'—'}</span></div>
+        <div class="ios-picker-line-name-code">
           <div class="ios-picker-name">${nombreHi}</div>
+          <span class="ios-picker-code-inline">Código: ${codigoHi||'—'}</span>
         </div>
-        <div class="ios-picker-code">Código: ${codigoHi||'—'}</div>
       </div>
       <svg class="ios-picker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
     </div>`;
