@@ -2279,7 +2279,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <div class="cfg-toolbar">
         <div class="cfg-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" id="searchTrab" placeholder="Buscar por nombre, código o ficha…" oninput="renderTrabajadores()">
+          <input type="text" id="searchTrab" placeholder="Nombre, código empresa o nº ficha…" oninput="renderTrabajadores()">
         </div>
         <select id="filterTrabArea" onchange="renderTrabajadores()" style="height:42px;padding:0 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font:500 13px var(--font);color:var(--text);">
           <option value="">Todas las áreas</option>
@@ -2798,7 +2798,8 @@ function renderTrabajadores(){
   const items=DB.data.trabajadores.filter(t=>{
     if(area&&t.area!==area)return false;
     if(!q)return true;
-    return norm(t.nombre+' '+t.codigo+' '+t.ficha).includes(q);
+    const n=norm(t.nombre),c=norm(t.codigo),f=norm(t.ficha);
+    return n.includes(q)||c.includes(q)||f.includes(q);
   });
   if(!items.length){
     list.innerHTML=`<div class="cfg-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><div class="t">Sin trabajadores</div><div>Crea uno con el botón "Nuevo trabajador"</div></div>`;
@@ -2814,7 +2815,7 @@ function renderTrabajadores(){
       <div class="ci-icon" style="background:var(--brand);color:#fff;font-weight:700;font-size:14px;">${esc(initials(t.nombre))}</div>
       <div class="ci-info">
         <div class="ci-name">${esc(t.nombre)} ${ab}</div>
-        <div class="ci-meta"><span class="mono">${esc(t.codigo)}</span><span class="mono">Ficha ${esc(t.ficha)}</span> ${areaL[t.area]||t.area} · Turno ${turnoL[t.turno]||t.turno} · ${rolL[t.rol]||t.rol}</div>
+        <div class="ci-meta"><span class="mono">Código: ${esc(t.codigo||'—')}</span> · <span class="mono">Ficha: ${esc(t.ficha||'—')}</span> · ${areaL[t.area]||t.area} · Turno ${turnoL[t.turno]||t.turno} · ${rolL[t.rol]||t.rol}</div>
       </div>
       <div class="ci-acts">
         <button class="btn ghost" onclick="editTrabajador(${t.id})">Editar</button>
@@ -4038,9 +4039,15 @@ function _getPRegPickerPlanilleros(){
   const workers=[];
   if(p.trabId){
     const t=DB.data.trabajadores.find(x=>x.id===p.trabId);
-    if(t)workers.push(t);
+    if(t){
+      workers.push({
+        ...t,
+        // Código = maestro empresa; ficha = la del armado de línea (puede ser numérica distinta).
+        ficha:(p.ficha!=null&&String(p.ficha).trim()!=='')?p.ficha:(t.ficha||'')
+      });
+    }
   } else if(p.nombre){
-    workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:''});
+    workers.push({id:'p_'+p.nombre,nombre:p.nombre,codigo:'',ficha:(p.ficha||'')});
   }
   return workers.length?workers:null;
 }
@@ -4070,7 +4077,7 @@ function renderPRegPlanilleros(){
   const sel=document.getElementById('pRegPlanillero');if(!sel)return;
   const workers=_getPRegPickerPlanilleros()||[];
   sel.innerHTML='<option value="">— Selecciona —</option>'
-    +workers.map(t=>`<option value="${t.id}">${esc(t.nombre)}</option>`).join('');
+    +workers.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc((t.ficha!=null&&String(t.ficha)!=='')?t.ficha:'')}">${esc(t.nombre)}</option>`).join('');
 }
 function renderPRegTrab(){
   // Copia de renderMRegTrab adaptada a pesaje (con ficha)
@@ -5040,7 +5047,7 @@ function openIosPicker(mode,cb,trabsList){
   const badge=isRegistro
     ?`<span style="font-size:11px;font-weight:600;color:#0369a1;margin-left:6px;background:#dbeafe;border-radius:10px;padding:1px 8px;">${allTrabs.length} personas</span>`
     :'';
-  const placeholder=isRegistro?'Buscar entre los asignados…':'Buscar por nombre o código…';
+  const placeholder=isRegistro?'Buscar: nombre, código o nº ficha…':'Buscar: nombre, código o nº ficha…';
   const overlay=document.createElement('div');overlay.className='ios-picker-overlay';overlay.id='iosPicker';
   overlay.innerHTML=`
     <div class="ios-picker-sheet" onclick="event.stopPropagation()">
@@ -5209,6 +5216,15 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
       if(selectId==='pRegTrab'){
         const fichaTxt=(opt&&opt.dataset&&opt.dataset.ficha)||((tDb&&tDb.ficha)||'');
         displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
+      }else if(selectId==='pRegPlanillero'){
+        const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
+        const arm=RT.armadoPesaje&&lineaSel&&RT.armadoPesaje[lineaSel];
+        const p=arm&&arm.planillero;
+        const fichaArm=(p&&String(p.trabId)===String(id)&&p.ficha!=null&&String(p.ficha).trim()!=='')?String(p.ficha).trim():'';
+        const fichaTxt=(opt&&opt.dataset&&opt.dataset.ficha)||fichaArm||((tDb&&tDb.ficha)||'');
+        opt.dataset.ficha=fichaTxt;
+        const codStr=((tDb&&tDb.codigo)||codigo||'').toString().trim();
+        displayMeta=`Código: ${codStr||'—'} · Ficha: ${fichaTxt||'—'}`;
       }
       sel.value=String(id);
     }

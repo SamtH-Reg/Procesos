@@ -509,7 +509,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
   </div>
 
   <div class="slicer-bar">
-    <div class="slicer" style="min-width:280px;"><label class="form-label">Buscar</label><input class="input" id="trabSearch" placeholder="Nombre o código..." oninput="renderTrabs()"></div>
+    <div class="slicer" style="min-width:280px;"><label class="form-label">Buscar</label><input class="input" id="trabSearch" placeholder="Nombre, código o nº ficha…" oninput="renderTrabs()"></div>
     <div class="slicer"><label class="form-label">Tipo Contrato</label>
       <select class="select" id="trabTurno" onchange="renderTrabs()">
         <option value="">Todos</option><option value="Indefinido">Indefinido</option><option value="Temporeros">Temporeros</option>
@@ -523,7 +523,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div style="margin-left:auto;font-size:12px;color:var(--text-3);align-self:flex-end;padding-bottom:4px;" id="trabCount"></div>
   </div>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>Código</th><th>Nombre</th><th>Centro de Costo</th><th>Tipo Contrato</th><th>Estado</th></tr></thead>
+    <thead><tr><th>Código</th><th>Ficha</th><th>Nombre</th><th>Centro de Costo</th><th>Tipo Contrato</th><th>Estado</th></tr></thead>
     <tbody id="tbTrabajadores"></tbody>
   </table></div>
 </div>
@@ -1826,7 +1826,8 @@ function renderTrabs(){
   const estadoFilt=document.getElementById('trabArea').value;  // re-used for estado
   const contratoFilt=document.getElementById('trabTurno').value; // re-used for contrato
   const list=DB.data.trabajadores.filter(t=>{
-    if(q&&!t.nombre.toLowerCase().includes(q)&&!(t.codigo||'').toLowerCase().includes(q))return false;
+    const fq=(t.ficha||'').toString().toLowerCase();
+    if(q&&!t.nombre.toLowerCase().includes(q)&&!(t.codigo||'').toLowerCase().includes(q)&&!fq.includes(q))return false;
     if(contratoFilt&&(t.contrato||'')!==contratoFilt)return false;
     if(estadoFilt==='activo'&&t.activo===false)return false;
     if(estadoFilt==='inactivo'&&t.activo!==false)return false;
@@ -1835,11 +1836,12 @@ function renderTrabs(){
   const cnt=document.getElementById('trabCount');if(cnt)cnt.textContent=list.length+' / '+DB.data.trabajadores.length+' trabajadores';
   tb.innerHTML=list.map(t=>`<tr>
     <td><strong style="color:var(--brand);">${esc(t.codigo||'—')}</strong></td>
+    <td><span class="mono" style="color:var(--text-2);">${esc(t.ficha||'—')}</span></td>
     <td>${esc(t.nombre)}</td>
     <td>${esc(t.centro_costo||'—')}</td>
     <td>${esc(t.contrato||'—')}</td>
     <td>${t.activo!==false?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
-  </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
 }
 function openTrabModal(id){
   const t=id?DB.data.trabajadores.find(x=>x.id===id):{id:Date.now(),codigo:'',nombre:'',ficha:'',area:'moldes',turno:'dia',rol:'operario',linea:'L1',activo:true};
