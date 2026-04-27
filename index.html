@@ -773,6 +773,21 @@ td.num{font-family:var(--mono);font-weight:600;text-align:right;}
   display:grid;place-items:center;
   font-size:10px;font-weight:700;
 }
+.worker-chip.wc-from-prev{
+  border-color:#c4b5fd;
+  background:color-mix(in srgb,#7c3aed 7%,var(--surface-alt));
+}
+.worker-chip.wc-from-prev > span:first-of-type{color:#5b21b6;font-weight:700;}
+.wc-plan-from-prev{color:#5b21b6;font-weight:700;}
+.wc-name-from-prev{color:#5b21b6;font-weight:600;}
+
+.m-armado-copia-hint{
+  align-items:flex-start;gap:10px;
+  padding:12px 14px;border-radius:var(--radius-sm);
+  background:#ede9fe;border:1px solid #c4b5fd;
+  color:#4c1d95;font-size:13px;line-height:1.45;font-weight:500;
+}
+.m-armado-copia-hint svg{margin-top:1px;opacity:.85;}
 
 /* ═══ ALERT ═══════════════════════════════════════════════════ */
 .alert{
@@ -1504,6 +1519,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           Guardar día
         </button>
       </div>
+      <div id="mArmadoCopiaHint" class="m-armado-copia-hint" style="display:none;margin-bottom:12px;"></div>
       <div class="alert info" style="margin-bottom:14px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         <div><strong>Armado de Línea (Moldes)</strong> — cada línea tiene un <strong>planillero</strong> y trabajadores. Edita para agregar o eliminar.</div>
@@ -4902,11 +4918,49 @@ function _ensureArmadoMolde(){
     if(!('fecha' in RT.armadoMolde[ln]))RT.armadoMolde[ln].fecha='';
   });
 }
+function _stripMarcaCopiaLinea(d){
+  if(!d||typeof d!=='object')return;
+  delete d.origenCopiaDesdeFecha;
+  delete d.origenCopiaGuardadoEn;
+  if(d.planillero&&typeof d.planillero==='object')delete d.planillero.fromPrevArmado;
+  (d.trabajadores||[]).forEach(t=>{delete t.fromPrevArmado;});
+}
+function _cloneArmadoMoldeSinMarcasCopia(){
+  const raw=JSON.parse(JSON.stringify(RT.armadoMolde||{}));
+  Object.keys(raw).forEach(ln=>_stripMarcaCopiaLinea(raw[ln]));
+  return raw;
+}
+function _applyMarcaCopiaArmadoMolde(fechaSnap,guardadoSnap){
+  if(!RT.armadoMolde)return;
+  const fechaLbl=(fechaSnap&&String(fechaSnap).trim())||'—';
+  Object.keys(RT.armadoMolde).forEach(ln=>{
+    const d=RT.armadoMolde[ln];
+    if(!d||typeof d!=='object')return;
+    d.origenCopiaDesdeFecha=fechaLbl;
+    if(guardadoSnap)d.origenCopiaGuardadoEn=String(guardadoSnap);
+    else delete d.origenCopiaGuardadoEn;
+    if(d.planillero)d.planillero={...d.planillero,fromPrevArmado:true};
+    (d.trabajadores||[]).forEach(t=>{t.fromPrevArmado=true;});
+  });
+}
+function _renderMArmadoCopiaBanner(){
+  const el=document.getElementById('mArmadoCopiaHint');
+  if(!el)return;
+  const m=RT.armadoMoldeUltimaCopia;
+  if(!m||!m.copiadoEn){el.style.display='none';el.innerHTML='';return;}
+  const partGuard=m.guardadoEn?` · Referencia guardada: <strong>${esc(m.guardadoEn)}</strong>`:'';
+  el.style.display='flex';
+  el.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div style="flex:1;"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
+}
 function renderMArmado(){
   _ensureArmadoMolde();
   const box=document.getElementById('mArmadoList');if(!box)return;
   const lineas=Object.keys(RT.armadoMolde).sort();
-  if(!lineas.length){box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';return;}
+  if(!lineas.length){
+    box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';
+    _renderMArmadoCopiaBanner();
+    return;
+  }
   box.innerHTML=lineas.map(ln=>{
     const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],especie:''};
     const trabs=data.trabajadores||[];
@@ -4918,10 +4972,11 @@ function renderMArmado(){
         <div class="line-id">${esc(ln)}</div>
         <div style="flex:1;min-width:0;">
           <div class="line-title">Línea ${esc(ln)}${especie?` <span style="font-size:12px;font-weight:500;color:var(--text-3);">·</span> <span style="font-size:13px;font-weight:600;color:#0369a1;">${esc(especie)}</span>`:''}</div>
-          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}</div>
+          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong'+(p.fromPrevArmado?' class="wc-plan-from-prev"':'')+'>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}${data.origenCopiaDesdeFecha?' · <span style="color:#6d28d9;font-weight:600;" title="'+(data.origenCopiaGuardadoEn?esc('Ref. '+data.origenCopiaGuardadoEn):'')+'">Copiado del armado del '+esc(data.origenCopiaDesdeFecha)+'</span>':''}</div>
         </div>
         <div class="section-spacer"></div>
         ${fechaStr?`<span class="badge slate" style="font-size:10px;"><span class="badge-dot"></span>${esc(fechaStr)}</span>`:''}
+        ${data.origenCopiaDesdeFecha?`<span class="badge" style="font-size:10px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-weight:600;" title="${data.origenCopiaGuardadoEn?esc('Referencia guardada: '+data.origenCopiaGuardadoEn):'Copiado desde snapshot'}">📋 ${esc(data.origenCopiaDesdeFecha)}</span>`:''}
         <span class="badge ${data.turno==='noche'?'navy':'amber'}" title="Turno"><span class="badge-dot"></span>${data.turno==='noche'?'Noche':'Día'}</span>
         <span class="badge ${p&&trabs.length?'green':'amber'}"><span class="badge-dot"></span>${p&&trabs.length?'Armada':'Pendiente'}</span>
         <button class="btn ghost sm" type="button" onclick="editMArmadoLinea('${esc(ln)}')">
@@ -4935,12 +4990,14 @@ function renderMArmado(){
           const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
           const tDb=DB.data.trabajadores.find(x=>x.id===t.trabId);
           const codigo=tDb?tDb.codigo:null;
-          return `<div class="worker-chip"><div class="wc-av">${esc(ini)}</div><span>${esc(t.nombre)}</span>${codigo?`<span style="font-size:10px;color:var(--text-3);margin-left:2px;">(${esc(codigo)})</span>`:''}  </div>`;
+          const prevCls=t.fromPrevArmado?' wc-from-prev':'';
+          return `<div class="worker-chip${prevCls}"><div class="wc-av">${esc(ini)}</div><span>${esc(t.nombre)}</span>${codigo?`<span style="font-size:10px;color:var(--text-3);margin-left:2px;">(${esc(codigo)})</span>`:''}  </div>`;
         }).join(''):'<div style="color:var(--text-3);font-size:12px;padding:8px 0;">Sin trabajadores — pulsa <em>Editar</em> para agregar</div>'}
         ${trabs.length>12?`<div class="worker-chip" style="background:var(--slate-100);font-weight:600;">+${trabs.length-12} más</div>`:''}
       </div>
     </div>`;
   }).join('');
+  _renderMArmadoCopiaBanner();
 }
 
 function addMLinea(){
@@ -4983,13 +5040,30 @@ function removeMLinea(ln){
 function copiarMArmadoDia(){
   const snap=RT.armadoMoldeSnapshot;
   if(!snap||!snap.data){showToast('No hay snapshot de día anterior. Pulsa "Guardar día" para crearlo.','error');return;}
-  if(!confirm('Se reemplazará el armado actual con el snapshot del '+(snap.fecha||'día anterior')+'. ¿Continuar?'))return;
+  const nRef=Object.keys(snap.data||{}).length;
+  let msg='Se reemplazará el armado actual por la referencia guardada con «Guardar día».\n\n';
+  msg+='• Fecha del snapshot: '+(snap.fecha||'—')+'\n';
+  if(snap.guardadoEn)msg+='• Referencia guardada el: '+snap.guardadoEn+'\n';
+  msg+='• Líneas en la referencia: '+nRef+'\n\n¿Continuar?';
+  if(!confirm(msg))return;
   RT.armadoMolde=JSON.parse(JSON.stringify(snap.data));
-  rtSave();renderMArmado();showToast('Armado copiado desde '+(snap.fecha||'día anterior'),'success');
+  _ensureArmadoMolde();
+  Object.keys(RT.armadoMolde).forEach(ln=>_stripMarcaCopiaLinea(RT.armadoMolde[ln]));
+  _applyMarcaCopiaArmadoMolde(snap.fecha,snap.guardadoEn);
+  RT.armadoMoldeUltimaCopia={
+    snapshotFecha:snap.fecha||'',
+    guardadoEn:snap.guardadoEn||'',
+    copiadoEn:new Date().toLocaleString('es-CL')
+  };
+  rtSave();renderMArmado();showToast('Armado copiado desde '+(snap.fecha||'día anterior')+'. Revisa el cartel y los nombres en violeta.','success');
 }
 function guardarMArmadoSnapshot(){
   _ensureArmadoMolde();
-  RT.armadoMoldeSnapshot={fecha:new Date().toLocaleDateString('es-CL'),data:JSON.parse(JSON.stringify(RT.armadoMolde))};
+  RT.armadoMoldeSnapshot={
+    fecha:new Date().toLocaleDateString('es-CL'),
+    guardadoEn:new Date().toLocaleString('es-CL'),
+    data:_cloneArmadoMoldeSinMarcasCopia()
+  };
   rtSave();showToast('Armado guardado como referencia de día anterior','success');
 }
 
@@ -5351,7 +5425,7 @@ function renderMArmModal(){
       pBox.innerHTML=`<div style="display:flex;align-items:center;gap:10px;">
         <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#34c759,#30b0c7);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0;">${esc(ini)}</div>
         <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;">${esc(p.nombre)}</div>
+          <div class="${p.fromPrevArmado?'wc-name-from-prev':''}" style="font-weight:700;font-size:14px;${p.fromPrevArmado?'color:#5b21b6;':''}">${esc(p.nombre)}</div>
           ${tDb?`<div style="font-size:11px;color:var(--text-3);">Código: ${esc(tDb.codigo||'—')}</div>`:''}
         </div>
         <button class="btn ghost sm" type="button" onclick="_editMArmado.planillero=null;renderMArmModal();">Cambiar</button>
@@ -5379,7 +5453,7 @@ function renderMArmModal(){
         return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--slate-100);">
           <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#007aff,#5856d6);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0;">${esc(ini)}</div>
           <div style="flex:1;min-width:0;">
-            <div style="font-weight:600;font-size:14px;">${esc(t.nombre)}</div>
+            <div class="${t.fromPrevArmado?'wc-name-from-prev':''}" style="font-weight:600;font-size:14px;${t.fromPrevArmado?'color:#5b21b6;':''}">${esc(t.nombre)}</div>
             ${codigo?`<div style="font-size:11px;color:var(--text-3);">Código: ${esc(codigo)}</div>`:''}
           </div>
           <button class="btn ghost sm icon" type="button" title="Quitar" onclick="_editMArmado.trabajadores.splice(${i},1);renderMArmModal();">
@@ -5435,6 +5509,7 @@ function saveMArmado(){
     turno:_editMArmado.turno||'dia',
     fecha:_editMArmado.fecha||''
   };
+  _stripMarcaCopiaLinea(RT.armadoMolde[_editMLn]);
   // Compat: keep lineaProducto synced for old references
   if(!RT.lineaProducto)RT.lineaProducto={};
   RT.lineaProducto[_editMLn]=_editMArmado.especie||'';
