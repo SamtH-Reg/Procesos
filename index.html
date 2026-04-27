@@ -2567,6 +2567,39 @@ let _catalogSnap='';
 function _bumpCatalogSnap(){
   try{_catalogSnap=localStorage.getItem(STORE_KEY)||'';}catch(e){_catalogSnap='';}
 }
+/** Filas preset desde Supabase vienen en snake_case; sin copiar a camelCase _heal dejaba kgRef vacío → 7.5 */
+function coercePresetFields(p){
+  if(!p||typeof p!=='object')return;
+  if((p.kgRef==null||p.kgRef==='')&&p.kg_ref!=null&&p.kg_ref!=='')p.kgRef=+p.kg_ref;
+  if((p.horasTunel==null||p.horasTunel==='')&&p.horas_tunel!=null)p.horasTunel=+p.horas_tunel;
+  if((p.horasPlaca==null||p.horasPlaca==='')&&p.horas_placa!=null)p.horasPlaca=+p.horas_placa;
+  if((p.tempObj==null||p.tempObj==='')&&p.temp_obj!=null)p.tempObj=+p.temp_obj;
+}
+/** Tras pull de Supabase: conservar lo ya guardado en localStorage (p. ej. admin) para el mismo id de preset */
+function mergePresetsWithLocalSnapshot(remoteRows){
+  let localList=[];
+  try{
+    const raw=localStorage.getItem(STORE_KEY);
+    if(raw){const snap=JSON.parse(raw);localList=snap.presets||[];}
+  }catch(e){}
+  const localById=new Map();
+  (localList||[]).forEach(p=>{
+    const c=JSON.parse(JSON.stringify(p));
+    coercePresetFields(c);
+    if(c.id!=null)localById.set(c.id,c);
+  });
+  const seen=new Set();
+  const out=[];
+  (remoteRows||[]).forEach(row=>{
+    const r=JSON.parse(JSON.stringify(row));
+    coercePresetFields(r);
+    const loc=localById.get(r.id);
+    seen.add(r.id);
+    out.push(loc?Object.assign({},r,loc,{id:r.id}):r);
+  });
+  localById.forEach((loc,id)=>{if(!seen.has(id))out.push(loc);});
+  return out;
+}
 const THEME_KEY='friosur_theme';
 const CONTRAST_KEY='friosur_contrast';
 
@@ -2645,6 +2678,7 @@ const DB={
     if(!Array.isArray(dd.formato))dd.formato=['BLOQUE','IQF','STOCK'];
     // Asegurar que los valores actuales de presets estén en los diccionarios
     (this.data.presets||[]).forEach(p=>{
+      coercePresetFields(p);
       ['destino','calibre','especie','formato'].forEach(f=>{
         if(p[f]&&!dd[f].includes(p[f]))dd[f].push(p[f]);
       });
@@ -6032,7 +6066,10 @@ const TBSync={
       for(const t of tables){
         const{data,error}=await _tbSb.from(t).select('*');
         if(error){console.warn('[sb pull]',t,error.message);continue;}
-        if(data&&data.length){DB.data[t]=data;}
+        if(data&&data.length){
+          if(t==='presets')DB.data.presets=mergePresetsWithLocalSnapshot(data);
+          else DB.data[t]=data;
+        }
       }
       DB.save();
       if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
