@@ -782,12 +782,28 @@ td.num{font-family:var(--mono);font-weight:600;text-align:right;}
 .wc-name-from-prev{color:#5b21b6;font-weight:600;}
 
 .m-armado-copia-hint{
-  align-items:flex-start;gap:10px;
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
   padding:12px 14px;border-radius:var(--radius-sm);
   background:#ede9fe;border:1px solid #c4b5fd;
-  color:#4c1d95;font-size:13px;line-height:1.45;font-weight:500;
+  color:#4c1d95;font-size:13px;line-height:1.5;font-weight:500;
 }
-.m-armado-copia-hint svg{margin-top:1px;opacity:.85;}
+/* SVG sin width/height en flex puede crecer al viewBox (p. ej. 24×24px como bloque enorme en algunos motores) */
+.m-armado-copia-hint > svg{
+  width:20px;height:20px;min-width:20px;min-height:20px;
+  flex-shrink:0;
+  margin-top:2px;
+  opacity:.9;
+  stroke:currentColor;
+}
+.m-armado-copia-hint-body{
+  flex:1;
+  min-width:0;
+}
 
 /* ═══ ALERT ═══════════════════════════════════════════════════ */
 .alert{
@@ -4950,7 +4966,7 @@ function _renderMArmadoCopiaBanner(){
   if(!m||!m.copiadoEn){el.style.display='none';el.innerHTML='';return;}
   const partGuard=m.guardadoEn?` · Referencia guardada: <strong>${esc(m.guardadoEn)}</strong>`:'';
   el.style.display='flex';
-  el.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div style="flex:1;"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
+  el.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div class="m-armado-copia-hint-body"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
 }
 function renderMArmado(){
   _ensureArmadoMolde();
