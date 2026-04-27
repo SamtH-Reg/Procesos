@@ -2562,6 +2562,11 @@ function showToast(msg,type){
    DATA LAYER — persistencia, seed, CRUD
    ═══════════════════════════════════════════════════════════════ */
 const STORE_KEY='friosur_app_v1';
+/* Evita re-parse al volver al tab si localStorage no cambió; se actualiza en cada DB.save */
+let _catalogSnap='';
+function _bumpCatalogSnap(){
+  try{_catalogSnap=localStorage.getItem(STORE_KEY)||'';}catch(e){_catalogSnap='';}
+}
 const THEME_KEY='friosur_theme';
 const CONTRAST_KEY='friosur_contrast';
 
@@ -2668,11 +2673,12 @@ const DB={
     if(dd.includes(v))return true;
     dd.push(v);this.save();return true;
   },
-  save(){this._heal();try{localStorage.setItem(STORE_KEY,JSON.stringify(this.data));}catch(e){console.warn('DB save falló',e);}},
+  save(){this._heal();try{localStorage.setItem(STORE_KEY,JSON.stringify(this.data));_bumpCatalogSnap();}catch(e){console.warn('DB save falló',e);}},
   nextId(coll){const arr=this.data[coll]||[];return arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;},
   reset(){this.data=JSON.parse(JSON.stringify(SEED));this.save();},
 };
 DB.load();
+_bumpCatalogSnap();
 window.DB=DB;
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2815,14 +2821,14 @@ function editPreset(id){
       activo:document.getElementById('f_activo').checked,
     };
     if(id){const i=DB.data.presets.findIndex(x=>x.id===id);DB.data.presets[i]=obj;} else {DB.data.presets.push(obj);}
-    DB.save();renderPresets();showToast(id?'Preset actualizado':'Preset creado','success');
+    DB.save();renderPresets();if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();showToast(id?'Preset actualizado':'Preset creado','success');
   });
 }
 function deletePreset(id){
   const p=DB.data.presets.find(x=>x.id===id);if(!p)return;
   if(!confirm('¿Eliminar preset "'+p.nombre+'"?'))return;
   DB.data.presets=DB.data.presets.filter(x=>x.id!==id);
-  DB.save();renderPresets();showToast('Preset eliminado','success');
+  DB.save();renderPresets();if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();showToast('Preset eliminado','success');
 }
 window.editPreset=editPreset;window.deletePreset=deletePreset;window.renderPresets=renderPresets;
 
@@ -3104,6 +3110,7 @@ function importJSON(input){
       DB.data=d;DB._heal();DB.save();
       if(p.tema)setTheme(p.tema);
       updateBadges();
+      if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
       showToast('Configuración importada','success');
       closeCfg();
     }catch(err){showToast('Error al importar: '+err.message,'error');}
@@ -5925,7 +5932,63 @@ function initRuntime(){
   _safeRun(renderAnalisis,'renderAnalisis');
   if(window.renderUserChip)renderUserChip();
 }
+/* Recarga catálogo desde localStorage (misma clave que admin.html) y actualiza pantallas operativas */
+function refreshOperateUiAfterCatalogChange(){
+  const presetOk=id=>{
+    const p=(DB.data.presets||[]).find(x=>x.id===id);
+    return p&&p.activo!==false;
+  };
+  let dirty=false;
+  ['selPresetM','selPresetG','selPresetP','selPresetE'].forEach(k=>{
+    const v=RT[k];
+    if(v!=null&&!presetOk(v)){RT[k]=null;dirty=true;}
+  });
+  if(dirty)rtSave();
+  _safeRun(updateBadges,'updateBadges');
+  _safeRun(renderMRegPresets,'renderMRegPresets');
+  _safeRun(mRegCalcKg,'mRegCalcKg');
+  _safeRun(renderGRegPresets,'renderGRegPresets');
+  _safeRun(gRegCalcKg,'gRegCalcKg');
+  _safeRun(renderERegPresets,'renderERegPresets');
+  _safeRun(eRegCalcKg,'eRegCalcKg');
+  _safeRun(renderMoldesTable,'renderMoldesTable');
+  _safeRun(renderGeneralesTable,'renderGeneralesTable');
+  _safeRun(renderPorCargar,'renderPorCargar');
+  _safeRun(renderEquipos,'renderEquipos');
+  _safeRun(renderMRegTrab,'renderMRegTrab');
+  _safeRun(renderPRegTrab,'renderPRegTrab');
+  _safeRun(renderTrabajadores,'renderTrabajadores');
+  _safeRun(renderTurnos,'renderTurnos');
+  _safeRun(renderPresets,'renderPresets');
+  _safeRun(renderEquiposCfg,'renderEquiposCfg');
+}
+function syncCatalogFromStorage(opts){
+  opts=opts||{};
+  const raw=localStorage.getItem(STORE_KEY)||'';
+  if(!raw)return false;
+  if(!opts.force&&opts.source!=='storage'&&raw===_catalogSnap)return false;
+  try{
+    DB.data=JSON.parse(raw);
+    DB._heal();
+    window.DB=DB;
+  }catch(e){console.warn('[syncCatalog]',e);return false;}
+  _bumpCatalogSnap();
+  refreshOperateUiAfterCatalogChange();
+  if(opts.source==='storage'&&typeof showToast==='function')showToast('Catálogo actualizado (admin u otra pestaña)','info');
+  return true;
+}
+window.refreshOperateUiAfterCatalogChange=refreshOperateUiAfterCatalogChange;
+window.syncCatalogFromStorage=syncCatalogFromStorage;
+
 initRuntime();
+
+window.addEventListener('storage',e=>{
+  if(e.key!==STORE_KEY||e.newValue==null)return;
+  syncCatalogFromStorage({source:'storage',force:true});
+});
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')syncCatalogFromStorage({source:'visibility'});
+});
 
 // Re-render equipos cada minuto para progreso en vivo
 setInterval(()=>{renderEquipos();},60000);
@@ -5972,11 +6035,14 @@ const TBSync={
         if(data&&data.length){DB.data[t]=data;}
       }
       DB.save();
-      if(typeof renderPresets==='function')renderPresets();
-      if(typeof renderTrabajadores==='function')renderTrabajadores();
-      if(typeof renderTurnos==='function')renderTurnos();
-      if(typeof renderEquiposCfg==='function')renderEquiposCfg();
-      if(typeof renderEquipos==='function')renderEquipos();
+      if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
+      else{
+        if(typeof renderPresets==='function')renderPresets();
+        if(typeof renderTrabajadores==='function')renderTrabajadores();
+        if(typeof renderTurnos==='function')renderTurnos();
+        if(typeof renderEquiposCfg==='function')renderEquiposCfg();
+        if(typeof renderEquipos==='function')renderEquipos();
+      }
       // ── Pull armado de línea ──────────────────────────────────
       try{
         const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
