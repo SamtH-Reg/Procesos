@@ -193,6 +193,15 @@ tbody tr:hover{background:var(--surface-alt);}
 .slicer-multi{display:flex;flex-wrap:wrap;gap:4px;padding:6px;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;min-height:40px;}
 .slicer-chip{padding:3px 10px;background:var(--surface);border:1px solid var(--border);border-radius:999px;font-size:11px;cursor:pointer;user-select:none;}
 .slicer-chip.on{background:var(--brand);color:#fff;border-color:var(--brand);}
+/* Dashboard: versión compacta para más campos visibles sin tanto alto */
+.dash-slicer-bar{gap:8px;padding:10px 12px;}
+.dash-slicer-bar .slicer{min-width:118px;}
+.dash-slicer-bar .form-label{font-size:10px;line-height:1.1;margin-bottom:4px;}
+.dash-slicer-bar .input,.dash-slicer-bar .select{height:34px;padding:6px 9px;font-size:12px;}
+.dash-slicer-bar .btn.sm{height:34px;padding:0 10px;font-size:12px;}
+.dash-slicer-bar .slicer-multi{min-height:34px;padding:4px;gap:3px;}
+.dash-slicer-bar .slicer-chip{padding:2px 8px;font-size:10px;}
+.dash-slicer-bar .slicer[data-kind="multi"]{flex:1 1 260px;min-width:220px;}
 
 /* Drill-down breadcrumb */
 .drill-crumbs{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--surface-alt);border-radius:10px;border:1px solid var(--border);font-size:12px;}
@@ -272,7 +281,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     </div>
   </div>
 
-  <div class="slicer-bar">
+  <div class="slicer-bar dash-slicer-bar">
     <div class="slicer">
       <label class="form-label">Fecha desde</label>
       <input type="date" class="input" id="slFechaDesde" onchange="applyFilters()">
@@ -301,15 +310,15 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       <label class="form-label">Hora hasta</label>
       <input type="time" class="input" id="slHoraHasta" onchange="applyFilters()" title="Inclusivo. Si es &lt; desde, rango cruza medianoche (ej. noche 19:00–06:59)">
     </div>
-    <div class="slicer" style="min-width:130px;">
+    <div class="slicer" style="min-width:116px;">
       <label class="form-label" style="opacity:.88;">Rango</label>
       <button type="button" class="btn ghost sm" style="width:100%;" onclick="dashSyncHoraFromTurno(true)" title="Rellenar horas según turno elegido (catálogo Turnos)">↻ Desde turno</button>
     </div>
-    <div class="slicer" style="flex:1;min-width:200px;">
+    <div class="slicer" data-kind="multi">
       <label class="form-label">Especies (multi)</label>
       <div class="slicer-multi" id="slEspecies"></div>
     </div>
-    <div class="slicer" style="flex:1;min-width:200px;">
+    <div class="slicer" data-kind="multi">
       <label class="form-label">Líneas (multi)</label>
       <div class="slicer-multi" id="slLineas"></div>
     </div>
@@ -972,6 +981,35 @@ function _adminTodayLocalYmd(){
   const p=n=>String(n).padStart(2,'0');
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
 }
+/** Fecha operativa del turno: para turnos que cruzan medianoche, 00:00..fin pertenece al día anterior. */
+function _dashTurnoOperativeYmd(turnoCodigo){
+  const now=new Date();
+  const fallback=_dateObjToLocalYmd(now);
+  const code=String(turnoCodigo||'').trim();
+  if(!code)return fallback;
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo||'').trim()===code);
+  if(!t)return fallback;
+  const iniM=_adminParseHMToMinutes(t.inicio),finM=_adminParseHMToMinutes(t.fin);
+  if(iniM==null||finM==null)return fallback;
+  if(finM<iniM){
+    const nowM=now.getHours()*60+now.getMinutes();
+    if(nowM<finM){
+      const prev=new Date(now);
+      prev.setDate(prev.getDate()-1);
+      return _dateObjToLocalYmd(prev);
+    }
+  }
+  return fallback;
+}
+function _dashTurnoCrossesMidnight(turnoCodigo){
+  const code=String(turnoCodigo||'').trim();
+  if(!code)return false;
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo||'').trim()===code);
+  if(!t)return false;
+  const iniM=_adminParseHMToMinutes(t.inicio),finM=_adminParseHMToMinutes(t.fin);
+  if(iniM==null||finM==null)return false;
+  return finM<iniM;
+}
 function _dateObjToLocalYmd(dt){
   if(!dt||isNaN(dt.getTime()))return _adminTodayLocalYmd();
   const p=n=>String(n).padStart(2,'0');
@@ -1070,9 +1108,16 @@ function applyFechaPreset(){
   else if(v==='semana'){const s=new Date(today);s.setDate(s.getDate()-7);d.value=_dateObjToLocalYmd(s);h.value=_dateObjToLocalYmd(today);}
   else if(v==='mes'){const s=new Date(today.getFullYear(),today.getMonth(),1);d.value=_dateObjToLocalYmd(s);h.value=_dateObjToLocalYmd(today);}
   else if(v==='turno'){
-    document.getElementById('slTurno').value=_adminInferTurnoCodigoPorHorario()||'';
-    const y=_dateObjToLocalYmd(today);
-    d.value=y;h.value=y;
+    const turnoActual=_adminInferTurnoCodigoPorHorario()||'';
+    document.getElementById('slTurno').value=turnoActual;
+    const yDesde=_dashTurnoOperativeYmd(turnoActual);
+    let yHasta=yDesde;
+    if(_dashTurnoCrossesMidnight(turnoActual)){
+      const dd=_ymdToLocalStart(yDesde)||new Date();
+      dd.setDate(dd.getDate()+1);
+      yHasta=_dateObjToLocalYmd(dd);
+    }
+    d.value=yDesde;h.value=yHasta;
     dashSyncHoraFromTurno(false);
   }
   applyFilters();
