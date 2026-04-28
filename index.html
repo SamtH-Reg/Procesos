@@ -6082,9 +6082,47 @@ window.syncCatalogFromStorage=syncCatalogFromStorage;
 
 initRuntime();
 
+/* RT compartido con admin.html u otra pestaña: mismo localStorage, sin Supabase */
+let _peerRtSyncTimer=null;
+let _lastPeerRtToastAt=0;
+function applyRtFromPeerJson(jsonStr){
+  if(jsonStr==null)return;
+  try{
+    const incoming=JSON.parse(jsonStr);
+    if(!incoming||typeof incoming!=='object')return;
+    Object.assign(RT,incoming);
+    if(!Array.isArray(RT.moldes))RT.moldes=[];
+    if(!Array.isArray(RT.pesajes))RT.pesajes=[];
+    if(!Array.isArray(RT.generales))RT.generales=[];
+    if(!RT.eqState||typeof RT.eqState!=='object')RT.eqState={};
+    if(!Array.isArray(RT.empacados))RT.empacados=[];
+    if(!Array.isArray(RT.empaques))RT.empaques=[];
+    (RT.moldes||[]).forEach(r=>{if(r.pendiente==null)r.pendiente=r.cant;});
+    (RT.generales||[]).forEach(r=>{if(r.pendiente==null)r.pendiente=r.cant;});
+    if(DB&&DB.data&&DB.data.equipos){
+      DB.data.equipos.forEach(eq=>{
+        if(!RT.eqState[eq.codigo])RT.eqState[eq.codigo]={estado:'libre',items:[],congelando:false,horaInicio:null,horaFinEst:null,horasTotal:0};
+      });
+    }
+    initRuntime();
+    updateBadges();
+    if(typeof showToast==='function'){
+      const t=Date.now();
+      if(t-_lastPeerRtToastAt>4500){_lastPeerRtToastAt=t;showToast('Datos operativos actualizados (admin u otra pestaña)','info');}
+    }
+  }catch(err){console.warn('[peer RT]',err);}
+}
+function schedulePeerRtApply(jsonStr){
+  if(_peerRtSyncTimer)clearTimeout(_peerRtSyncTimer);
+  _peerRtSyncTimer=setTimeout(()=>{_peerRtSyncTimer=null;applyRtFromPeerJson(jsonStr);},120);
+}
+
 window.addEventListener('storage',e=>{
-  if(e.key!==STORE_KEY||e.newValue==null)return;
-  syncCatalogFromStorage({source:'storage',force:true});
+  if(e.key===STORE_KEY&&e.newValue!=null){
+    syncCatalogFromStorage({source:'storage',force:true});
+    return;
+  }
+  if(e.key===RT_KEY&&e.newValue!=null)schedulePeerRtApply(e.newValue);
 });
 let _lastSbVisiblePull=0;
 document.addEventListener('visibilitychange',()=>{
@@ -6112,11 +6150,13 @@ const SB_URL='https://etiltewnmupnifedhyld.supabase.co';
 const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 let _tbSb=null;
 try{if(window.supabase)_tbSb=window.supabase.createClient(SB_URL,SB_ANON);}catch(e){console.warn('[sb] init',e);}
+/** Ahorro de mensajes Realtime en tablet: '1'/ausente = no escuchar moldes·pesajes por WS; '0' = escuchar cambios remotos. */
+function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')!=='0';}catch(e){return true;}}
 
 const TBSync={
   _pushLastAt:0,
-  _pushMinGapMs:8000,
-  _pushDebounceMs:6000,
+  _pushMinGapMs:4500,
+  _pushDebounceMs:2500,
   _lastSig:{moldes:'',pesajes:'',armado:''},
   onlineBadge(){
     try{
@@ -6188,8 +6228,11 @@ const TBSync={
   _pushQueued:false,
   schedulePush(){
     if(!_tbSb||this._pushQueued)return;
+    const eco=tbMsgEconomy();
+    const deb=eco?9000:this._pushDebounceMs;
+    const gap=eco?14000:this._pushMinGapMs;
     const now=Date.now();
-    const wait=Math.max(this._pushDebounceMs,(this._pushLastAt+this._pushMinGapMs)-now);
+    const wait=Math.max(deb,(this._pushLastAt+gap)-now);
     this._pushQueued=true;
     setTimeout(()=>{this._pushQueued=false;this.pushAll();},wait);
   },
@@ -6269,28 +6312,28 @@ const TBSync={
       .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
       .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
       .subscribe();
-    // moldes remotos
-    _tbSb.channel('tb-moldes').on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
-      const rec=p.new||p.old;if(!rec)return;
-      const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,producto:rec.producto,presetId:rec.preset_id,destino:rec.destino,calibre:rec.calibre,especie:rec.especie,cant:rec.cant,pendiente:rec.pendiente,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
-      const i=RT.moldes.findIndex(r=>String(r.id)===String(rec.id));
-      if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);}
-      else{if(i>=0)RT.moldes[i]=local;else RT.moldes.unshift(local);}
-      // Guardar local SIN re-disparar push (evita loop Realtime -> push -> Realtime)
-      _rtSaveOrig&&_rtSaveOrig();
-      if(typeof renderMoldesTable==='function')renderMoldesTable();
-      if(typeof renderPorCargar==='function')renderPorCargar();
-    }).subscribe();
-    _tbSb.channel('tb-pesajes').on('postgres_changes',{event:'*',schema:'public',table:'pesajes'},(p)=>{
-      const rec=p.new||p.old;if(!rec)return;
-      const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,trabId:rec.trab_id,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,especie:rec.especie,tipo:rec.tipo,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
-      const i=RT.pesajes.findIndex(r=>String(r.id)===String(rec.id));
-      if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);}
-      else{if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);}
-      // Guardar local SIN re-disparar push (evita loop Realtime -> push -> Realtime)
-      _rtSaveOrig&&_rtSaveOrig();
-      if(typeof renderPesajesTable==='function')renderPesajesTable();
-    }).subscribe();
+    /* moldes/pesajes por Realtime: muchos mensajes WS; desactivado por defecto (localStorage friosur_tb_msg_economy='0' para activar). */
+    if(!tbMsgEconomy()){
+      _tbSb.channel('tb-moldes').on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
+        const rec=p.new||p.old;if(!rec)return;
+        const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,producto:rec.producto,presetId:rec.preset_id,destino:rec.destino,calibre:rec.calibre,especie:rec.especie,cant:rec.cant,pendiente:rec.pendiente,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
+        const i=RT.moldes.findIndex(r=>String(r.id)===String(rec.id));
+        if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);}
+        else{if(i>=0)RT.moldes[i]=local;else RT.moldes.unshift(local);}
+        _rtSaveOrig&&_rtSaveOrig();
+        if(typeof renderMoldesTable==='function')renderMoldesTable();
+        if(typeof renderPorCargar==='function')renderPorCargar();
+      }).subscribe();
+      _tbSb.channel('tb-pesajes').on('postgres_changes',{event:'*',schema:'public',table:'pesajes'},(p)=>{
+        const rec=p.new||p.old;if(!rec)return;
+        const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,trabId:rec.trab_id,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,especie:rec.especie,tipo:rec.tipo,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
+        const i=RT.pesajes.findIndex(r=>String(r.id)===String(rec.id));
+        if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);}
+        else{if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);}
+        _rtSaveOrig&&_rtSaveOrig();
+        if(typeof renderPesajesTable==='function')renderPesajesTable();
+      }).subscribe();
+    }
     // ── Realtime armado de línea ──────────────────────────────
     _tbSb.channel('tb-armado-lineas').on('postgres_changes',{event:'*',schema:'public',table:'armado_lineas'},(p)=>{
       const rec=p.new||p.old;if(!rec)return;

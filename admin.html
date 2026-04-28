@@ -233,6 +233,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div class="chip" id="dateChip">—</div>
   </div>
   <div class="topbar-right">
+    <button class="top-btn" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes desde Supabase (solo HTTP, casi sin costo de mensajes Realtime)">☁ Traer tablets</button>
     <button class="top-btn" onclick="openSupabaseModal()">Conectar Supabase</button>
     <button class="top-btn primary" onclick="tabletLink()">Abrir Tablet</button>
   </div>
@@ -264,8 +265,9 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 <div class="page active" id="page-dashboard">
   <div class="page-hdr">
     <div><h1 class="page-title">Dashboard</h1><div class="page-sub">KPIs operacionales en tiempo real · arrastra widgets para reordenar</div></div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ghost sm" onclick="reloadDashboard()">↻ Actualizar</button>
+      <button class="btn ghost sm" type="button" onclick="sbManualPullTabletRegs()" title="Descarga moldes/pesajes desde la nube (recomendado en modo ahorro de mensajes)">☁ Traer desde tablets</button>
       <button class="btn sm" onclick="addWidget()">+ Widget</button>
     </div>
   </div>
@@ -644,21 +646,28 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 
 <!-- ═══ SUPABASE ═══ -->
 <div class="page" id="page-supabase">
-  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos y registros a la nube. Los presets al guardarlos ya se envían a Supabase; «Traer del servidor» solo si necesitas recuperar datos desde otra PC.</div></div></div>
+  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos. Para no gastar la cuota de <strong>mensajes Realtime</strong>, el modo ahorro (por defecto) evita escuchar moldes/pesajes en vivo: usa <strong>Traer moldes y pesajes</strong> cuando quieras ver lo de las tablets.</div></div></div>
   <div class="grid-2">
     <div class="card">
       <div class="card-hdr"><div class="card-title">🔌 Conexión</div><span class="badge info" id="sbBadge">No conectado</span></div>
       <div class="form-field"><label class="form-label">URL del proyecto</label><input class="input" id="sbUrl" placeholder="https://xxx.supabase.co"></div>
       <div class="form-field"><label class="form-label">Anon key</label><input class="input" id="sbKey" placeholder="eyJ..."></div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn" onclick="connectSupabase()">Conectar</button>
         <button class="btn ghost" onclick="testSupabase()">Probar</button>
         <button class="btn ghost" onclick="pushAll()">⬆ Subir todo a Supabase</button>
         <button type="button" class="btn ghost" onclick="pullAll()" title="Sobrescribe esta PC con lo que hay en el servidor. No hace falta para el uso diario.">⬇ Traer del servidor</button>
+        <button type="button" class="btn" onclick="sbManualPullTabletRegs()" title="Solo peticiones REST (SELECT), no Realtime">☁ Traer moldes y pesajes (tablets)</button>
+      </div>
+      <div class="form-field" style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px;line-height:1.45;">
+          <input type="checkbox" id="sbMsgEconomy" checked onchange="sbMsgEconomyOnChange()" style="margin-top:3px;">
+          <span><strong>Modo ahorro de mensajes</strong> (recomendado): no abre canales Realtime ni polling automático sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span>. Los catálogos (presets, turnos, equipos) siguen en Realtime con poco tráfico. Desmarca solo si necesitas ver cada registro al instante en todos los equipos.</span>
+        </label>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:12px;">
-        Flujo habitual: editar en Admin y guardar (p. ej. presets) o usar <strong>Subir todo</strong>. No se descarga nada al iniciar sesión.
-        Las credenciales van en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>); en producción usa RLS.
+        Al iniciar sesión se hace una descarga inicial de moldes/pesajes (HTTP). Después, en modo ahorro, pulsa <strong>Traer moldes y pesajes</strong> o el botón del topbar.
+        Credenciales en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>); en producción usa RLS.
       </div>
     </div>
   </div>
@@ -740,6 +749,20 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 const STORE_KEY='friosur_app_v1';
 const RT_KEY='friosur_rt_v1';
 const SB_KEY='friosur_sb';
+/** '1' o ausente = ahorro (sin Realtime/poll en moldes·pesajes). '0' = tiempo casi real (más mensajes Supabase). */
+const SB_MSG_ECONOMY_KEY='friosur_admin_msg_economy';
+function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)!=='0';}catch(e){return true;}}
+function sbMsgEconomySet(on){try{localStorage.setItem(SB_MSG_ECONOMY_KEY,on?'1':'0');}catch(e){}}
+function sbMsgEconomyInitCheckbox(){const el=document.getElementById('sbMsgEconomy');if(el)el.checked=sbMsgEconomyEnabled();}
+function sbMsgEconomyOnChange(){
+  const el=document.getElementById('sbMsgEconomy');
+  sbMsgEconomySet(!!(el&&el.checked));
+  sbStopPoll();
+  sbSubscribeRealtime();
+  if(sbMsgEconomyEnabled())sbLog('Modo ahorro: moldes/pesajes solo manual (botón Traer).');
+  else sbStartPoll();
+  toast(sbMsgEconomyEnabled()?'Modo ahorro activo':'Modo vivo: Realtime + poll en moldes/pesajes','info');
+}
 const SB_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function inferUsoEquipo(p){
@@ -2151,7 +2174,7 @@ function importExcel(e){
 let _sb=null;
 function loadSbCreds(){try{const c=JSON.parse(localStorage.getItem(SB_KEY))||{};if(!c.url&&SB_DEFAULT.url){return{...SB_DEFAULT,connected:true};}return c;}catch(e){return{...SB_DEFAULT,connected:true};}}
 function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
-(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{connectSupabase(true);setTimeout(initAuth,500);},300);})();
+(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{connectSupabase(true);setTimeout(initAuth,500);sbMsgEconomyInitCheckbox();},300);})();
 
 /* ════════════ AUTH ════════════ */
 let _currentUser=null;
@@ -2166,6 +2189,37 @@ async function initAuth(){
     else if(event==='SIGNED_IN'&&sess){await applySession(sess);}
   });
 }
+/** Moldes/pesajes desde la nube (tablets). Solo SELECT por HTTP — no cuenta como mensajes Realtime. */
+async function sbManualPullTabletRegs(){
+  if(!_sb){toast('Conecta Supabase primero','warn');return;}
+  if(!_currentUser){toast('Inicia sesión para leer moldes y pesajes','warn');return;}
+  try{
+    await sbPullRuntimeFromCloud();
+    toast('Moldes y pesajes actualizados desde la nube','success');
+    rtPulse('manual');
+  }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)),'err');}
+}
+/** Moldes/pesajes desde la nube (tablets / otros admins). Necesario para tiempo real entre dispositivos — localStorage no cruza equipos. */
+async function sbPullRuntimeFromCloud(){
+  if(!_sb)return;
+  try{
+    if(!RT.data)RT.data={};
+    for(const t of['moldes','pesajes']){
+      const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+      if(error){sbLog('pull RT '+t+': '+error.message,false);continue;}
+      RT.data[t]=_sbParse(t,data||[]);
+    }
+    if(RT.save)RT.save();
+    try{
+      const{count:cm}=await _sb.from('moldes').select('*',{count:'exact',head:true});
+      const{count:cp}=await _sb.from('pesajes').select('*',{count:'exact',head:true});
+      if(cm!=null)_pollCounts.moldes=cm|0;
+      if(cp!=null)_pollCounts.pesajes=cp|0;
+    }catch(_){}
+    _doRender(new Set(['moldes','pesajes']));
+    sbLog('Moldes/pesajes sincronizados desde nube (multi-dispositivo)');
+  }catch(e){sbLog('pull RT: '+e.message,false);}
+}
 async function applySession(session){
   hideAuthOverlay();
   // Cargar perfil + rol
@@ -2177,10 +2231,12 @@ async function applySession(session){
   applyRolePermissions();
   updateUserBadge();
   sbLog('Sesión: '+_currentUser.email+' ('+_currentUser.rol+')');
-  // Sin pull automático: el admin sube a Supabase al guardar / «Subir todo». Traer datos es manual (pestaña Supabase).
-  setTimeout(()=>{
+  // Una descarga HTTP inicial; Realtime/poll en moldes·pesajes solo si modo vivo
+  setTimeout(async()=>{
+    await sbPullRuntimeFromCloud();
     sbSubscribeRealtime();
-    if(typeof sbStartPoll==='function')sbStartPoll();
+    if(sbMsgEconomyEnabled()){sbStopPoll();sbLog('Modo ahorro: usa «Traer moldes y pesajes» o el topbar (pocos mensajes Realtime).');}
+    else if(typeof sbStartPoll==='function')sbStartPoll();
   },400);
 }
 async function doLogin(){
@@ -2242,16 +2298,16 @@ function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line
 function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');return;}
-  try{_sb=window.supabase.createClient(url,key);saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();}
+  try{_sb=window.supabase.createClient(url,key);saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();}
   catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
 }
 let _sbChannels=[];
 function sbSubscribeRealtime(){
   if(!_sb)return;
   _sbChannels.forEach(ch=>{try{_sb.removeChannel(ch);}catch(e){}});_sbChannels=[];
+  const liveRt=!sbMsgEconomyEnabled();
   const subs=[
-    {tbl:'moldes',     target:'RT',  key:'moldes'},
-    {tbl:'pesajes',    target:'RT',  key:'pesajes'},
+    ...(liveRt?[{tbl:'moldes',     target:'RT',  key:'moldes'},{tbl:'pesajes',    target:'RT',  key:'pesajes'}]:[]),
     {tbl:'presets',    target:'DB',  key:'presets',    render:()=>typeof renderPresets==='function'&&renderPresets()},
     {tbl:'trabajadores',target:'DB', key:'trabajadores',render:()=>typeof renderTrabs==='function'&&renderTrabs()},
     {tbl:'turnos',     target:'DB',  key:'turnos',     render:()=>typeof renderTurnos==='function'&&renderTurnos()},
@@ -2282,7 +2338,7 @@ function sbSubscribeRealtime(){
     }).subscribe((status)=>{sbLog('canal '+s.tbl+': '+status);});
     _sbChannels.push(ch);
   });
-  sbLog('Realtime: '+subs.length+' canales activos');
+  sbLog('Realtime: '+subs.length+' canal(es)'+(liveRt?'':' (ahorro: sin moldes/pesajes)'));
 }
 /* ── Re-render reactivo con debounce corto + indicador RT ── */
 let _rerenderTimer=null;
@@ -2328,6 +2384,18 @@ function _doRender(dirty){
     if(id==='page-tuneles'&&dataChanged&&typeof renderTunReport==='function')renderTunReport();
   }catch(e){console.warn('[rerender]',e);}
 }
+/* RT en vivo con index.html (tablet): misma clave localStorage, sin tráfico Supabase */
+let _peerRtStorageTimer=null;
+window.addEventListener('storage',ev=>{
+  if(ev.key!==RT_KEY||ev.newValue==null)return;
+  if(_peerRtStorageTimer)clearTimeout(_peerRtStorageTimer);
+  _peerRtStorageTimer=setTimeout(()=>{
+    _peerRtStorageTimer=null;
+    try{RT.load();}catch(x){}
+    _doRender(null);
+    rtPulse('local');
+  },120);
+});
 function sbRerenderCurrent(tbl){
   if(tbl)_dirtyTables.add(tbl);
   if(tbl)rtPulse(tbl);
