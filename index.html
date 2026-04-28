@@ -1539,6 +1539,23 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 
     <!-- TAB CONTENT: ARMADO -->
     <div id="mArmado" class="mold-tab hidden">
+      <div class="form-grid cols-3" style="margin-bottom:10px;">
+        <div class="form-field">
+          <label class="form-label">Turno de armado</label>
+          <select class="select" id="mArmScopeTurno" onchange="onMArmScopeChange()">
+            <option value="dia">Día (07:00–19:00)</option>
+            <option value="noche">Noche (19:00–07:00)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Fecha de armado</label>
+          <input type="date" class="input" id="mArmScopeFecha" onchange="onMArmScopeChange()">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Estado</label>
+          <div class="input" id="mArmScopeStatus" style="display:flex;align-items:center;min-height:42px;background:var(--surface-alt);color:var(--text-2);font-size:12px;">Configura líneas para este turno y fecha.</div>
+        </div>
+      </div>
       <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;">
         <button class="btn" type="button" onclick="addMLinea()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -3225,17 +3242,66 @@ rtLoad();
 const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 const nowDate=()=>new Date().toISOString().slice(0,10);
 const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
+const ARM_SCOPE_SEP='@@';
+function _armScopeKey(linea,turno,fecha){
+  return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+String(turno||'dia').trim()+ARM_SCOPE_SEP+String(fecha||nowDate()).trim();
+}
+function _armParseKey(key){
+  const raw=String(key||'');
+  if(raw.includes(ARM_SCOPE_SEP)){
+    const p=raw.split(ARM_SCOPE_SEP);
+    return {linea:(p[0]||'').trim().toUpperCase(),turno:(p[1]||'dia').trim(),fecha:(p[2]||nowDate()).trim(),scoped:true};
+  }
+  return {linea:raw.trim().toUpperCase(),turno:'dia',fecha:'',scoped:false};
+}
+function _armRegFecha(){return nowDate();}
+function _armRegTurno(){const el=document.getElementById('mRegTurno');return (el&&el.value)||'dia';}
+function _armGetEntry(linea,turno,fecha){
+  if(!RT.armadoMolde||!linea)return null;
+  const scopedKey=_armScopeKey(linea,turno,fecha);
+  if(RT.armadoMolde[scopedKey])return RT.armadoMolde[scopedKey];
+  const legacy=RT.armadoMolde[linea];
+  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&String(legacy.fecha||'')===String(fecha||''))return legacy;
+  return null;
+}
+function _armSetEntry(linea,data,turno,fecha){
+  if(!RT.armadoMolde)RT.armadoMolde={};
+  const k=_armScopeKey(linea,turno,fecha);
+  RT.armadoMolde[k]=data;
+  return k;
+}
+function _armDeleteEntry(linea,turno,fecha){
+  if(!RT.armadoMolde)return;
+  const k=_armScopeKey(linea,turno,fecha);
+  if(k in RT.armadoMolde)delete RT.armadoMolde[k];
+}
+function _armEntriesForScope(turno,fecha){
+  const out=[];
+  const src=RT.armadoMolde||{};
+  Object.entries(src).forEach(([k,d])=>{
+    const meta=_armParseKey(k);
+    const mt=d&&d.turno?d.turno:meta.turno;
+    const mf=d&&d.fecha?d.fecha:meta.fecha;
+    if(String(mt||'dia')!==String(turno||'dia'))return;
+    if(String(mf||'')!==String(fecha||''))return;
+    out.push({key:k,linea:meta.linea,data:d});
+  });
+  out.sort((a,b)=>String(a.linea).localeCompare(String(b.linea)));
+  return out;
+}
 
 /* ═══ MOLDES — REGISTRAR ═══════════════════════════════════════ */
 function renderMRegLinea(){
   const sel=document.getElementById('mRegLinea');if(!sel)return;
   _ensureArmadoMolde&&_ensureArmadoMolde();
-  const arm=RT.armadoMolde||{};
+  const turno=_armRegTurno();
+  const fecha=_armRegFecha();
+  const arm=_armEntriesForScope(turno,fecha);
   // Solo líneas con planillero O al menos 1 trabajador asignado
-  const lineasActivas=Object.keys(arm).filter(ln=>{
-    const d=arm[ln];
+  const lineasActivas=arm.filter(row=>{
+    const d=row.data;
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
-  }).sort();
+  }).map(row=>row.linea).sort();
   const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3'};
   const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
@@ -3261,7 +3327,7 @@ function renderMRegTurnos(){
 /* Lista unificada: solo personas en el armado de moldes de `linea` (DB + ingresos manuales en armado). */
 function _mRegArmadoWorkersListForLinea(linea){
   if(!RT.armadoMolde||!linea)return[];
-  const data=RT.armadoMolde[linea];
+  const data=_armGetEntry(linea,_armRegTurno(),_armRegFecha());
   if(!data)return[];
   const workers=[];
   const seen=new Set();
@@ -3299,8 +3365,8 @@ function renderMRegTrab(){
   }
   const linea=document.getElementById('mRegLinea')?document.getElementById('mRegLinea').value:'';
   const fromArmado=_mRegArmadoWorkersListForLinea(linea);
-  const tieneArmado=linea&&RT.armadoMolde&&RT.armadoMolde[linea]&&
-    ((RT.armadoMolde[linea].trabajadores||[]).length>0||RT.armadoMolde[linea].planillero);
+  const armLinea=linea?_armGetEntry(linea,_armRegTurno(),_armRegFecha()):null;
+  const tieneArmado=linea&&armLinea&&(((armLinea.trabajadores||[]).length>0)||armLinea.planillero);
   const items=fromArmado;
   const placeholder=!linea
     ?'— Selecciona línea primero —'
@@ -3319,10 +3385,11 @@ function renderMRegTrab(){
   // Badge informativo: mostrar cuántas personas tiene el armado de la línea y su fecha
   const info=document.getElementById('mRegArmadoInfo');
   if(info){
-    const armData=linea&&RT.armadoMolde&&RT.armadoMolde[linea];
+    const armData=linea?_armGetEntry(linea,_armRegTurno(),_armRegFecha()):null;
     if(armData&&fromArmado.length){
       const fechaStr=armData.fecha?(' · 📅 '+armData.fecha.split('-').reverse().join('/')):'';
-      info.textContent=fromArmado.length+' en armado'+fechaStr;
+      const turnoLbl=String(armData.turno||'dia')==='noche'?'Noche':'Día';
+      info.textContent=fromArmado.length+' en armado · '+turnoLbl+fechaStr;
       info.style.display='';
     } else {
       info.style.display='none';
@@ -3330,7 +3397,7 @@ function renderMRegTrab(){
   }
   onMRegTrabChange();
 }
-function onMRegTurnoChange(){renderMRegTrab();}
+function onMRegTurnoChange(){renderMRegLinea();renderMRegTrab();if(window.renderMRegPresets)renderMRegPresets();}
 function onMRegTrabChange(){
   const sel=document.getElementById('mRegTrab');if(!sel)return;
   const val=sel.value;
@@ -3388,8 +3455,9 @@ function onMRegTrabChange(){
 function _getMRegEspecie(){
   // Get especie from armado of currently selected linea
   const linea=(document.getElementById('mRegLinea')||{}).value||'';
-  if(RT.armadoMolde&&linea&&RT.armadoMolde[linea]){
-    return RT.armadoMolde[linea].especie||RT.armadoMolde[linea].producto||'';
+  const armData=_armGetEntry(linea,_armRegTurno(),_armRegFecha());
+  if(armData){
+    return armData.especie||armData.producto||'';
   }
   return '';
 }
@@ -3418,7 +3486,8 @@ function renderMRegPresets(){
 }
 function _clearMRegEspecieFilter(){
   const linea=(document.getElementById('mRegLinea')||{}).value||'';
-  if(RT.armadoMolde&&linea&&RT.armadoMolde[linea]){RT.armadoMolde[linea].especie='';rtSave();}
+  const armData=_armGetEntry(linea,_armRegTurno(),_armRegFecha());
+  if(armData){armData.especie='';rtSave();}
   renderMRegPresets();
 }
 function selectPresetM(id){
@@ -4553,10 +4622,10 @@ function renderPConsol(){
 }
 
 /* ═══ Turno de línea (armado) → filtro en resúmenes por hora ═══════ */
-function _turnoArmadoMoldesForLinea(linea){
+function _turnoArmadoMoldesForLinea(linea,fecha){
   if(!linea)return null;
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
-  const d=RT.armadoMolde&&RT.armadoMolde[linea];
+  const d=_armGetEntry(linea,'dia',fecha||'')||_armGetEntry(linea,'noche',fecha||'');
   if(!d)return null;
   return d.turno==='noche'?'noche':'dia';
 }
@@ -4574,7 +4643,8 @@ function _readTurnoLineaFilter(selectId){
 }
 function _moldeMatchesTurnoLineaFiltro(r,filtro){
   if(filtro==='todos')return true;
-  const arm=_turnoArmadoMoldesForLinea(r.linea);
+  if(r&&r.turno){return String(r.turno)===String(filtro);}
+  const arm=_turnoArmadoMoldesForLinea(r.linea,r&&r.fecha||'');
   if(arm==null)return false;
   return arm===filtro;
 }
@@ -5082,13 +5152,48 @@ window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.r
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
 function _ensureArmadoMolde(){
   if(!RT.armadoMolde)RT.armadoMolde={};
-  ['L1','L2','L3'].forEach(ln=>{if(!RT.armadoMolde[ln])RT.armadoMolde[ln]={planillero:null,trabajadores:[],especie:'',turno:'dia',fecha:''};});
-  // heal existentes: agregar campos por defecto
-  Object.keys(RT.armadoMolde).forEach(ln=>{
-    if(!RT.armadoMolde[ln].turno)RT.armadoMolde[ln].turno='dia';
-    if(!('especie' in RT.armadoMolde[ln]))RT.armadoMolde[ln].especie=RT.armadoMolde[ln].producto||'';
-    if(!('fecha' in RT.armadoMolde[ln]))RT.armadoMolde[ln].fecha='';
+  const migrated={};
+  Object.keys(RT.armadoMolde).forEach(k=>{
+    const d=RT.armadoMolde[k]||{};
+    if(!Array.isArray(d.trabajadores))d.trabajadores=[];
+    if(!('especie' in d))d.especie=d.producto||'';
+    if(!d.turno)d.turno='dia';
+    if(!d.fecha)d.fecha=nowDate();
+    const meta=_armParseKey(k);
+    const linea=(meta.linea||k||'').trim().toUpperCase();
+    const finalKey=_armScopeKey(linea,d.turno,d.fecha);
+    migrated[finalKey]={...d,turno:d.turno,fecha:d.fecha};
   });
+  RT.armadoMolde=migrated;
+}
+function _getMArmScopeTurno(){
+  const el=document.getElementById('mArmScopeTurno');
+  return (el&&el.value)||((new Date().getHours()>=7&&new Date().getHours()<19)?'dia':'noche');
+}
+function _getMArmScopeFecha(){
+  const el=document.getElementById('mArmScopeFecha');
+  return (el&&el.value)||nowDate();
+}
+function _setMArmScopeDefaults(){
+  const tEl=document.getElementById('mArmScopeTurno');
+  const fEl=document.getElementById('mArmScopeFecha');
+  if(tEl&&!tEl.value)tEl.value=(new Date().getHours()>=7&&new Date().getHours()<19)?'dia':'noche';
+  if(fEl&&!fEl.value)fEl.value=nowDate();
+}
+function _updateMArmScopeStatus(){
+  const el=document.getElementById('mArmScopeStatus');
+  if(!el)return;
+  const turno=_getMArmScopeTurno();
+  const fecha=_getMArmScopeFecha();
+  const n=_armEntriesForScope(turno,fecha).length;
+  const t=turno==='noche'?'Noche':'Día';
+  el.textContent=`${n} línea(s) configurada(s) para ${t} · ${fecha}`;
+}
+function onMArmScopeChange(){
+  renderMArmado();
+  if(window.renderMRegLinea)renderMRegLinea();
+  if(window.renderMRegTrab)renderMRegTrab();
+  if(window.renderMRegPresets)renderMRegPresets();
 }
 function _stripMarcaCopiaLinea(d){
   if(!d||typeof d!=='object')return;
@@ -5098,15 +5203,22 @@ function _stripMarcaCopiaLinea(d){
   (d.trabajadores||[]).forEach(t=>{delete t.fromPrevArmado;});
 }
 function _cloneArmadoMoldeSinMarcasCopia(){
-  const raw=JSON.parse(JSON.stringify(RT.armadoMolde||{}));
-  Object.keys(raw).forEach(ln=>_stripMarcaCopiaLinea(raw[ln]));
+  const turno=_getMArmScopeTurno();
+  const fecha=_getMArmScopeFecha();
+  const raw={};
+  _armEntriesForScope(turno,fecha).forEach(row=>{
+    raw[row.linea]=JSON.parse(JSON.stringify(row.data||{}));
+  });
+  Object.keys(raw).forEach(k=>_stripMarcaCopiaLinea(raw[k]));
   return raw;
 }
 function _applyMarcaCopiaArmadoMolde(fechaSnap,guardadoSnap){
   if(!RT.armadoMolde)return;
+  const turno=_getMArmScopeTurno();
+  const fecha=_getMArmScopeFecha();
   const fechaLbl=(fechaSnap&&String(fechaSnap).trim())||'—';
-  Object.keys(RT.armadoMolde).forEach(ln=>{
-    const d=RT.armadoMolde[ln];
+  _armEntriesForScope(turno,fecha).forEach(row=>{
+    const d=row.data;
     if(!d||typeof d!=='object')return;
     d.origenCopiaDesdeFecha=fechaLbl;
     if(guardadoSnap)d.origenCopiaGuardadoEn=String(guardadoSnap);
@@ -5126,15 +5238,21 @@ function _renderMArmadoCopiaBanner(){
 }
 function renderMArmado(){
   _ensureArmadoMolde();
+  _setMArmScopeDefaults();
   const box=document.getElementById('mArmadoList');if(!box)return;
-  const lineas=Object.keys(RT.armadoMolde).sort();
+  const turnoScope=_getMArmScopeTurno();
+  const fechaScope=_getMArmScopeFecha();
+  const scopedRows=_armEntriesForScope(turnoScope,fechaScope);
+  const lineas=scopedRows.map(x=>x.linea);
+  _updateMArmScopeStatus();
   if(!lineas.length){
-    box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';
+    box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas para este turno/fecha</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';
     _renderMArmadoCopiaBanner();
     return;
   }
-  box.innerHTML=lineas.map(ln=>{
-    const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],especie:''};
+  box.innerHTML=scopedRows.map(row=>{
+    const ln=row.linea;
+    const data=row.data||{planillero:null,trabajadores:[],especie:''};
     const trabs=data.trabajadores||[];
     const p=data.planillero;
     const especie=data.especie||data.producto||'';
@@ -5174,7 +5292,10 @@ function renderMArmado(){
 
 function addMLinea(){
   _ensureArmadoMolde();
-  const existentes=Object.keys(RT.armadoMolde);
+  _setMArmScopeDefaults();
+  const turnoScope=_getMArmScopeTurno();
+  const fechaScope=_getMArmScopeFecha();
+  const existentes=_armEntriesForScope(turnoScope,fechaScope).map(r=>r.linea);
   let nextN=1;while(existentes.indexOf('L'+nextN)>=0)nextN++;
   const sugerido='L'+nextN;
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mAddLineaModal';
@@ -5200,13 +5321,17 @@ function confirmMAddLinea(){
   const inp=document.getElementById('mAddLineaInput');if(!inp)return;
   const key=(inp.value||'').trim().toUpperCase();
   if(!key){showToast('Nombre inválido','error');inp.focus();return;}
-  if(RT.armadoMolde[key]){showToast('Esa línea ya existe','error');inp.focus();return;}
-  RT.armadoMolde[key]={planillero:null,trabajadores:[],especie:'',turno:'dia'};
+  const turnoScope=_getMArmScopeTurno();
+  const fechaScope=_getMArmScopeFecha();
+  if(_armGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');inp.focus();return;}
+  _armSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
 function removeMLinea(ln){
-  if(!confirm('¿Eliminar la línea '+ln+' completa?'))return;
-  delete RT.armadoMolde[ln];
+  const turnoScope=_getMArmScopeTurno();
+  const fechaScope=_getMArmScopeFecha();
+  if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+  _armDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();renderMArmado();showToast('Línea '+ln+' eliminada','success');
 }
 function copiarMArmadoDia(){
@@ -5218,9 +5343,17 @@ function copiarMArmadoDia(){
   if(snap.guardadoEn)msg+='• Referencia guardada el: '+snap.guardadoEn+'\n';
   msg+='• Líneas en la referencia: '+nRef+'\n\n¿Continuar?';
   if(!confirm(msg))return;
-  RT.armadoMolde=JSON.parse(JSON.stringify(snap.data));
+  const turnoScope=_getMArmScopeTurno();
+  const fechaScope=_getMArmScopeFecha();
+  _armEntriesForScope(turnoScope,fechaScope).forEach(row=>_armDeleteEntry(row.linea,turnoScope,fechaScope));
+  Object.entries(snap.data||{}).forEach(([ln,d])=>{
+    const rec=JSON.parse(JSON.stringify(d||{}));
+    rec.turno=turnoScope;
+    rec.fecha=fechaScope;
+    _stripMarcaCopiaLinea(rec);
+    _armSetEntry(ln,rec,turnoScope,fechaScope);
+  });
   _ensureArmadoMolde();
-  Object.keys(RT.armadoMolde).forEach(ln=>_stripMarcaCopiaLinea(RT.armadoMolde[ln]));
   _applyMarcaCopiaArmadoMolde(snap.fecha,snap.guardadoEn);
   RT.armadoMoldeUltimaCopia={
     snapshotFecha:snap.fecha||'',
@@ -5495,8 +5628,9 @@ window.openRegPicker=openRegPicker;window.clearRegPicker=clearRegPicker;window._
 
 function editMArmadoLinea(ln){
   _ensureArmadoMolde();
+  _setMArmScopeDefaults();
   _editMLn=ln;
-  const data=RT.armadoMolde[ln]||{planillero:null,trabajadores:[],especie:''};
+  const data=_armGetEntry(ln,_getMArmScopeTurno(),_getMArmScopeFecha())||{planillero:null,trabajadores:[],especie:'',turno:_getMArmScopeTurno(),fecha:_getMArmScopeFecha()};
   const currentEspecie=data.especie||data.producto||'';
   _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia',fecha:data.fecha||''};
   const especies=_getEspecies();
@@ -5675,14 +5809,16 @@ function saveMArmado(){
   _editMArmado.especie=especie;
   _editMArmado.turno=turnoRaw;
   _editMArmado.fecha=fecha;
-  RT.armadoMolde[_editMLn]={
+  _armDeleteEntry(_editMLn,_getMArmScopeTurno(),_getMArmScopeFecha());
+  const target={
     planillero:_editMArmado.planillero,
     trabajadores:_editMArmado.trabajadores,
     especie,
     turno:turnoRaw,
     fecha
   };
-  _stripMarcaCopiaLinea(RT.armadoMolde[_editMLn]);
+  _armSetEntry(_editMLn,target,turnoRaw,fecha);
+  _stripMarcaCopiaLinea(target);
   // Compat: keep lineaProducto synced for old references
   if(!RT.lineaProducto)RT.lineaProducto={};
   RT.lineaProducto[_editMLn]=_editMArmado.especie||'';
@@ -5700,6 +5836,7 @@ window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMA
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;
+window.onMArmScopeChange=onMArmScopeChange;
 
 /* ═══ EMPAQUE — Registrar + lotes ══════════════════════════════ */
 function renderERegPresets(){
@@ -6205,13 +6342,13 @@ const TBSync={
           // Supabase tiene datos → aplicar localmente
           if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
           armData.forEach(row=>{
-            RT.armadoMolde[row.linea]={
+            _armSetEntry(row.linea,{
               planillero:row.planillero||null,
               trabajadores:row.trabajadores||[],
               especie:row.especie||'',
               turno:row.turno||'dia',
               fecha:row.fecha||''
-            };
+            },row.turno||'dia',row.fecha||'');
           });
           _rtSaveOrig&&_rtSaveOrig();
           if(typeof renderMArmado==='function')renderMArmado();
@@ -6279,15 +6416,17 @@ const TBSync={
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       const armadoRows=Object.entries(RT.armadoMolde||{})
         .filter(([,d])=>d)
-        .map(([linea,d])=>({
-          linea,
+        .map(([key,d])=>{
+          const meta=_armParseKey(key);
+          return {
+          linea:meta.linea||'',
           planillero:d.planillero||null,
           trabajadores:d.trabajadores||[],
           especie:d.especie||'',
-          turno:d.turno||'dia',
-          fecha:d.fecha||'',
+          turno:d.turno||meta.turno||'dia',
+          fecha:d.fecha||meta.fecha||'',
           updated_at:new Date().toISOString()
-        }));
+        };});
       const sigA=this._sigRows(armadoRows,'linea');
       if(armadoRows.length&&sigA!==this._lastSig.armado){
         const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea'});
@@ -6339,15 +6478,15 @@ const TBSync={
       const rec=p.new||p.old;if(!rec)return;
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       if(p.eventType==='DELETE'){
-        if(RT.armadoMolde)delete RT.armadoMolde[rec.linea];
+        _armDeleteEntry(rec.linea,rec.turno||'dia',rec.fecha||'');
       }else{
-        RT.armadoMolde[rec.linea]={
+        _armSetEntry(rec.linea,{
           planillero:rec.planillero||null,
           trabajadores:rec.trabajadores||[],
           especie:rec.especie||'',
           turno:rec.turno||'dia',
           fecha:rec.fecha||''
-        };
+        },rec.turno||'dia',rec.fecha||'');
       }
       // Guardar local sin disparar re-push (evita loop infinito)
       _rtSaveOrig&&_rtSaveOrig();
