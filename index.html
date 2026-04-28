@@ -2597,6 +2597,13 @@ function coercePresetFields(p){
   if((p.horasTunel==null||p.horasTunel==='')&&p.horas_tunel!=null)p.horasTunel=+p.horas_tunel;
   if((p.horasPlaca==null||p.horasPlaca==='')&&p.horas_placa!=null)p.horasPlaca=+p.horas_placa;
   if((p.tempObj==null||p.tempObj==='')&&p.temp_obj!=null)p.tempObj=+p.temp_obj;
+  const usoRaw=String(p.usoEquipo||p.uso_equipo||'').toLowerCase();
+  if(usoRaw==='tunel'||usoRaw==='placa'||usoRaw==='ambos')p.usoEquipo=usoRaw;
+  else{
+    const ht=+p.horasTunel||0;
+    const hp=+p.horasPlaca||0;
+    p.usoEquipo=(ht>0&&hp<=0)?'tunel':(hp>0&&ht<=0)?'placa':'ambos';
+  }
 }
 /** Tras pull: la nube manda en campos coincidentes; se mantienen presets solo locales (aún no en Supabase) */
 function mergePresetsWithLocalSnapshot(remoteRows){
@@ -3901,7 +3908,14 @@ function openEqModal(codigo){
   // Filtrar presets según tipo de equipo:
   // - Placa: sólo preset.tipo=='molde'
   // - Túnel: todos (molde + pallet + carro + castillo)
-  const presets=DB.data.presets.filter(p=>p.activo&&(eq.tipo==='tunel'||p.tipo==='molde'));
+  const presets=DB.data.presets.filter(p=>{
+    if(!p.activo)return false;
+    const uso=String(p.usoEquipo||'ambos');
+    if(eq.tipo==='placa'&&p.tipo!=='molde')return false;
+    if(eq.tipo==='tunel'&&uso==='placa')return false;
+    if(eq.tipo==='placa'&&uso==='tunel')return false;
+    return true;
+  });
   const b=estadoBadgeTP[rt.estado];
   const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">

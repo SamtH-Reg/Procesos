@@ -475,7 +475,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     </div>
   </div>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
+    <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th>Uso</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
     <tbody id="tbPresets"></tbody>
   </table></div>
 </div>
@@ -742,6 +742,16 @@ const RT_KEY='friosur_rt_v1';
 const SB_KEY='friosur_sb';
 const SB_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function inferUsoEquipo(p){
+  if(!p||typeof p!=='object')return'ambos';
+  const u=String(p.usoEquipo||p.uso_equipo||'').toLowerCase();
+  if(u==='tunel'||u==='placa'||u==='ambos')return u;
+  const ht=+p.horasTunel||0;
+  const hp=+p.horasPlaca||0;
+  if(ht>0&&hp<=0)return'tunel';
+  if(hp>0&&ht<=0)return'placa';
+  return'ambos';
+}
 
 /* DB compartida con la Tablet */
 const DB={data:null,
@@ -750,6 +760,7 @@ const DB={data:null,
   _heal(){
     const d=this.data;
     d.presets=d.presets||[];d.trabajadores=d.trabajadores||[];d.turnos=d.turnos||[];d.equipos=d.equipos||[];
+    d.presets.forEach(p=>{p.usoEquipo=inferUsoEquipo(p);});
     d.roles=d.roles||[{id:1,nombre:'Admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true}},
                      {id:2,nombre:'Supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false}},
                      {id:3,nombre:'Operario',permisos:{dashboard:true,reportes:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,import:false,supabase:false,ajustes:false}}];
@@ -1735,19 +1746,22 @@ function renderPresets(){
     if(est==='1'&&!p.activo)return false;
     if(est==='0'&&p.activo)return false;
     if(!q)return true;
-    return [p.nombre,p.destino,p.especie,p.calibre,p.formato,p.tipo].some(v=>String(v||'').toLowerCase().includes(q));
+    return [p.nombre,p.destino,p.especie,p.calibre,p.formato,p.tipo,p.usoEquipo].some(v=>String(v||'').toLowerCase().includes(q));
   });
   if(stats)stats.textContent=filtered.length+' / '+all.length;
+  const usoLbl=u=>u==='tunel'?'Túnel':u==='placa'?'Placa':'Ambos';
+  const usoBadge=u=>u==='tunel'?'info':u==='placa'?'warn':'ok';
   tb.innerHTML=filtered.map(p=>`<tr>
     <td><strong>${esc(p.nombre)}</strong></td>
     <td>${esc(p.tipo||'—')}</td><td>${esc(p.destino||'—')}</td><td>${esc(p.especie||'—')}</td><td>${esc(p.calibre||'—')}</td>
-    <td class="num">${p.kgRef}</td><td class="num">${p.horasTunel||0}</td><td class="num">${p.horasPlaca||0}</td><td class="num">${p.tempObj||0}</td>
+    <td class="num">${p.kgRef}</td><td class="num">${p.horasTunel||0}</td><td class="num">${p.horasPlaca||0}</td><td><span class="badge ${usoBadge(inferUsoEquipo(p))}">${usoLbl(inferUsoEquipo(p))}</span></td><td class="num">${p.tempObj||0}</td>
     <td>${p.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
     <td><button class="btn sm ghost" onclick="openPresetModal(${p.id})">✎</button> <button class="btn sm ghost" onclick="delPreset(${p.id})">✕</button></td>
-  </tr>`).join('')||'<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets que coincidan con el filtro</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets que coincidan con el filtro</td></tr>';
 }
 function openPresetModal(id){
-  const p=id?DB.data.presets.find(x=>x.id===id):{id:Date.now(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,activo:true};
+  const p=id?DB.data.presets.find(x=>x.id===id):{id:Date.now(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true};
+  const uso=inferUsoEquipo(p);
   openModal('Preset',`
     <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(p.nombre)}"></div>
     <div class="grid-2">
@@ -1759,10 +1773,11 @@ function openPresetModal(id){
       <div class="form-field"><label class="form-label">Kg/unidad</label><input class="input" id="f_kgRef" type="number" step="0.1" value="${p.kgRef||0}"></div>
       <div class="form-field"><label class="form-label">Horas Túnel</label><input class="input" id="f_horasTunel" type="number" step="0.5" value="${p.horasTunel||0}"></div>
       <div class="form-field"><label class="form-label">Horas Placa</label><input class="input" id="f_horasPlaca" type="number" step="0.5" value="${p.horasPlaca||0}"></div>
+      <div class="form-field"><label class="form-label">Uso del preset</label><select class="select" id="f_usoEquipo"><option value="ambos" ${uso==='ambos'?'selected':''}>Ambos (Túnel y Placa)</option><option value="tunel" ${uso==='tunel'?'selected':''}>Solo Túnel</option><option value="placa" ${uso==='placa'?'selected':''}>Solo Placa</option></select></div>
       <div class="form-field"><label class="form-label">Tº objetivo</label><input class="input" id="f_tempObj" type="number" value="${p.tempObj||0}"></div>
       <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${p.activo?'selected':''}>Activo</option><option value="0" ${!p.activo?'selected':''}>Inactivo</option></select></div>
     </div>`,async ()=>{
-    const n={id:p.id,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
+    const n={id:p.id,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
     if(!_sb){
       toast('Sin Supabase: guardando solo en este equipo.','warn');
