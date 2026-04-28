@@ -6561,11 +6561,26 @@ setInterval(()=>{renderEquipos();},60000);
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
    - Auto-push en modo ahorro (debounce + deduplicación) de moldes/pesajes/armado tras rtSave
    - Realtime: escucha cambios remotos y actualiza UI
+   - Misma clave localStorage que admin (`friosur_sb`): URL/key por defecto embebidos; si el admin guardó otro proyecto, la tablet usa ese (mismo patrón que UCO admin_cfg + defaults).
    ══════════════════════════════════════════════════════════════ */
-const SB_URL='https://etiltewnmupnifedhyld.supabase.co';
-const SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
+const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
+const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
+const TB_SB_STORAGE_KEY='friosur_sb';
+function _tbResolveSupabaseCreds(){
+  try{
+    const j=JSON.parse(localStorage.getItem(TB_SB_STORAGE_KEY)||'{}');
+    const url=(j.url&&String(j.url).trim())||TB_SB_DEFAULT_URL;
+    const key=(j.key&&String(j.key).trim())||TB_SB_DEFAULT_KEY;
+    return{url,key};
+  }catch(e){
+    return{url:TB_SB_DEFAULT_URL,key:TB_SB_DEFAULT_KEY};
+  }
+}
 let _tbSb=null;
-try{if(window.supabase)_tbSb=window.supabase.createClient(SB_URL,SB_ANON);}catch(e){console.warn('[sb] init',e);}
+try{
+  const _c=_tbResolveSupabaseCreds();
+  if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key);
+}catch(e){console.warn('[sb] init',e);}
 /** Ahorro de mensajes Realtime en tablet: '1'/ausente = no escuchar moldes·pesajes por WS; '0' = escuchar cambios remotos. */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')!=='0';}catch(e){return true;}}
 
