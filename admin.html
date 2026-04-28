@@ -944,20 +944,40 @@ let _charts={};
 let _dashSlicersUserCleared=false;
 let _dashDefaultsApplied=false;
 
+/** Inicio del día civil local (evita que `YYYY-MM-DD` en UTC desplace el día en Chile). */
+function _ymdToLocalStart(ymd){
+  const m=String(ymd||'').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  return new Date(+m[1],+m[2]-1,+m[3],0,0,0,0);
+}
+function _ymdToLocalEnd(ymd){
+  const m=String(ymd||'').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  return new Date(+m[1],+m[2]-1,+m[3],23,59,59,999);
+}
 function _recDate(r){
-  if(r.ts)return new Date(r.ts);
-  if(r.fecha)return new Date(r.fecha);
+  if(r&&r.ts)return new Date(r.ts);
+  if(r&&r.fecha){
+    const m=String(r.fecha).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m)return new Date(+m[1],+m[2]-1,+m[3],0,0,0,0);
+    const d=new Date(r.fecha);
+    return isNaN(d.getTime())?null:d;
+  }
   return null;
 }
 function _filterRecs(recs){
   return recs.filter(r=>{
-    if(_filters.turno&&r.turno!==_filters.turno)return false;
+    if(_filters.turno){
+      const a=String(_filters.turno||'').toLowerCase();
+      const b=String(r.turno||'').toLowerCase();
+      if(b!==a)return false;
+    }
     if(_filters.especies.size&&!_filters.especies.has(r.especie))return false;
     if(_filters.lineas.size&&!_filters.lineas.has(r.linea))return false;
     if(_filters.desde||_filters.hasta){
       const d=_recDate(r);if(!d)return true;
-      if(_filters.desde&&d<_filters.desde)return false;
-      if(_filters.hasta){const h=new Date(_filters.hasta);h.setHours(23,59,59,999);if(d>h)return false;}
+      if(_filters.desde&&d.getTime()<_filters.desde.getTime())return false;
+      if(_filters.hasta&&d.getTime()>_filters.hasta.getTime())return false;
     }
     return true;
   });
@@ -1213,8 +1233,8 @@ function toggleSlicer(type,val,el){
 function applyFilters(){
   const d=document.getElementById('slFechaDesde').value;
   const h=document.getElementById('slFechaHasta').value;
-  _filters.desde=d?new Date(d+'T00:00:00'):null;
-  _filters.hasta=h?new Date(h+'T00:00:00'):null;
+  _filters.desde=d?_ymdToLocalStart(d):null;
+  _filters.hasta=h?_ymdToLocalEnd(h):null;
   _filters.turno=document.getElementById('slTurno').value;
   renderKPIs();renderDashGrid();
   try{if(document.getElementById('dashLastKgSync'))dashRefreshKgSummary({silent:true});}catch(e){}
