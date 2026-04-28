@@ -200,9 +200,12 @@ end $$;
 --   (4,'operario',    '{"moldes":{"read":true,"write":false},"pesaje":{"read":true,"write":false}}')
 -- on conflict (id) do nothing;
 
-
-https://etiltewnmupnifedhyld.supabase.co/rest/v1/
-
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ
-
-
+-- ═══════════════ REALTIME (index.html escucha cambios del admin) ══
+-- En Dashboard → Database → Publications → supabase_realtime, añadir tablas,
+-- o ejecutar (idempotente si ya están):
+--   alter publication supabase_realtime add table presets;
+--   alter publication supabase_realtime add table trabajadores;
+--   alter publication supabase_realtime add table turnos;
+--   alter publication supabase_realtime add table equipos;
+-- Sin esto, la tablet sigue actualizando al volver a la pestaña (pull cada ~15s)
+-- y al abrir la app; el push en vivo requiere Realtime + RLS que permita SELECT al rol que use el cliente.

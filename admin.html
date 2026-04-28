@@ -620,7 +620,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 
 <!-- ═══ SUPABASE ═══ -->
 <div class="page" id="page-supabase">
-  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta backend para sincronizar datos y habilitar multi-usuario</div></div></div>
+  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos y registros a la nube. Los presets al guardarlos ya se envían a Supabase; «Traer del servidor» solo si necesitas recuperar datos desde otra PC.</div></div></div>
   <div class="grid-2">
     <div class="card">
       <div class="card-hdr"><div class="card-title">🔌 Conexión</div><span class="badge info" id="sbBadge">No conectado</span></div>
@@ -629,11 +629,12 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       <div style="display:flex;gap:8px;">
         <button class="btn" onclick="connectSupabase()">Conectar</button>
         <button class="btn ghost" onclick="testSupabase()">Probar</button>
-        <button class="btn ghost" onclick="pushAll()">⬆ Subir datos</button>
-        <button class="btn ghost" onclick="pullAll()">⬇ Descargar</button>
+        <button class="btn ghost" onclick="pushAll()">⬆ Subir todo a Supabase</button>
+        <button type="button" class="btn ghost" onclick="pullAll()" title="Sobrescribe esta PC con lo que hay en el servidor. No hace falta para el uso diario.">⬇ Traer del servidor</button>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:12px;">
-        Las credenciales se guardan en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>). Para producción usa RLS y una función serverless que proteja la anon key.
+        Flujo habitual: editar en Admin y guardar (p. ej. presets) o usar <strong>Subir todo</strong>. No se descarga nada al iniciar sesión.
+        Las credenciales van en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>); en producción usa RLS.
       </div>
     </div>
   </div>
@@ -1714,19 +1715,45 @@ function openPresetModal(id){
       <div class="form-field"><label class="form-label">Horas Placa</label><input class="input" id="f_horasPlaca" type="number" step="0.5" value="${p.horasPlaca||0}"></div>
       <div class="form-field"><label class="form-label">Tº objetivo</label><input class="input" id="f_tempObj" type="number" value="${p.tempObj||0}"></div>
       <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${p.activo?'selected':''}>Activo</option><option value="0" ${!p.activo?'selected':''}>Inactivo</option></select></div>
-    </div>`,()=>{
+    </div>`,async ()=>{
     const n={id:p.id,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
+    if(!_sb){
+      toast('Sin Supabase: guardando solo en este equipo.','warn');
+      sbLog('Preset sin nube (_sb null) — Conectar en pestaña Supabase',false);
+    }else{
+      sbLog('→ Enviando preset id='+n.id+' a Supabase…');
+      const{error}=await sbUpsertPresets([n]);
+      if(error){
+        const detail=[error.message,error.details,error.hint].filter(Boolean).join(' — ');
+        toast('Supabase no guardó el preset: '+detail,'err');
+        sbLog('Upsert preset falló: '+detail,false);
+        console.error('[presets upsert]',error,n);
+        return false;
+      }
+      sbLog('← Preset id='+n.id+' guardado en Supabase OK');
+    }
     const i=DB.data.presets.findIndex(x=>x.id===n.id);
     if(i>=0)DB.data.presets[i]=n;else DB.data.presets.push(n);
-    DB.save();renderPresets();toast('Preset guardado','success');return true;
+    DB.save();renderPresets();
+    if(_sb)toast('Preset guardado en Supabase (la tablet lo verá al sincronizar)','success');
+    return true;
   });
 }
-function delPreset(id){if(!confirm('¿Eliminar preset?'))return;DB.data.presets=DB.data.presets.filter(p=>p.id!==id);DB.save();renderPresets();}
+async function delPreset(id){
+  if(!confirm('¿Eliminar preset?'))return;
+  if(_sb){
+    const{error}=await sbDeletePresetRemote(id);
+    if(error){toast('Supabase no permitió borrar: '+error.message+' (preset no eliminado)','err');return;}
+  }else if(!confirm('Sin Supabase conectado: el borrado será solo local. ¿Continuar?'))return;
+  DB.data.presets=DB.data.presets.filter(p=>p.id!==id);
+  DB.save();renderPresets();
+  toast(_sb?'Preset eliminado (Supabase y local)':'Preset eliminado (solo local)','success');
+}
 
 /* ════════════ SYNC DESDE ASISTENCIA ════════════ */
 const SYNC_KEY='friosur_sync_cfg_v1';
-const SYNC_DEFAULT={url:'https://qvtztwqbbbzortkodtla.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2dHp0d3FiYmJ6b3J0a29kdGxhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NDA4NTMsImV4cCI6MjA4OTAxNjg1M30.zMcRweclE46qwOCTduo7sLfduZxXjKvFLmim7nZyiok',table:'empleados'};
+const SYNC_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ',table:'empleados'};
 function _syncCfg(){try{const s=JSON.parse(localStorage.getItem(SYNC_KEY));return(s&&s.url)?s:SYNC_DEFAULT;}catch(e){return SYNC_DEFAULT;}}
 function _syncLog(msg,ok){
   const el=document.getElementById('syncLog');if(!el)return;
@@ -2089,10 +2116,9 @@ async function applySession(session){
   applyRolePermissions();
   updateUserBadge();
   sbLog('Sesión: '+_currentUser.email+' ('+_currentUser.rol+')');
-  // Re-suscribir realtime con token autenticado y arrancar polling de respaldo
+  // Sin pull automático: el admin sube a Supabase al guardar / «Subir todo». Traer datos es manual (pestaña Supabase).
   setTimeout(()=>{
-    if(typeof pullAll==='function')pullAll();
-    sbSubscribeRealtime(); // reconectar canales con JWT autenticado
+    sbSubscribeRealtime();
     if(typeof sbStartPoll==='function')sbStartPoll();
   },400);
 }
@@ -2333,6 +2359,18 @@ const SB_MAP={
 function _sbRows(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.out);}
 function _sbParse(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.in);}
 
+async function sbUpsertPresets(rows){
+  if(!_sb)return{error:new Error('Sin Supabase')};
+  const mapped=_sbRows('presets',rows);
+  const{data,error}=await _sb.from('presets').upsert(mapped,{onConflict:'id'}).select('id');
+  return{data,error};
+}
+async function sbDeletePresetRemote(id){
+  if(!_sb||id==null)return{error:null};
+  const{error}=await _sb.from('presets').delete().eq('id',id);
+  return{error};
+}
+
 async function pushAll(){
   if(!_sb){toast('Conecta primero','warn');return;}
   document.getElementById('sbDot').className='status-dot syncing';
@@ -2370,8 +2408,8 @@ async function pullAll(){
     }
     DB.save();if(RT.save)RT.save();
     renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
-    toast('Datos descargados','success');
-  }catch(e){toast('Error pull: '+e.message,'err');sbLog('Pull error: '+e.message,false);}
+    toast('Datos traídos desde Supabase','success');
+  }catch(e){toast('Error al traer datos: '+e.message,'err');sbLog('Pull error: '+e.message,false);}
   document.getElementById('sbDot').className='status-dot online';
 }
 
@@ -2392,7 +2430,20 @@ function openModal(title,body,cb){
   document.body.appendChild(m);
 }
 function closeModal(){const m=document.getElementById('__modal');if(m)m.remove();_modalCallback=null;}
-function confirmModal(){if(_modalCallback){const ok=_modalCallback();if(ok!==false)closeModal();}else closeModal();}
+function confirmModal(){
+  if(!_modalCallback){closeModal();return;}
+  const ret=_modalCallback();
+  if(ret&&typeof ret.then==='function'){
+    ret.then(ok=>{if(ok!==false)closeModal();}).catch(e=>{
+      const m=e&&e.message?e.message:String(e);
+      toast('Error al guardar: '+m,'err');
+      sbLog('Modal async: '+m,false);
+      console.error(e);
+    });
+    return;
+  }
+  if(ret!==false)closeModal();
+}
 
 function tabletLink(){window.open('index.html','_blank');}
 

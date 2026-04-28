@@ -2205,7 +2205,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
             </div>
             <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Presets de productos</div>
-            <div style="font-size:12px;color:var(--slate-500);">Molde, túnel y placa con kilos estándar</div>
+            <div style="font-size:12px;color:var(--slate-500);">Catálogo desde Supabase — edición solo en Admin</div>
             <div style="margin-top:12px;"><span class="badge slate" id="badgePresets">0 activos</span></div>
           </div>
         </button>
@@ -2280,11 +2280,10 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
         </button>
         <div style="flex:1;">
           <div class="section-title">Presets de productos</div>
-          <div class="section-sub">Configura molde, túnel y placa con kilos estándar y horas de congelación</div>
+          <div class="section-sub">Solo lectura en tablet. Crea o edita en <strong>Admin → Productos / Presets</strong>; los cambios se guardan en Supabase y se aplican aquí al sincronizar.</div>
         </div>
-        <button class="btn btn-primary" onclick="editPreset(null)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nuevo preset
+        <button type="button" class="btn ghost" onclick="if(typeof TBSync!=='undefined'&&TBSync.pullCatalogs){TBSync.pullCatalogs();showToast('Actualizando catálogo…','info');}" title="Traer últimos datos de Supabase">
+          ↻ Actualizar desde nube
         </button>
       </div>
       <div class="cfg-toolbar">
@@ -2575,7 +2574,7 @@ function coercePresetFields(p){
   if((p.horasPlaca==null||p.horasPlaca==='')&&p.horas_placa!=null)p.horasPlaca=+p.horas_placa;
   if((p.tempObj==null||p.tempObj==='')&&p.temp_obj!=null)p.tempObj=+p.temp_obj;
 }
-/** Tras pull de Supabase: conservar lo ya guardado en localStorage (p. ej. admin) para el mismo id de preset */
+/** Tras pull: la nube manda en campos coincidentes; se mantienen presets solo locales (aún no en Supabase) */
 function mergePresetsWithLocalSnapshot(remoteRows){
   let localList=[];
   try{
@@ -2595,7 +2594,7 @@ function mergePresetsWithLocalSnapshot(remoteRows){
     coercePresetFields(r);
     const loc=localById.get(r.id);
     seen.add(r.id);
-    out.push(loc?Object.assign({},r,loc,{id:r.id}):r);
+    out.push(loc?Object.assign({},loc,r,{id:r.id}):r);
   });
   localById.forEach((loc,id)=>{if(!seen.has(id))out.push(loc);});
   return out;
@@ -2788,7 +2787,7 @@ function renderPresets(){
     return norm(p.nombre+' '+p.destino+' '+p.calibre+' '+p.especie).includes(q);
   });
   if(!items.length){
-    list.innerHTML=`<div class="cfg-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><div class="t">Sin presets</div><div>Crea uno con el botón "Nuevo preset"</div></div>`;
+    list.innerHTML=`<div class="cfg-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><div class="t">Sin presets</div><div>Defínalos en Admin → Productos / Presets (Supabase).</div></div>`;
     return;
   }
   list.innerHTML=items.map(p=>{
@@ -2805,64 +2804,15 @@ function renderPresets(){
         <div class="ci-meta"><span class="mono">${esc(p.destino)}</span><span class="mono">${esc(p.calibre)}</span> ${esc(p.especie)} · ${tipoL} · ${esc(p.formato||'')}</div>
         <div class="ci-meta" style="margin-top:3px;">❄️ Túnel: <strong>${p.horasTunel}h</strong> · Placa: <strong>${p.horasPlaca}h</strong> · ⚖️ <strong>${p.kgRef}kg/u</strong> · ${p.tempObj}°C</div>
       </div>
-      <div class="ci-acts">
-        <button class="btn ghost" onclick="editPreset(${p.id})">Editar</button>
-        <button class="btn btn-danger-outline" onclick="deletePreset(${p.id})">Eliminar</button>
-      </div>
     </div>`;
   }).join('');
 }
-function editPreset(id){
-  const p=id?DB.data.presets.find(x=>x.id===id):{nombre:'',destino:'POLONIA',calibre:'S/C',especie:'MERLUZA DE COLA',tipo:'molde',formato:'BLOQUE',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,activo:true};
-  if(!p)return;
-  const dd=DB.data._dicts;
-  const optsSel=(field,curr)=>{
-    const list=dd[field]||[];
-    if(curr&&!list.includes(curr))list.push(curr);
-    return list.map(v=>`<option value="${esc(v)}" ${v===curr?'selected':''}>${esc(v)}</option>`).join('')+
-      `<option value="__new__" style="color:var(--brand);font-weight:700;">+ Agregar nuevo…</option>`;
-  };
-  const onNew=`onchange="if(this.value==='__new__'){const v=prompt('Nuevo valor:');if(v&&v.trim()){DB.addDictValue('@F@',v.trim());const o=document.createElement('option');o.value=v.trim();o.textContent=v.trim();o.selected=true;this.insertBefore(o,this.lastElementChild);}else{this.value=this.options[0].value;}}"`;
-  const selFor=(field,curr)=>`<select id="f_${field}" ${onNew.replace('@F@',field)}>${optsSel(field,curr)}</select>`;
-  openModal(id?'Editar preset':'Nuevo preset',`
-    <div class="form-grid">
-      <div class="fg-full"><label>Nombre</label><input id="f_nombre" value="${esc(p.nombre)}" placeholder="Filete Merluza 170-UP Bloque"></div>
-      <div><label>Destino</label>${selFor('destino',p.destino)}</div>
-      <div><label>Calibre</label>${selFor('calibre',p.calibre)}</div>
-      <div><label>Especie</label>${selFor('especie',p.especie)}</div>
-      <div><label>Tipo <span style="font-weight:400;color:var(--text-3);font-size:11px;">(molde → placas · pallet/carro/castillo → túneles)</span></label><select id="f_tipo"><option value="molde" ${p.tipo==='molde'?'selected':''}>Molde</option><option value="pallet" ${p.tipo==='pallet'?'selected':''}>Pallet</option><option value="carro" ${p.tipo==='carro'?'selected':''}>Carro</option><option value="castillo" ${p.tipo==='castillo'?'selected':''}>Castillo</option></select></div>
-      <div><label>Formato</label>${selFor('formato',p.formato)}</div>
-      <div><label>Kg referencia /unidad</label><input id="f_kgRef" type="number" step="0.1" value="${p.kgRef}"></div>
-      <div><label>Horas túnel</label><input id="f_horasTunel" type="number" step="0.5" value="${p.horasTunel}"></div>
-      <div><label>Horas placa</label><input id="f_horasPlaca" type="number" step="0.5" value="${p.horasPlaca}"></div>
-      <div><label>Temp. objetivo (°C)</label><input id="f_tempObj" type="number" step="1" value="${p.tempObj}"></div>
-      <div class="fg-full"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="f_activo" ${p.activo?'checked':''} style="width:18px;height:18px;accent-color:var(--brand);"> Preset activo (visible en registros)</label></div>
-    </div>`,()=>{
-    const nombre=document.getElementById('f_nombre').value.trim();
-    if(!nombre){showToast('Ingresa nombre','error');return false;}
-    const obj={
-      id:id||DB.nextId('presets'),
-      nombre,
-      destino:document.getElementById('f_destino').value,
-      calibre:document.getElementById('f_calibre').value.trim()||'S/C',
-      especie:document.getElementById('f_especie').value.trim(),
-      tipo:document.getElementById('f_tipo').value,
-      formato:document.getElementById('f_formato').value,
-      kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,
-      horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,
-      horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,
-      tempObj:parseInt(document.getElementById('f_tempObj').value)||-18,
-      activo:document.getElementById('f_activo').checked,
-    };
-    if(id){const i=DB.data.presets.findIndex(x=>x.id===id);DB.data.presets[i]=obj;} else {DB.data.presets.push(obj);}
-    DB.save();renderPresets();if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();showToast(id?'Preset actualizado':'Preset creado','success');
-  });
+/** Edición de presets solo en admin.html (Supabase). La tablet solo consulta. */
+function editPreset(_id){
+  showToast('Los presets se crean y editan en Admin → Productos / Presets (se guardan en Supabase).','info');
 }
-function deletePreset(id){
-  const p=DB.data.presets.find(x=>x.id===id);if(!p)return;
-  if(!confirm('¿Eliminar preset "'+p.nombre+'"?'))return;
-  DB.data.presets=DB.data.presets.filter(x=>x.id!==id);
-  DB.save();renderPresets();if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();showToast('Preset eliminado','success');
+function deletePreset(_id){
+  showToast('Para eliminar un preset usa Admin → Productos / Presets.','info');
 }
 window.editPreset=editPreset;window.deletePreset=deletePreset;window.renderPresets=renderPresets;
 
@@ -3048,7 +2998,7 @@ window.editEquipo=editEquipo;window.deleteEquipo=deleteEquipo;window.renderEquip
 /* ═══ ROLES (matriz de permisos) ═════════════════════════════ */
 const PERM_DEFS=[
   {k:'config',l:'Ver Configuración'},
-  {k:'presets',l:'Gestionar Presets'},
+  {k:'presets',l:'Ver catálogo Presets (edita en Admin)'},
   {k:'trabajadores',l:'Gestionar Trabajadores'},
   {k:'turnos',l:'Gestionar Turnos'},
   {k:'equipos',l:'Gestionar Equipos'},
@@ -3141,7 +3091,10 @@ function importJSON(input){
       const d=p.data||p;
       if(!d.presets||!d.trabajadores){throw new Error('Archivo inválido');}
       if(!confirm('Esto reemplazará TODA la configuración actual. ¿Continuar?')){input.value='';return;}
-      DB.data=d;DB._heal();DB.save();
+      const preservedPresets=JSON.parse(JSON.stringify(DB.data.presets||[]));
+      DB.data=d;DB._heal();
+      DB.data.presets=preservedPresets;
+      DB.save();
       if(p.tema)setTheme(p.tema);
       updateBadges();
       if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
@@ -3423,7 +3376,7 @@ function renderMRegPresets(){
     }
   }
   if(!presets.length){
-    grid.innerHTML=`<div style="color:var(--text-3);padding:20px;text-align:center;">${especie?'Sin presets para <strong>'+esc(especie)+'</strong> — asigna especie en Ajustes → Presets':'Sin presets activos — crea uno en Ajustes → Presets'}</div>`;
+    grid.innerHTML=`<div style="color:var(--text-3);padding:20px;text-align:center;">${especie?'Sin presets para <strong>'+esc(especie)+'</strong> — revisa especie en Admin → Presets':'Sin presets activos — créalos en Admin → Productos / Presets'}</div>`;
     return;
   }
   grid.innerHTML=presets.map(p=>`
@@ -3717,7 +3670,7 @@ function renderGRegPresets(){
   const grid=document.getElementById('gRegPresetGrid');if(!grid)return;
   const presets=DB.data.presets.filter(p=>p.activo&&p.tipo!=='molde');
   document.getElementById('gRegPresetCount').textContent=presets.length+' presets (pallet/carro/castillo)';
-  if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets generales — crea uno en Ajustes → Presets con tipo pallet/carro/castillo</div>';return;}
+  if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets generales — créalos en Admin con tipo pallet/carro/castillo</div>';return;}
   grid.innerHTML=presets.map(p=>`
     <button type="button" class="preset-card ${String(RT.selPresetG)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetG(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
@@ -6020,8 +5973,15 @@ window.addEventListener('storage',e=>{
   if(e.key!==STORE_KEY||e.newValue==null)return;
   syncCatalogFromStorage({source:'storage',force:true});
 });
+let _lastSbVisiblePull=0;
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible')syncCatalogFromStorage({source:'visibility'});
+  if(document.visibilityState!=='visible')return;
+  syncCatalogFromStorage({source:'visibility'});
+  if(!_tbSb||typeof TBSync==='undefined'||!TBSync.pullCatalogs)return;
+  const now=Date.now();
+  if(now-_lastSbVisiblePull<15000)return;
+  _lastSbVisiblePull=now;
+  TBSync.pullCatalogs();
 });
 
 // Re-render equipos cada minuto para progreso en vivo
@@ -6032,7 +5992,7 @@ setInterval(()=>{renderEquipos();},60000);
    ──────────────────────────────────────────────────────────────
    - Conecta automáticamente al inicio
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
-   - Auto-push (debounced 2s) de moldes/pesajes/generales tras cada rtSave
+   - Auto-push (debounced 2s) de moldes/pesajes/armado tras cada rtSave (presets solo desde Admin)
    - Realtime: escucha cambios remotos y actualiza UI
    ══════════════════════════════════════════════════════════════ */
 const SB_URL='https://etiltewnmupnifedhyld.supabase.co';
@@ -6121,6 +6081,7 @@ const TBSync={
       const today=new Date().toISOString().slice(0,10);
       const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
       const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
+      // Presets no se suben desde tablet — origen de verdad: Admin + Supabase
       // moldes (dejar pendiente + unificar con generales marcándolos esGeneral)
       const moldesRows=(RT.moldes||[]).map(r=>({
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
@@ -6166,6 +6127,18 @@ const TBSync={
   },
   subscribe(){
     if(!_tbSb)return;
+    if(this._rtSubscribed)return;
+    this._rtSubscribed=true;
+    const bumpRemoteCatalog=()=>{
+      clearTimeout(this._debRemoteCat);
+      this._debRemoteCat=setTimeout(()=>{this.pullCatalogs();},500);
+    };
+    _tbSb.channel('tb-catalog-sync')
+      .on('postgres_changes',{event:'*',schema:'public',table:'presets'},bumpRemoteCatalog)
+      .on('postgres_changes',{event:'*',schema:'public',table:'trabajadores'},bumpRemoteCatalog)
+      .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
+      .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
+      .subscribe();
     // moldes remotos
     _tbSb.channel('tb-moldes').on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
       const rec=p.new||p.old;if(!rec)return;
@@ -6224,9 +6197,16 @@ async function tbInitAuth(){
   if(!_tbSb)return;
   const{data:{session}}=await _tbSb.auth.getSession();
   if(session){await tbApplySession(session);}else{tbShowAuth();}
+  try{
+    await TBSync.pullCatalogs();
+    TBSync.subscribe();
+  }catch(e){console.warn('[tb] pull catálogo inicial',e);}
   _tbSb.auth.onAuthStateChange(async(event,sess)=>{
     if(event==='SIGNED_OUT'){_tbUser=null;tbShowAuth();}
-    else if(event==='SIGNED_IN'&&sess){await tbApplySession(sess);}
+    else if(event==='SIGNED_IN'&&sess){
+      await tbApplySession(sess);
+      try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
+    }
   });
 }
 async function tbApplySession(session){
@@ -6236,9 +6216,6 @@ async function tbApplySession(session){
     _tbUser={id:session.user.id,email:session.user.email,rol:(data&&data.rol)||'operario',nombre:(data&&data.nombre)||session.user.email.split('@')[0]};
   }catch(e){_tbUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
   tbUpdateUserBadge();
-  // Arranca sync: pull primero, luego suscribir (NO pushAll en login — evita sobreescribir otros dispositivos)
-  await TBSync.pullCatalogs();
-  TBSync.subscribe();
 }
 async function tbDoLogin(){
   const email=document.getElementById('tbAuthEmail').value.trim();
