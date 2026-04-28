@@ -6105,7 +6105,7 @@ setInterval(()=>{renderEquipos();},60000);
    ──────────────────────────────────────────────────────────────
    - Conecta automáticamente al inicio
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
-   - Auto-push (debounced 2s) de moldes/pesajes/armado tras cada rtSave (presets solo desde Admin)
+   - Auto-push en modo ahorro (debounce + deduplicación) de moldes/pesajes/armado tras rtSave
    - Realtime: escucha cambios remotos y actualiza UI
    ══════════════════════════════════════════════════════════════ */
 const SB_URL='https://etiltewnmupnifedhyld.supabase.co';
@@ -6114,6 +6114,10 @@ let _tbSb=null;
 try{if(window.supabase)_tbSb=window.supabase.createClient(SB_URL,SB_ANON);}catch(e){console.warn('[sb] init',e);}
 
 const TBSync={
+  _pushLastAt:0,
+  _pushMinGapMs:8000,
+  _pushDebounceMs:6000,
+  _lastSig:{moldes:'',pesajes:'',armado:''},
   onlineBadge(){
     try{
       const tb=document.querySelector('.topbar,[data-topbar]')||document.body;
@@ -6184,8 +6188,14 @@ const TBSync={
   _pushQueued:false,
   schedulePush(){
     if(!_tbSb||this._pushQueued)return;
+    const now=Date.now();
+    const wait=Math.max(this._pushDebounceMs,(this._pushLastAt+this._pushMinGapMs)-now);
     this._pushQueued=true;
-    setTimeout(()=>{this._pushQueued=false;this.pushAll();},2000);
+    setTimeout(()=>{this._pushQueued=false;this.pushAll();},wait);
+  },
+  _sigRows(rows,pk){
+    const list=(rows||[]).slice().sort((a,b)=>String(a[pk]||'').localeCompare(String(b[pk]||'')));
+    return JSON.stringify(list);
   },
   async pushAll(){
     if(!_tbSb)return;
@@ -6204,9 +6214,11 @@ const TBSync={
         cant:r.cant||null,pendiente:r.pendiente||null,kg:r.kg||null,guia:r.guia||null,
         fecha:r.fecha||today
       }));
-      if(moldesRows.length){
+      const sigM=this._sigRows(moldesRows,'id');
+      if(moldesRows.length&&sigM!==this._lastSig.moldes){
         const{error}=await _tbSb.from('moldes').upsert(moldesRows,{onConflict:'id'});
         if(error)console.warn('[sb push moldes]',error.message);
+        else this._lastSig.moldes=sigM;
       }
       const pesajesRows=(RT.pesajes||[]).map(r=>({
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
@@ -6214,9 +6226,11 @@ const TBSync={
         especie:r.especie||null,tipo:r.tipo||null,kg:r.kg||null,guia:r.guia||null,
         fecha:r.fecha||today
       }));
-      if(pesajesRows.length){
+      const sigP=this._sigRows(pesajesRows,'id');
+      if(pesajesRows.length&&sigP!==this._lastSig.pesajes){
         const{error}=await _tbSb.from('pesajes').upsert(pesajesRows,{onConflict:'id'});
         if(error)console.warn('[sb push pesajes]',error.message);
+        else this._lastSig.pesajes=sigP;
       }
       // ── Push armado de línea ──────────────────────────────────
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
@@ -6231,10 +6245,13 @@ const TBSync={
           fecha:d.fecha||'',
           updated_at:new Date().toISOString()
         }));
-      if(armadoRows.length){
+      const sigA=this._sigRows(armadoRows,'linea');
+      if(armadoRows.length&&sigA!==this._lastSig.armado){
         const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea'});
         if(armErr)console.warn('[sb push armado_lineas]',armErr.message);
+        else this._lastSig.armado=sigA;
       }
+      this._pushLastAt=Date.now();
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pushAll]',e);this.setStatus('⚠ Error','#dc2626');}
   },
@@ -6259,7 +6276,8 @@ const TBSync={
       const i=RT.moldes.findIndex(r=>String(r.id)===String(rec.id));
       if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);}
       else{if(i>=0)RT.moldes[i]=local;else RT.moldes.unshift(local);}
-      rtSave();
+      // Guardar local SIN re-disparar push (evita loop Realtime -> push -> Realtime)
+      _rtSaveOrig&&_rtSaveOrig();
       if(typeof renderMoldesTable==='function')renderMoldesTable();
       if(typeof renderPorCargar==='function')renderPorCargar();
     }).subscribe();
@@ -6269,7 +6287,8 @@ const TBSync={
       const i=RT.pesajes.findIndex(r=>String(r.id)===String(rec.id));
       if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);}
       else{if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);}
-      rtSave();
+      // Guardar local SIN re-disparar push (evita loop Realtime -> push -> Realtime)
+      _rtSaveOrig&&_rtSaveOrig();
       if(typeof renderPesajesTable==='function')renderPesajesTable();
     }).subscribe();
     // ── Realtime armado de línea ──────────────────────────────
