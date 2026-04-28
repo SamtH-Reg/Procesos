@@ -650,6 +650,12 @@ thead th{
   white-space:nowrap;
   position:sticky;top:0;z-index:1;
 }
+.tbl-wrap thead th{
+  background:var(--brand,#1e3a8a);
+  color:#fff;
+  border-bottom:1px solid rgba(255,255,255,.14);
+}
+.tbl-wrap thead th.num,.tbl-wrap thead th.center-head{text-align:center;}
 tbody td{
   padding:14px;
   border-bottom:1px solid var(--border);
@@ -658,7 +664,16 @@ tbody td{
 }
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:active{background:var(--surface-alt);}
-td.num{font-family:var(--mono);font-weight:600;text-align:right;}
+td.num,th.num{font-family:var(--mono);font-weight:600;text-align:center;}
+.tbl-wrap tfoot td,.tbl-wrap tfoot th{
+  background:#eceef2;
+  color:#64748b;
+  font-style:italic;
+  font-weight:600;
+  padding:12px 14px;
+  border-top:1px solid var(--border);
+}
+.tbl-wrap tfoot td.num,.tbl-wrap tfoot th.num{color:#64748b;text-align:center;}
 .row-icon-btn{
   width:36px;height:36px;border-radius:8px;
   background:var(--surface-alt);
@@ -993,7 +1008,7 @@ td.num{font-family:var(--mono);font-weight:600;text-align:right;}
   .worker-badge{padding:10px 12px;gap:10px;}
   .worker-avatar{width:42px;height:42px;font-size:14px;}
   .tbl-wrap{font-size:12px;}
-  thead th,tbody td{padding:10px 8px;}
+  thead th,tbody td,.tbl-wrap tfoot td,.tbl-wrap tfoot th{padding:10px 8px;}
 }
 
 /* Mobile muy pequeno */
@@ -1688,10 +1703,10 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       </div>
     </div>
 
-    <!-- MOLDES — CONSOLIDADO (kg por línea×hora) -->
+    <!-- MOLDES — CONSOLIDADO (kg acumulados por persona) -->
     <div id="mConsol" class="mold-tab hidden">
       <div class="card">
-        <div class="card-hdr"><div class="card-title">Consolidado — Kg por Línea</div><div class="card-sub" id="mConsolSub">—</div></div>
+        <div class="card-hdr"><div class="card-title">Consolidado — Kg por persona</div><div class="card-sub" id="mConsolSub">—</div></div>
         <div class="tbl-wrap" id="mConsolWrap"></div>
       </div>
     </div>
@@ -2138,6 +2153,15 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <div class="card">
         <div class="card-hdr"><div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Resumen por hora — Moldes + Pesaje</div><div class="card-sub">Hora por hora del turno</div></div>
         <div class="card-body" style="padding:0;">
+          <div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
+            <label class="form-label" style="margin:0;">Turno de línea</label>
+            <select class="select" id="analHoraFiltroTurno" style="max-width:260px;" onchange="renderAnalisis()">
+              <option value="todos" selected>Todos</option>
+              <option value="dia">Día (armado moldes / pesaje)</option>
+              <option value="noche">Noche (armado moldes / pesaje)</option>
+            </select>
+            <span style="font-size:11px;color:var(--text-3);">Aplica a moldes y pesajes según el turno guardado en cada línea.</span>
+          </div>
           <div class="tbl-wrap"><table>
             <thead><tr><th>Hora</th><th class="num">Moldes</th><th class="num">Kg moldes</th><th class="num">Pesajes</th><th class="num">Kg pesados</th><th class="num">Total kg</th></tr></thead>
             <tbody id="analHoraTable"></tbody>
@@ -4422,8 +4446,19 @@ window.renderPesajeTable=renderPesajeTable;window.renderPesajesRecientes=renderP
 function renderPResumen(){
   const wrap=document.getElementById('pResumenWrap');if(!wrap)return;
   const sub=document.getElementById('pResumenSub');
-  const pes=RT.pesajes||[];
-  if(!pes.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes registrados aún.</div>';if(sub)sub.textContent='0 pesajes';return;}
+  const filtro=_readTurnoLineaFilter('pResumenFiltroTurno');
+  let pes=RT.pesajes||[];
+  if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
+  const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
+    <label class="form-label" style="margin:0;">Turno de línea</label>
+    <select class="select" id="pResumenFiltroTurno" style="max-width:260px;" onchange="renderPResumen()">
+      <option value="todos" ${filtro==='todos'?'selected':''}>Todos</option>
+      <option value="dia" ${filtro==='dia'?'selected':''}>Día (según armado)</option>
+      <option value="noche" ${filtro==='noche'?'selected':''}>Noche (según armado)</option>
+    </select>
+    <span style="font-size:11px;color:var(--text-3);max-width:520px;">Filtra por el turno del <strong>Armado de pesaje</strong> por línea.</span>
+  </div>`;
+  if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes'+(filtro!=='todos'?' con ese turno de línea':'')+'.</div>';if(sub)sub.textContent='0 pesajes'+(filtro!=='todos'?' · filtro':'');return;}
   // hours observed
   const hoursSet=new Set();
   pes.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
@@ -4445,27 +4480,22 @@ function renderPResumen(){
   const turno=rows.length?(pes[0].turno||'Turno'):'Turno';
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
-    '<th class="num" style="background:var(--brand,#1e3a8a);color:#fff;min-width:100px;">SUMA TOTAL</th></tr></thead>';
+    '<th class="num" style="min-width:100px;">SUMA TOTAL</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
     <td style="color:var(--text-2);">${esc(r.especie)}</td>
     ${hours.map(h=>`<td class="num">${fmt(r.byHour[h])||'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
-    <td class="num" style="font-weight:700;color:var(--brand,#1e3a8a);">${fmt(r.tot)}</td>
+    <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
-    <tr style="background:var(--surface-alt);font-style:italic;color:var(--text-2);">
+    <tr>
       <td colspan="2">Total ${esc(hoy)} ${esc(turno)}</td>
       ${hours.map(h=>`<td class="num">${fmt(totCol[h])}</td>`).join('')}
-      <td class="num" style="font-weight:700;color:var(--brand);">${fmt(totGrand)}</td>
-    </tr>
-    <tr style="background:var(--brand,#1e3a8a);color:#fff;">
-      <td colspan="2" style="font-weight:700;">Suma total</td>
-      ${hours.map(h=>`<td class="num" style="font-weight:700;">${fmt(totCol[h])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
   </tfoot>`;
-  wrap.innerHTML=`<table>${hdr}${body}${foot}</table>`;
-  if(sub)sub.textContent=rows.length+' operarios · '+pes.length+' pesajes · '+fmt(totGrand)+' kg';
+  wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
+  if(sub)sub.textContent=rows.length+' operarios · '+pes.length+' pesajes · '+fmt(totGrand)+' kg'+(filtro!=='todos'?' · turno línea: '+(filtro==='dia'?'Día':'Noche'):'');
 }
 
 /* ═══ PESAJE — Consolidado por Especie (pivot) ═════════════════════ */
@@ -4489,23 +4519,18 @@ function renderPConsol(){
   const totCol={};let totGrand=0;
   rows.forEach(r=>{esps.forEach(e=>{totCol[e]=(totCol[e]||0)+(r.byEsp[e]||0);});totGrand+=r.tot;});
   const hdr=`<thead>
-    <tr><th rowspan="2" style="min-width:180px;vertical-align:bottom;">NOMBRE</th><th colspan="${esps.length}" style="text-align:center;background:var(--surface-alt);text-transform:uppercase;letter-spacing:.04em;">ESPECIE (KG)</th><th rowspan="2" class="num" style="background:var(--brand,#1e3a8a);color:#fff;min-width:100px;vertical-align:bottom;">TOTAL KG</th></tr>
+    <tr><th rowspan="2" style="min-width:180px;vertical-align:bottom;">NOMBRE</th><th colspan="${esps.length}" class="center-head" style="text-transform:uppercase;letter-spacing:.04em;">ESPECIE (KG)</th><th rowspan="2" class="num" style="min-width:100px;vertical-align:bottom;">TOTAL KG</th></tr>
     <tr>${esps.map(e=>`<th class="num" style="min-width:130px;">${esc(e.toUpperCase())}</th>`).join('')}</tr>
   </thead>`;
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
     ${esps.map(e=>`<td class="num">${r.byEsp[e]?fmt(r.byEsp[e]):'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
-    <td class="num" style="font-weight:700;color:var(--brand,#1e3a8a);">${fmt(r.tot)}</td>
+    <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
-    <tr style="background:var(--surface-alt);font-style:italic;color:var(--text-2);">
+    <tr>
       <td>Subtotal</td>
       ${esps.map(e=>`<td class="num">${fmt(totCol[e])}</td>`).join('')}
-      <td class="num" style="font-weight:700;color:var(--brand);">${fmt(totGrand)}</td>
-    </tr>
-    <tr style="background:var(--brand,#1e3a8a);color:#fff;">
-      <td style="font-weight:700;">Total Kg</td>
-      ${esps.map(e=>`<td class="num" style="font-weight:700;">${fmt(totCol[e])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
   </tfoot>`;
@@ -4513,14 +4538,59 @@ function renderPConsol(){
   if(sub)sub.textContent=rows.length+' operarios · '+esps.length+' especies · '+fmt(totGrand)+' kg';
 }
 
+/* ═══ Turno de línea (armado) → filtro en resúmenes por hora ═══════ */
+function _turnoArmadoMoldesForLinea(linea){
+  if(!linea)return null;
+  if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+  const d=RT.armadoMolde&&RT.armadoMolde[linea];
+  if(!d)return null;
+  return d.turno==='noche'?'noche':'dia';
+}
+function _turnoArmadoPesajeForLinea(linea){
+  if(!linea)return null;
+  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+  const d=RT.armadoPesaje&&RT.armadoPesaje[linea];
+  if(!d)return null;
+  return d.turno==='noche'?'noche':'dia';
+}
+function _readTurnoLineaFilter(selectId){
+  const el=document.getElementById(selectId);
+  const v=(el&&el.value)||'todos';
+  return v==='dia'||v==='noche'?v:'todos';
+}
+function _moldeMatchesTurnoLineaFiltro(r,filtro){
+  if(filtro==='todos')return true;
+  const arm=_turnoArmadoMoldesForLinea(r.linea);
+  if(arm==null)return false;
+  return arm===filtro;
+}
+function _pesajeMatchesTurnoLineaFiltro(r,filtro){
+  if(filtro==='todos')return true;
+  const arm=_turnoArmadoPesajeForLinea(r.linea);
+  if(arm==null)return false;
+  return arm===filtro;
+}
+
 /* ═══ MOLDES — Resumen por Hora (pivot operario × hora) ═══════════ */
 function renderMResumen(){
   const wrap=document.getElementById('mResumenWrap');if(!wrap)return;
   const sub=document.getElementById('mResumenSub');
+  const prevFiltro=_readTurnoLineaFilter('mResumenFiltroTurno');
   const today=nowDate();
   const hoyStr=today.split('-').reverse().join('/');
-  const mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(!r.fecha||r.fecha===today));
-  if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados hoy ('+hoyStr+').</div>';if(sub)sub.textContent='0 moldes · '+hoyStr;return;}
+  let mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(!r.fecha||r.fecha===today));
+  const filtro=prevFiltro;
+  if(filtro!=='todos')mol=mol.filter(r=>_moldeMatchesTurnoLineaFiltro(r,filtro));
+  const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
+    <label class="form-label" style="margin:0;">Turno de línea</label>
+    <select class="select" id="mResumenFiltroTurno" style="max-width:260px;" onchange="renderMResumen()">
+      <option value="todos" ${filtro==='todos'?'selected':''}>Todos</option>
+      <option value="dia" ${filtro==='dia'?'selected':''}>Día (según armado)</option>
+      <option value="noche" ${filtro==='noche'?'selected':''}>Noche (según armado)</option>
+    </select>
+    <span style="font-size:11px;color:var(--text-3);max-width:520px;">Filtra por el turno configurado en <strong>Armado de línea</strong> para cada L. Los registros sin línea o sin armado no aparecen al filtrar.</span>
+  </div>`;
+  if(!mol.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados hoy ('+hoyStr+')'+(filtro!=='todos'?' con ese turno de línea':'')+'.</div>';if(sub)sub.textContent='0 moldes · '+hoyStr+(filtro!=='todos'?' · filtro activo':'');return;}
   const hoursSet=new Set();
   mol.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
   const hours=[...hoursSet].sort((a,b)=>a-b);
@@ -4541,67 +4611,62 @@ function renderMResumen(){
   const hoy=new Date().toLocaleDateString('es-CL');
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">PRODUCTO</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
-    '<th class="num" style="background:var(--brand,#1e3a8a);color:#fff;min-width:100px;">MOLDES</th>'+
-    '<th class="num" style="background:var(--brand,#1e3a8a);color:#fff;min-width:100px;">KG</th></tr></thead>';
+    '<th class="num" style="min-width:100px;">MOLDES</th>'+
+    '<th class="num" style="min-width:100px;">KG</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
     <td style="color:var(--text-2);">${esc(r.producto)}</td>
     ${hours.map(h=>`<td class="num">${fmt(r.byHour[h])||'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
-    <td class="num" style="font-weight:700;color:var(--brand,#1e3a8a);">${fmt(r.tot)}</td>
-    <td class="num" style="font-weight:700;color:var(--brand,#1e3a8a);">${fmtKg(r.totKg)}</td>
+    <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
+    <td class="num" style="font-weight:700;">${fmtKg(r.totKg)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
-    <tr style="background:var(--surface-alt);font-style:italic;color:var(--text-2);">
+    <tr>
       <td colspan="2">Total ${esc(hoy)}</td>
       ${hours.map(h=>`<td class="num">${fmt(totCol[h])}</td>`).join('')}
-      <td class="num" style="font-weight:700;color:var(--brand);">${fmt(totGrand)}</td>
-      <td class="num" style="font-weight:700;color:var(--brand);">${fmtKg(totGrandKg)}</td>
+      <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
+      <td class="num" style="font-weight:700;">${fmtKg(totGrandKg)}</td>
     </tr>
   </tfoot>`;
-  wrap.innerHTML=`<table>${hdr}${body}${foot}</table>`;
-  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmt(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg';
+  wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
+  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmt(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg'+(filtro!=='todos'?' · turno línea: '+(filtro==='dia'?'Día':'Noche'):'');
 }
 
-/* ═══ MOLDES — Consolidado (línea × hora, kg) ══════════════════════ */
+/* ═══ MOLDES — Consolidado (kg acumulados por persona, hoy) ═══════ */
 function renderMConsol(){
   const wrap=document.getElementById('mConsolWrap');if(!wrap)return;
   const sub=document.getElementById('mConsolSub');
   const _todayC=nowDate();
-  const mol=(RT.moldes||[]).filter(r=>!r.fecha||r.fecha===_todayC);
+  const mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(!r.fecha||r.fecha===_todayC));
   const hoyStrC=_todayC.split('-').reverse().join('/');
   if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados hoy ('+hoyStrC+').</div>';if(sub)sub.textContent='0 moldes · '+hoyStrC;return;}
-  const hoursSet=new Set();const linSet=new Set();
-  mol.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));linSet.add(r.linea||'—');});
-  const hours=[...hoursSet].sort((a,b)=>a-b);
-  const lins=[...linSet].sort();
   const map={};
-  lins.forEach(l=>map[l]={byHour:{},totKg:0,totCant:0});
   mol.forEach(r=>{
-    const l=r.linea||'—';const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
-    const kg=+r.kg||0;
-    if(hh!=null)map[l].byHour[hh]=(map[l].byHour[hh]||0)+kg;
-    map[l].totKg+=kg;map[l].totCant+=(+r.cant||0);
+    const key=String(r.trabId!=null?r.trabId:(r.nombre||'—'));
+    if(!map[key])map[key]={nombre:r.nombre||'—',totKg:0,totCant:0};
+    map[key].totKg+=(+r.kg||0);
+    map[key].totCant+=(+r.cant||0);
   });
+  const rows=Object.values(map).sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const fmt=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
-  const totCol={};let totGrand=0;
-  lins.forEach(l=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(map[l].byHour[h]||0);});totGrand+=map[l].totKg;});
-  const hdr='<thead><tr><th style="min-width:120px;">LÍNEA</th>'+
-    hours.map(h=>`<th class="num" style="min-width:80px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
-    '<th class="num" style="background:var(--brand,#1e3a8a);color:#fff;min-width:110px;">TOTAL KG</th></tr></thead>';
-  const body='<tbody>'+lins.map(l=>`<tr>
-    <td style="font-weight:700;">${esc(l)}</td>
-    ${hours.map(h=>`<td class="num">${fmt(map[l].byHour[h])||'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
-    <td class="num" style="font-weight:700;color:var(--brand,#1e3a8a);">${fmt(map[l].totKg)}</td>
+  const fmtN=v=>v?v.toLocaleString('es-CL'):'';
+  let totGrand=0,totCant=0;
+  rows.forEach(r=>{totGrand+=r.totKg;totCant+=r.totCant;});
+  const hdr='<thead><tr><th style="min-width:220px;">NOMBRE</th><th class="num" style="min-width:100px;">MOLDES</th><th class="num" style="min-width:120px;">TOTAL KG</th></tr></thead>';
+  const body='<tbody>'+rows.map(r=>`<tr>
+    <td style="font-weight:700;">${esc(r.nombre)}</td>
+    <td class="num" style="font-weight:600;">${fmtN(r.totCant)}</td>
+    <td class="num" style="font-weight:700;">${fmt(r.totKg)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
-    <tr style="background:var(--brand,#1e3a8a);color:#fff;">
-      <td style="font-weight:700;">Total kg</td>
-      ${hours.map(h=>`<td class="num" style="font-weight:700;">${fmt(totCol[h])}</td>`).join('')}
+    <tr>
+      <td>Total ${esc(hoyStrC)}</td>
+      <td class="num" style="font-weight:700;">${fmtN(totCant)}</td>
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
   </tfoot>`;
   wrap.innerHTML=`<table>${hdr}${body}${foot}</table>`;
-  if(sub)sub.textContent=lins.length+' líneas · '+mol.length+' registros · '+fmt(totGrand)+' kg';
+  if(sub)sub.textContent=rows.length+' personas · '+mol.length+' registros · '+fmt(totGrand)+' kg';
 }
 
 /* ═══ MOLDES — Por Especie (operario × especie) ════════════════════ */
@@ -4625,18 +4690,18 @@ function renderMEspecie(){
   const totCol={};let totGrand=0;
   rows.forEach(r=>{esps.forEach(e=>{totCol[e]=(totCol[e]||0)+(r.byEsp[e]||0);});totGrand+=r.tot;});
   const hdr=`<thead>
-    <tr><th rowspan="2" style="min-width:180px;vertical-align:bottom;">NOMBRE</th><th colspan="${esps.length}" style="text-align:center;background:var(--surface-alt);text-transform:uppercase;letter-spacing:.04em;">ESPECIE (KG)</th><th rowspan="2" class="num" style="background:var(--brand,#1e3a8a);color:#fff;min-width:100px;vertical-align:bottom;">TOTAL KG</th></tr>
+    <tr><th rowspan="2" style="min-width:180px;vertical-align:bottom;">NOMBRE</th><th colspan="${esps.length}" class="center-head" style="text-transform:uppercase;letter-spacing:.04em;">ESPECIE (KG)</th><th rowspan="2" class="num" style="min-width:100px;vertical-align:bottom;">TOTAL KG</th></tr>
     <tr>${esps.map(e=>`<th class="num" style="min-width:130px;">${esc(e.toUpperCase())}</th>`).join('')}</tr>
   </thead>`;
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
     ${esps.map(e=>`<td class="num">${r.byEsp[e]?fmt(r.byEsp[e]):'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
-    <td class="num" style="font-weight:700;color:var(--brand,#1e3a8a);">${fmt(r.tot)}</td>
+    <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
-    <tr style="background:var(--brand,#1e3a8a);color:#fff;">
-      <td style="font-weight:700;">Total Kg</td>
-      ${esps.map(e=>`<td class="num" style="font-weight:700;">${fmt(totCol[e])}</td>`).join('')}
+    <tr>
+      <td>Total kg</td>
+      ${esps.map(e=>`<td class="num">${fmt(totCol[e])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
   </tfoot>`;
@@ -4646,14 +4711,17 @@ function renderMEspecie(){
 window.renderMResumen=renderMResumen;window.renderMConsol=renderMConsol;window.renderMEspecie=renderMEspecie;
 
 /* ═══ PESAJE — Armado (asignación por línea con planillero + fichas) ═══ */
-/* RT.armadoPesaje = { 'L1': {planillero:{trabId,nombre,ficha}, trabajadores:[{trabId?,nombre,ficha}]}, ... }
+/* RT.armadoPesaje = { 'L1': {planillero, trabajadores, turno, fecha}, ... }
    RT.armadoPesajeSnapshot = {fecha, data: <mismo formato>} — "día anterior" */
 function _ensureArmadoPesaje(){
   if(!RT.armadoPesaje)RT.armadoPesaje={};
   if(Object.keys(RT.armadoPesaje).length===0){
-    ['L1','L2','L3'].forEach(ln=>{RT.armadoPesaje[ln]={planillero:null,trabajadores:[],turno:'dia'};});
+    ['L1','L2','L3'].forEach(ln=>{RT.armadoPesaje[ln]={planillero:null,trabajadores:[],turno:'dia',fecha:''};});
   }
-  Object.keys(RT.armadoPesaje).forEach(ln=>{if(!RT.armadoPesaje[ln].turno)RT.armadoPesaje[ln].turno='dia';});
+  Object.keys(RT.armadoPesaje).forEach(ln=>{
+    if(!RT.armadoPesaje[ln].turno)RT.armadoPesaje[ln].turno='dia';
+    if(!('fecha' in RT.armadoPesaje[ln]))RT.armadoPesaje[ln].fecha='';
+  });
 }
 function renderPArmado(){
   _ensureArmadoPesaje();
@@ -4661,17 +4729,19 @@ function renderPArmado(){
   const lineas=Object.keys(RT.armadoPesaje).sort();
   if(!lineas.length){box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';return;}
   box.innerHTML=lineas.map(ln=>{
-    const data=RT.armadoPesaje[ln]||{planillero:null,trabajadores:[]};
+    const data=RT.armadoPesaje[ln]||{planillero:null,trabajadores:[],fecha:''};
     const trabs=data.trabajadores||[];
     const p=data.planillero;
+    const fechaStr=data.fecha?String(data.fecha).split('-').reverse().join('/'):'';
     return `<div class="line-card" style="margin-bottom:12px;">
       <div class="line-hdr">
         <div class="line-id">${esc(ln)}</div>
         <div style="flex:1;min-width:0;">
           <div class="line-title">Línea ${esc(ln)}</div>
-          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)</div>
+          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}</div>
         </div>
         <div class="section-spacer"></div>
+        ${fechaStr?`<span class="badge slate" style="font-size:10px;"><span class="badge-dot"></span>${esc(fechaStr)}</span>`:''}
         <span class="badge ${data.turno==='noche'?'navy':'amber'}" title="Turno"><span class="badge-dot"></span>${data.turno==='noche'?'Noche':'Día'}</span>
         <span class="badge ${p&&trabs.length?'green':'amber'}"><span class="badge-dot"></span>${p&&trabs.length?'Armada':'Pendiente'}</span>
         <button class="btn ghost sm" type="button" onclick="editPArmadoLinea('${esc(ln)}')">
@@ -4721,7 +4791,7 @@ function confirmPAddLinea(){
   const key=(inp.value||'').trim().toUpperCase();
   if(!key){showToast('Nombre inválido','error');inp.focus();return;}
   if(RT.armadoPesaje[key]){showToast('Esa línea ya existe','error');inp.focus();return;}
-  RT.armadoPesaje[key]={planillero:null,trabajadores:[],turno:'dia'};
+  RT.armadoPesaje[key]={planillero:null,trabajadores:[],turno:'dia',fecha:''};
   rtSave();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
 function removePLinea(ln){
@@ -4747,20 +4817,25 @@ let _editPLn=null;
 function editPArmadoLinea(ln){
   _ensureArmadoPesaje();
   _editPLn=ln;
-  const data=RT.armadoPesaje[ln]||{planillero:null,trabajadores:[]};
+  const data=RT.armadoPesaje[ln]||{planillero:null,trabajadores:[],fecha:''};
   // Trabajar en una copia en memoria; al guardar se vuelca a RT
-  _editPArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),turno:data.turno||'dia'};
+  _editPArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),turno:data.turno||'dia',fecha:data.fecha||''};
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='pArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
     <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Pesaje</div><button class="modal-x" onclick="closePArmado()">×</button></div>
     <div class="modal-body">
-      <!-- TURNO -->
-      <div class="form-field" style="margin-bottom:14px;">
-        <label class="form-label">Turno de la línea</label>
-        <select class="select" id="pArmTurno" onchange="_editPArmado.turno=this.value;">
-          <option value="dia" ${_editPArmado.turno==='dia'?'selected':''}>Día (07:00–19:00)</option>
-          <option value="noche" ${_editPArmado.turno==='noche'?'selected':''}>Noche (19:00–07:00)</option>
-        </select>
+      <div class="form-grid cols-2" style="margin-bottom:14px;">
+        <div class="form-field">
+          <label class="form-label">Turno de la línea <span class="required">*</span></label>
+          <select class="select" id="pArmTurno" required onchange="_editPArmado.turno=this.value;">
+            <option value="dia" ${_editPArmado.turno==='dia'?'selected':''}>Día (07:00–19:00)</option>
+            <option value="noche" ${_editPArmado.turno==='noche'?'selected':''}>Noche (19:00–07:00)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">📅 Fecha inicio <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+          <input type="date" class="input" id="pArmFecha" required value="${_editPArmado.fecha||''}" onchange="_editPArmado.fecha=this.value;">
+        </div>
       </div>
 
       <!-- PLANILLERO LÍNEA -->
@@ -4972,7 +5047,15 @@ function closePArmado(){
   _editPLn=null;_editPArmado=null;
 }
 function savePArmado(){
-  if(!_editPLn)return;
+  if(!_editPLn||!_editPArmado)return;
+  const selTurno=document.getElementById('pArmTurno');
+  const turnoRaw=(selTurno&&selTurno.value)||'';
+  if(turnoRaw!=='dia'&&turnoRaw!=='noche'){showToast('El turno de la línea es obligatorio','error');if(selTurno)selTurno.focus();return;}
+  _editPArmado.turno=turnoRaw;
+  const fe=document.getElementById('pArmFecha');
+  const fecha=(fe&&fe.value||'').trim();
+  if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
+  _editPArmado.fecha=fecha;
   RT.armadoPesaje[_editPLn]=JSON.parse(JSON.stringify(_editPArmado));
   rtSave();closePArmado();renderPArmado();
   showToast('Línea actualizada','success');
@@ -5412,24 +5495,23 @@ function editMArmadoLinea(ln){
         <div class="form-field">
           <label class="form-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-.1em;margin-right:4px;"><path d="M12 3v18M5 6l7-3 7 3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/></svg>
-            Especie <span style="font-size:10px;color:var(--text-3);font-weight:400;">(filtra presets)</span>
+            Especie <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(filtra presets)</span>
           </label>
-          <select class="select" id="mArmEspecie" onchange="_editMArmado.especie=this.value;_mArmUpdatePresetHint();">
-            <option value="">— Sin filtro —</option>
-            ${especies.map(e=>`<option value="${esc(e)}" ${e===_editMArmado.especie?'selected':''}>${esc(e)}</option>`).join('')}
+          <select class="select" id="mArmEspecie" required onchange="_editMArmado.especie=this.value;_mArmUpdatePresetHint();">
+            ${especies.length?`<option value="" disabled ${!currentEspecie?'selected':''}>— Elige especie —</option>`+especies.map(e=>`<option value="${esc(e)}" ${e===currentEspecie?'selected':''}>${esc(e)}</option>`).join(''):'<option value="" disabled selected>Sin especies — agrega presets en Config</option>'}
           </select>
           <div id="mArmPresetHint" style="margin-top:5px;font-size:11px;color:#0369a1;"></div>
         </div>
         <div class="form-field">
-          <label class="form-label">Turno de la línea</label>
-          <select class="select" id="mArmTurno" onchange="_editMArmado.turno=this.value;">
+          <label class="form-label">Turno de la línea <span class="required">*</span></label>
+          <select class="select" id="mArmTurno" required onchange="_editMArmado.turno=this.value;">
             <option value="dia" ${_editMArmado.turno==='dia'?'selected':''}>Día (07:00–19:00)</option>
             <option value="noche" ${_editMArmado.turno==='noche'?'selected':''}>Noche (19:00–07:00)</option>
           </select>
         </div>
         <div class="form-field">
-          <label class="form-label">📅 Fecha inicio <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
-          <input type="date" class="input" id="mArmFecha" value="${_editMArmado.fecha||''}" onchange="_editMArmado.fecha=this.value;">
+          <label class="form-label">📅 Fecha inicio <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+          <input type="date" class="input" id="mArmFecha" required value="${_editMArmado.fecha||''}" onchange="_editMArmado.fecha=this.value;">
         </div>
       </div>
 
@@ -5567,12 +5649,24 @@ function closeMArmado(){
 }
 function saveMArmado(){
   if(!_editMLn||!_editMArmado)return;
+  const selEsp=document.getElementById('mArmEspecie');
+  const especie=(selEsp&&selEsp.value||'').trim();
+  if(!especie){showToast('Debes elegir una especie','error');if(selEsp)selEsp.focus();return;}
+  const selTurno=document.getElementById('mArmTurno');
+  const turnoRaw=(selTurno&&selTurno.value)||'';
+  if(turnoRaw!=='dia'&&turnoRaw!=='noche'){showToast('El turno de la línea es obligatorio','error');if(selTurno)selTurno.focus();return;}
+  const fe=document.getElementById('mArmFecha');
+  const fecha=(fe&&fe.value||'').trim();
+  if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
+  _editMArmado.especie=especie;
+  _editMArmado.turno=turnoRaw;
+  _editMArmado.fecha=fecha;
   RT.armadoMolde[_editMLn]={
     planillero:_editMArmado.planillero,
     trabajadores:_editMArmado.trabajadores,
-    especie:_editMArmado.especie||'',
-    turno:_editMArmado.turno||'dia',
-    fecha:_editMArmado.fecha||''
+    especie,
+    turno:turnoRaw,
+    fecha
   };
   _stripMarcaCopiaLinea(RT.armadoMolde[_editMLn]);
   // Compat: keep lineaProducto synced for old references
@@ -5722,9 +5816,14 @@ function renderAnalisis(){
   else {setEl('analEspTop','—');setEl('analEspTopSub','—');}
   // Filtrar por fecha de hoy para gráfico y tabla por hora
   const _today=nowDate();
-  const moldesHoy=moldes.filter(r=>!r.fecha||r.fecha===_today);
-  const pesajesHoy=pesajes.filter(r=>!r.fecha||r.fecha===_today);
-  // Chart por hora (kg moldes — solo hoy)
+  let moldesHoy=moldes.filter(r=>!r.fecha||r.fecha===_today);
+  let pesajesHoy=pesajes.filter(r=>!r.fecha||r.fecha===_today);
+  const filtroAnal=_readTurnoLineaFilter('analHoraFiltroTurno');
+  if(filtroAnal!=='todos'){
+    moldesHoy=moldesHoy.filter(r=>_moldeMatchesTurnoLineaFiltro(r,filtroAnal));
+    pesajesHoy=pesajesHoy.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtroAnal));
+  }
+  // Chart por hora (kg moldes — solo hoy, respeta filtro turno de línea)
   const chart=document.getElementById('analHoraChart');
   if(chart){
     const horas={};
@@ -5786,7 +5885,7 @@ function renderAnalisis(){
     const kgMolHoy=moldesHoy.reduce((s,r)=>s+(r.kg||0),0);
     const kgPesHoy=pesajesHoy.reduce((s,r)=>s+(r.kg||0),0);
     const foot=document.getElementById('analHoraFoot');
-    if(foot)foot.innerHTML=`<tr style="background:var(--surface-alt);font-weight:700;">
+    if(foot)foot.innerHTML=`<tr>
       <td>TOTAL HOY</td><td class="num">${cantMolHoy}</td><td class="num">${kgMolHoy.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
       <td class="num">${pesajesHoy.length}</td><td class="num">${kgPesHoy.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
       <td class="num">${(kgMolHoy+kgPesHoy).toLocaleString('es-CL',{maximumFractionDigits:1})}</td>
@@ -5863,7 +5962,7 @@ function renderAnalisis(){
       <td class="num"><span class="badge slate">${((r.tot/totKg)*100).toFixed(1).replace('.',',')}%</span></td>
     </tr>`).join('');
     const foot=document.getElementById('analConsolFoot');
-    if(foot)foot.innerHTML=`<tr style="background:var(--surface-alt);font-weight:700;">
+    if(foot)foot.innerHTML=`<tr>
       <td>TOTAL</td>
       <td class="num">${cantMol}</td>
       <td class="num">${kgMol.toLocaleString('es-CL',{maximumFractionDigits:1})}</td>

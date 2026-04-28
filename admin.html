@@ -450,6 +450,30 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div><h1 class="page-title">Productos / Presets</h1><div class="page-sub">Define productos, kg de referencia, tiempos de túnel/placa y temperatura objetivo</div></div>
     <button class="btn" onclick="openPresetModal()">+ Nuevo preset</button>
   </div>
+  <div class="slicer-bar">
+    <div class="slicer" style="min-width:260px;">
+      <label class="form-label">Buscar</label>
+      <input class="input" id="presetSearch" placeholder="Nombre, destino o calibre…" oninput="renderPresets()">
+    </div>
+    <div class="slicer" style="min-width:240px;">
+      <label class="form-label">Especie</label>
+      <select class="select" id="presetEspecie" onchange="renderPresets()">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="slicer" style="min-width:180px;">
+      <label class="form-label">Estado</label>
+      <select class="select" id="presetEstado" onchange="renderPresets()">
+        <option value="">Todos</option>
+        <option value="1">Activos</option>
+        <option value="0">Inactivos</option>
+      </select>
+    </div>
+    <div class="slicer" style="min-width:180px;">
+      <label class="form-label">Resumen</label>
+      <div class="badge" id="presetStats" style="width:max-content;">0 / 0</div>
+    </div>
+  </div>
   <div class="tbl-wrap"><table>
     <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
     <tbody id="tbPresets"></tbody>
@@ -1692,13 +1716,35 @@ function renderAnalisis(){
 /* ════════════ PRESETS CRUD ════════════ */
 function renderPresets(){
   const tb=document.getElementById('tbPresets');
-  tb.innerHTML=DB.data.presets.map(p=>`<tr>
+  const sIn=document.getElementById('presetSearch');
+  const eSel=document.getElementById('presetEspecie');
+  const stSel=document.getElementById('presetEstado');
+  const stats=document.getElementById('presetStats');
+  const all=(DB.data.presets||[]).slice();
+  const especies=[...new Set(all.map(p=>(p.especie||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  if(eSel){
+    const prev=eSel.value;
+    eSel.innerHTML='<option value="">Todas</option>'+especies.map(e=>`<option value="${esc(e)}">${esc(e)}</option>`).join('');
+    if(prev&&especies.includes(prev))eSel.value=prev;
+  }
+  const q=((sIn&&sIn.value)||'').trim().toLowerCase();
+  const esp=(eSel&&eSel.value)||'';
+  const est=(stSel&&stSel.value)||'';
+  const filtered=all.filter(p=>{
+    if(esp&&(p.especie||'')!==esp)return false;
+    if(est==='1'&&!p.activo)return false;
+    if(est==='0'&&p.activo)return false;
+    if(!q)return true;
+    return [p.nombre,p.destino,p.especie,p.calibre,p.formato,p.tipo].some(v=>String(v||'').toLowerCase().includes(q));
+  });
+  if(stats)stats.textContent=filtered.length+' / '+all.length;
+  tb.innerHTML=filtered.map(p=>`<tr>
     <td><strong>${esc(p.nombre)}</strong></td>
     <td>${esc(p.tipo||'—')}</td><td>${esc(p.destino||'—')}</td><td>${esc(p.especie||'—')}</td><td>${esc(p.calibre||'—')}</td>
     <td class="num">${p.kgRef}</td><td class="num">${p.horasTunel||0}</td><td class="num">${p.horasPlaca||0}</td><td class="num">${p.tempObj||0}</td>
     <td>${p.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
     <td><button class="btn sm ghost" onclick="openPresetModal(${p.id})">✎</button> <button class="btn sm ghost" onclick="delPreset(${p.id})">✕</button></td>
-  </tr>`).join('')||'<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets que coincidan con el filtro</td></tr>';
 }
 function openPresetModal(id){
   const p=id?DB.data.presets.find(x=>x.id===id):{id:Date.now(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,activo:true};
