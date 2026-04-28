@@ -1321,7 +1321,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
   <div class="topbar-context">
     <div class="ctx-chip live">
       <span class="ctx-label">Turno</span>
-      <span class="ctx-value" id="ctxTurno">Día · 07:00–19:00</span>
+      <span class="ctx-value" id="ctxTurno">Día · 07:00–18 h</span>
     </div>
     <div class="ctx-chip">
       <svg style="width:14px;height:14px;color:var(--slate-400);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
@@ -1550,9 +1550,9 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <div class="form-grid cols-3" style="margin-bottom:10px;">
         <div class="form-field">
           <label class="form-label">Turno de armado</label>
-          <select class="select" id="mArmScopeTurno" onchange="onMArmScopeChange()">
-            <option value="dia">Día (07:00–19:00)</option>
-            <option value="noche">Noche (19:00–07:00)</option>
+          <select class="select" id="mArmScopeTurno" onchange="onMArmScopeTurnoPick()">
+            <option value="dia">Día (07:00–18 h, mismo día)</option>
+            <option value="noche">Noche (19:00 hoy → 06:00 día siguiente)</option>
           </select>
         </div>
         <div class="form-field">
@@ -2533,10 +2533,11 @@ const DIAS_ES=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MESES_ES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 function _fmtFecha(d){return DIAS_ES[d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+' '+MESES_ES[d.getMonth()]+' '+d.getFullYear();}
 function _turnoActual(d){
-  const h=d.getHours();
-  // Día: 07–19, Noche: 19–07
-  if(h>=7&&h<19)return{nombre:'Día',rango:'07:00–19:00'};
-  return{nombre:'Noche',rango:'19:00–07:00'};
+  const cod=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():((d.getHours()>=7&&d.getHours()<19)?'dia':'noche');
+  const row=(DB.data.turnos||[]).find(x=>String(x.codigo)===String(cod));
+  const rango=row?`${row.inicio}–${row.fin}`:(cod==='noche'?'19:00–07:00':'07:00–19:00');
+  const nombre=row?row.nombre:(cod==='noche'?'Noche':'Día');
+  return{nombre,rango:rango+(cod==='dia'?' (mismo día)':' (hasta 06:00 día sig.)')};
 }
 (function tick(){
   const d=new Date();
@@ -3256,7 +3257,12 @@ window.RT=RT;
 rtLoad();
 
 const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
-const nowDate=()=>new Date().toISOString().slice(0,10);
+function todayLocalYmd(){
+  const d=new Date();
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
+const nowDate=()=>todayLocalYmd();
 const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
 const ARM_SCOPE_SEP='@@';
 function _armScopeKey(linea,turno,fecha){
@@ -3287,6 +3293,26 @@ function _parseHMToMinutes(s){
   return h*60+mi;
 }
 function _minutesNowLocal(){const d=new Date();return d.getHours()*60+d.getMinutes();}
+function _addDaysLocalYmd(ymd,deltaDays){
+  const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return ymd;
+  const dt=new Date(+m[1],+m[2]-1,+m[3]+(deltaDays|0),12,0,0,0);
+  const p=n=>String(n).padStart(2,'0');
+  return dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate());
+}
+/**
+ * Fecha de armado / registro según turno:
+ * - Día: calendario actual (jornada 07:00–antes de 19:00 = hasta ~18 h).
+ * - Noche: 19:00–23:59 del día D → fecha D; 00:00–06:59 → turno que empezó ayer a las 19:00 → fecha D−1.
+ */
+function _fechaArmadoOperativa(turnoCod){
+  const tc=String(turnoCod||'dia').toLowerCase();
+  const ymd=todayLocalYmd();
+  if(tc!=='noche')return ymd;
+  const mins=_minutesNowLocal();
+  if(mins>=0&&mins<7*60)return _addDaysLocalYmd(ymd,-1);
+  return ymd;
+}
 /** Elige código de turno según hora actual y horarios en Admin → Turnos (soporta cruce de medianoche). */
 function _inferTurnoCodigoPorHorario(){
   const activos=(DB.data.turnos||[]).filter(t=>t.activo);
@@ -3310,7 +3336,9 @@ function _inferTurnoCodigoPorHorario(){
 }
 function _mRegEnsureFechaDefault(){
   const fe=document.getElementById('mRegFechaArmado');
-  if(fe&&!fe.value)fe.value=nowDate();
+  const tEl=document.getElementById('mRegTurno');
+  const tc=(tEl&&tEl.value)||_inferTurnoCodigoPorHorario();
+  if(fe&&!fe.value)fe.value=_fechaArmadoOperativa(tc);
 }
 function onMRegFechaArmadoChange(){
   _mRegEnsureFechaDefault();
@@ -3395,11 +3423,14 @@ function renderMRegTurnos(){
   const hint=document.getElementById('mRegTurnoHint');
   if(hint){
     hint.style.display='';
-    hint.textContent='Por defecto según hora actual ('+nowHM()+') y horarios de turno en Admin.';
+    hint.textContent='Por defecto según hora actual ('+nowHM()+') y turnos en Admin. Noche 00:00–06:59: fecha de armado = día anterior (turno desde 19:00).';
   }
+  let appliedDefault=false;
   if(prev&&activos.some(t=>String(t.codigo)===String(prev)))sel.value=prev;
-  else if(activos.find(t=>String(t.codigo)===String(inferred)))sel.value=inferred;
-  else if(activos[0])sel.value=activos[0].codigo;
+  else if(activos.find(t=>String(t.codigo)===String(inferred))){sel.value=inferred;appliedDefault=true;}
+  else if(activos[0]){sel.value=activos[0].codigo;appliedDefault=true;}
+  const fe=document.getElementById('mRegFechaArmado');
+  if(fe&&sel.value&&(!String(fe.value||'').trim()||appliedDefault))fe.value=_fechaArmadoOperativa(sel.value);
 }
 /* Lista unificada: solo personas en el armado de moldes de `linea` (DB + ingresos manuales en armado). */
 function _mRegArmadoWorkersListForLinea(linea){
@@ -3476,7 +3507,13 @@ function renderMRegTrab(){
   }
   onMRegTrabChange();
 }
-function onMRegTurnoChange(){_mRegEnsureFechaDefault();renderMRegLinea();renderMRegTrab();if(window.renderMRegPresets)renderMRegPresets();if(typeof mRegRefreshGate==='function')mRegRefreshGate();}
+function onMRegTurnoChange(){
+  const fe=document.getElementById('mRegFechaArmado');
+  const tEl=document.getElementById('mRegTurno');
+  if(fe&&tEl&&tEl.value)fe.value=_fechaArmadoOperativa(tEl.value);
+  else _mRegEnsureFechaDefault();
+  renderMRegLinea();renderMRegTrab();if(window.renderMRegPresets)renderMRegPresets();if(typeof mRegRefreshGate==='function')mRegRefreshGate();
+}
 function _mRegHasArmadoConfigured(){
   const turno=_armRegTurno();
   const fecha=_armRegFecha();
@@ -4372,8 +4409,7 @@ function renderPRegTurnos(){
   const sel=document.getElementById('pRegTurno');if(!sel)return;
   const activos=DB.data.turnos.filter(t=>t.activo);
   sel.innerHTML=activos.map(t=>`<option value="${t.codigo}">${esc(t.nombre)} · ${esc(t.inicio)} – ${esc(t.fin)}</option>`).join('');
-  const h=new Date().getHours();
-  const code=(h>=7&&h<19)?'dia':'noche';
+  const code=_inferTurnoCodigoPorHorario();
   if(activos.find(t=>t.codigo===code))sel.value=code;
 }
 /* ─ Copia exacta de la lógica de Moldes Registrar, adaptada a Pesaje ─ */
@@ -5189,8 +5225,8 @@ function editPArmadoLinea(ln){
         <div class="form-field">
           <label class="form-label">Turno de la línea <span class="required">*</span></label>
           <select class="select" id="pArmTurno" required onchange="_editPArmado.turno=this.value;">
-            <option value="dia" ${_editPArmado.turno==='dia'?'selected':''}>Día (07:00–19:00)</option>
-            <option value="noche" ${_editPArmado.turno==='noche'?'selected':''}>Noche (19:00–07:00)</option>
+            <option value="dia" ${_editPArmado.turno==='dia'?'selected':''}>Día (07:00–18 h, mismo día)</option>
+            <option value="noche" ${_editPArmado.turno==='noche'?'selected':''}>Noche (19:00 → 06:00 día siguiente)</option>
           </select>
         </div>
         <div class="form-field">
@@ -5445,17 +5481,24 @@ function _ensureArmadoMolde(){
 }
 function _getMArmScopeTurno(){
   const el=document.getElementById('mArmScopeTurno');
-  return (el&&el.value)||((new Date().getHours()>=7&&new Date().getHours()<19)?'dia':'noche');
+  return (el&&el.value)||_inferTurnoCodigoPorHorario();
 }
 function _getMArmScopeFecha(){
   const el=document.getElementById('mArmScopeFecha');
-  return (el&&el.value)||nowDate();
+  if(el&&el.value)return el.value.trim();
+  return _fechaArmadoOperativa(_getMArmScopeTurno());
 }
 function _setMArmScopeDefaults(){
   const tEl=document.getElementById('mArmScopeTurno');
   const fEl=document.getElementById('mArmScopeFecha');
-  if(tEl&&!tEl.value)tEl.value=(new Date().getHours()>=7&&new Date().getHours()<19)?'dia':'noche';
-  if(fEl&&!fEl.value)fEl.value=nowDate();
+  if(tEl&&!tEl.value)tEl.value=_inferTurnoCodigoPorHorario();
+  if(fEl&&!fEl.value)fEl.value=_fechaArmadoOperativa(tEl.value||'dia');
+}
+function onMArmScopeTurnoPick(){
+  const fe=document.getElementById('mArmScopeFecha');
+  const tEl=document.getElementById('mArmScopeTurno');
+  if(fe&&tEl&&tEl.value)fe.value=_fechaArmadoOperativa(tEl.value);
+  onMArmScopeChange();
 }
 function _updateMArmScopeStatus(){
   const el=document.getElementById('mArmScopeStatus');
@@ -5930,8 +5973,8 @@ function editMArmadoLinea(ln){
         <div class="form-field">
           <label class="form-label">Turno de la línea <span class="required">*</span></label>
           <select class="select" id="mArmTurno" required onchange="_editMArmado.turno=this.value;">
-            <option value="dia" ${_editMArmado.turno==='dia'?'selected':''}>Día (07:00–19:00)</option>
-            <option value="noche" ${_editMArmado.turno==='noche'?'selected':''}>Noche (19:00–07:00)</option>
+            <option value="dia" ${_editMArmado.turno==='dia'?'selected':''}>Día (07:00–18 h, mismo día)</option>
+            <option value="noche" ${_editMArmado.turno==='noche'?'selected':''}>Noche (19:00 → 06:00 día siguiente)</option>
           </select>
         </div>
         <div class="form-field">
@@ -6113,7 +6156,7 @@ window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMA
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;
-window.onMArmScopeChange=onMArmScopeChange;
+window.onMArmScopeChange=onMArmScopeChange;window.onMArmScopeTurnoPick=onMArmScopeTurnoPick;
 
 /* ═══ EMPAQUE — Registrar + lotes ══════════════════════════════ */
 function renderERegPresets(){
@@ -6684,7 +6727,7 @@ const TBSync={
     if(!_tbSb)return;
     this.setStatus('☁ …','#f59e0b');
     try{
-      const today=new Date().toISOString().slice(0,10);
+      const today=todayLocalYmd();
       const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
       const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
       // Presets no se suben desde tablet — origen de verdad: Admin + Supabase
