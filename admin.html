@@ -283,6 +283,12 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 
   <div class="slicer-bar dash-slicer-bar">
     <div class="slicer">
+      <label class="form-label">Turno</label>
+      <select class="select" id="slTurno" onchange="onDashTurnoChange()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="slicer">
       <label class="form-label">Fecha desde</label>
       <input type="date" class="input" id="slFechaDesde" onchange="applyFilters()">
     </div>
@@ -297,12 +303,6 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       </select>
     </div>
     <div class="slicer">
-      <label class="form-label">Turno</label>
-      <select class="select" id="slTurno" onchange="onDashTurnoChange()">
-        <option value="">Todos</option>
-      </select>
-    </div>
-    <div class="slicer">
       <label class="form-label">Hora desde</label>
       <input type="time" class="input" id="slHoraDesde" onchange="applyFilters()" title="Filtro por hora del registro (opcional si ambas vacías)">
     </div>
@@ -312,7 +312,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     </div>
     <div class="slicer" style="min-width:116px;">
       <label class="form-label" style="opacity:.88;">Rango</label>
-      <button type="button" class="btn ghost sm" style="width:100%;" onclick="dashSyncHoraFromTurno(true)" title="Rellenar horas según turno elegido (catálogo Turnos)">↻ Desde turno</button>
+      <button type="button" class="btn ghost sm" style="width:100%;" onclick="(function(){var s=document.getElementById('slTurno'),t=s&&s.value;if(t)dashApplyFechaRangeForTurnoCodigo(t);dashSyncHoraFromTurno(true);})()" title="Rellenar fechas y horas según turno elegido (catálogo Turnos)">↻ Desde turno</button>
     </div>
     <div class="slicer" data-kind="multi">
       <label class="form-label">Especies (multi)</label>
@@ -1010,6 +1010,21 @@ function _dashTurnoCrossesMidnight(turnoCodigo){
   if(iniM==null||finM==null)return false;
   return finM<iniM;
 }
+/** Rellena fecha desde/hasta según turno (misma regla que preset «Turno actual»). */
+function dashApplyFechaRangeForTurnoCodigo(tur){
+  const dEl=document.getElementById('slFechaDesde'),hEl=document.getElementById('slFechaHasta');
+  if(!dEl||!hEl)return;
+  const code=String(tur||'').trim();
+  if(!code)return;
+  const yDesde=_dashTurnoOperativeYmd(code);
+  let yHasta=yDesde;
+  if(_dashTurnoCrossesMidnight(code)){
+    const dd=_ymdToLocalStart(yDesde)||new Date();
+    dd.setDate(dd.getDate()+1);
+    yHasta=_dateObjToLocalYmd(dd);
+  }
+  dEl.value=yDesde;hEl.value=yHasta;
+}
 function _dateObjToLocalYmd(dt){
   if(!dt||isNaN(dt.getTime()))return _adminTodayLocalYmd();
   const p=n=>String(n).padStart(2,'0');
@@ -1037,30 +1052,35 @@ function _minutesToHHMM(mins){
   const h=Math.floor(m/60),mi=m%60;
   return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
 }
-/** Rellena hora desde/hasta según catálogo Turnos (fin de día = minuto anterior al fin catálogo). */
-function dashSyncHoraFromTurno(showToastOk){
+/** Rellena hora desde/hasta según catálogo Turnos (fin de día = minuto anterior al fin catálogo). Si skipApply, no llama applyFilters (útil al combinar con fechas en onDashTurnoChange). */
+function dashSyncHoraFromTurno(showToastOk, skipApply){
   const tur=(document.getElementById('slTurno')||{}).value;
   const hd=document.getElementById('slHoraDesde');
   const hh=document.getElementById('slHoraHasta');
+  const doApply=()=>{if(!skipApply)applyFilters();};
   if(!hd||!hh)return;
-  if(!tur){hd.value='';hh.value='';if(showToastOk)toast('Elige un turno para copiar horario','info');applyFilters();return;}
+  if(!tur){hd.value='';hh.value='';if(showToastOk)toast('Elige un turno para copiar horario','info');doApply();return;}
   const t=(DB.data.turnos||[]).find(x=>String(x.codigo)===String(tur));
   if(!t||t.inicio==null||t.fin==null||String(t.inicio).trim()===''||String(t.fin).trim()===''){
     if(showToastOk)toast('Sin inicio/fin en Turnos (Admin)','warn');
+    doApply();
     return;
   }
   const iniM=_adminParseHMToMinutes(t.inicio),finM=_adminParseHMToMinutes(t.fin);
-  if(iniM==null||finM==null){if(showToastOk)toast('Horario de turno no legible','warn');return;}
+  if(iniM==null||finM==null){if(showToastOk)toast('Horario de turno no legible','warn');doApply();return;}
   hd.value=_minutesToHHMM(iniM);
   if(finM<iniM)hh.value=_minutesToHHMM(Math.max(0,finM*1-1));
   else hh.value=_minutesToHHMM(Math.max(iniM,finM-1));
   if(showToastOk)toast('Horas: '+hd.value+' – '+hh.value,'success');
-  applyFilters();
+  doApply();
 }
 function onDashTurnoChange(){
   const tur=(document.getElementById('slTurno')||{}).value;
-  if(tur)dashSyncHoraFromTurno(false);
-  else{
+  if(tur){
+    dashApplyFechaRangeForTurnoCodigo(tur);
+    dashSyncHoraFromTurno(false,true);
+    applyFilters();
+  }else{
     const hd=document.getElementById('slHoraDesde'),hh=document.getElementById('slHoraHasta');
     if(hd)hd.value='';
     if(hh)hh.value='';
@@ -1110,15 +1130,8 @@ function applyFechaPreset(){
   else if(v==='turno'){
     const turnoActual=_adminInferTurnoCodigoPorHorario()||'';
     document.getElementById('slTurno').value=turnoActual;
-    const yDesde=_dashTurnoOperativeYmd(turnoActual);
-    let yHasta=yDesde;
-    if(_dashTurnoCrossesMidnight(turnoActual)){
-      const dd=_ymdToLocalStart(yDesde)||new Date();
-      dd.setDate(dd.getDate()+1);
-      yHasta=_dateObjToLocalYmd(dd);
-    }
-    d.value=yDesde;h.value=yHasta;
-    dashSyncHoraFromTurno(false);
+    dashApplyFechaRangeForTurnoCodigo(turnoActual);
+    dashSyncHoraFromTurno(false,true);
   }
   applyFilters();
 }
