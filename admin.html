@@ -233,7 +233,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div class="chip" id="dateChip">—</div>
   </div>
   <div class="topbar-right">
-    <button class="top-btn" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes desde Supabase (solo HTTP, casi sin costo de mensajes Realtime)">☁ Traer tablets</button>
+    <button class="top-btn" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes (incl. kg) desde Supabase y actualiza el dashboard">↻ Actualizar kg / moldes</button>
     <button class="top-btn" onclick="openSupabaseModal()">Conectar Supabase</button>
     <button class="top-btn primary" onclick="tabletLink()">Abrir Tablet</button>
   </div>
@@ -267,7 +267,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div><h1 class="page-title">Dashboard</h1><div class="page-sub">KPIs operacionales en tiempo real · arrastra widgets para reordenar</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ghost sm" onclick="reloadDashboard()">↻ Actualizar</button>
-      <button class="btn ghost sm" type="button" onclick="sbManualPullTabletRegs()" title="Descarga moldes/pesajes desde la nube (recomendado en modo ahorro de mensajes)">☁ Traer desde tablets</button>
+      <button class="btn sm" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes desde Supabase (kg incluidos) y fusiona con datos locales">↻ Actualizar desde Supabase (kg)</button>
       <button class="btn sm" onclick="addWidget()">+ Widget</button>
     </div>
   </div>
@@ -302,6 +302,10 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       <div class="slicer-multi" id="slLineas"></div>
     </div>
     <button class="btn ghost sm" onclick="clearFilters()">Limpiar</button>
+    <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding-top:10px;margin-top:4px;border-top:1px solid var(--border);">
+      <button type="button" class="btn sm" onclick="sbManualPullTabletRegs()" title="Lee moldes y pesajes en Supabase (kilos) y actualiza KPIs y widgets">↻ Actualizar moldes y kg (Supabase)</button>
+      <span id="dashLastKgSync" style="font-size:12px;color:var(--text-2);line-height:1.4;max-width:min(920px,100%);"></span>
+    </div>
   </div>
 
   <div class="grid-4" id="kpiRow" style="margin-bottom:16px;"></div>
@@ -1212,6 +1216,7 @@ function applyFilters(){
   _filters.hasta=h?new Date(h+'T00:00:00'):null;
   _filters.turno=document.getElementById('slTurno').value;
   renderKPIs();renderDashGrid();
+  try{if(document.getElementById('dashLastKgSync'))dashRefreshKgSummary({silent:true});}catch(e){}
 }
 function clearFilters(){
   _dashSlicersUserCleared=true;
@@ -2235,13 +2240,32 @@ async function initAuth(){
     else if(event==='SIGNED_IN'&&sess){await applySession(sess);}
   });
 }
+/** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
+function dashRefreshKgSummary(opts){
+  opts=opts||{};
+  try{
+    RT.load();
+    const m=RT.data.moldes||[],p=RT.data.pesajes||[];
+    const kgM=m.reduce((s,r)=>s+(+r.kg||0),0),kgP=p.reduce((s,r)=>s+(+r.kg||0),0);
+    const fm=typeof _filterRecs==='function'?_filterRecs(m):m;
+    const fp=typeof _filterRecs==='function'?_filterRecs(p):p;
+    const kgFM=fm.reduce((s,r)=>s+(+r.kg||0),0),kgFP=fp.reduce((s,r)=>s+(+r.kg||0),0);
+    const ts=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+    const fmt=n=>Number(n).toLocaleString('es-CL',{maximumFractionDigits:1});
+    const linea='Sync '+ts+' · Total: '+m.length+' moldes '+fmt(kgM)+' kg · '+p.length+' pesajes '+fmt(kgP)+' kg. Con filtros actuales: '+fm.length+' mol '+fmt(kgFM)+' kg · '+fp.length+' pes '+fmt(kgFP)+' kg.';
+    const el=document.getElementById('dashLastKgSync');
+    if(el)el.textContent=linea;
+    if(!opts.silent)toast('Moldes y kg actualizados desde Supabase (ver detalle abajo)','success');
+  }catch(e){if(!opts.silent)toast('No se pudo calcular resumen de kg','warn');}
+}
+
 /** Moldes/pesajes desde la nube (tablets). Solo SELECT por HTTP — no cuenta como mensajes Realtime. */
 async function sbManualPullTabletRegs(){
   if(!_sb){toast('Conecta Supabase primero','warn');return;}
   if(!_currentUser){toast('Inicia sesión para leer moldes y pesajes','warn');return;}
   try{
     await sbPullRuntimeFromCloud();
-    toast('Moldes y pesajes actualizados desde la nube','success');
+    dashRefreshKgSummary({silent:false});
     rtPulse('manual');
   }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)),'err');}
 }
@@ -2285,6 +2309,7 @@ async function applySession(session){
   // Una descarga HTTP inicial; Realtime/poll en moldes·pesajes solo si modo vivo
   setTimeout(async()=>{
     await sbPullRuntimeFromCloud();
+    dashRefreshKgSummary({silent:true});
     sbSubscribeRealtime();
     if(sbMsgEconomyEnabled()){sbStopPoll();sbLog('Modo ahorro: usa «Traer moldes y pesajes» o el topbar (pocos mensajes Realtime).');}
     else if(typeof sbStartPoll==='function')sbStartPoll();

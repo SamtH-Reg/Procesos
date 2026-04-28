@@ -3716,6 +3716,7 @@ function regMolde(){
     banner._t=setTimeout(()=>{banner.style.display='none';},4000);
   }
   showToast('✅ '+nombreTrab+' · '+cant+' moldes · '+kg+' kg','success');
+  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
 }
 function clearMReg(){
   document.getElementById('mRegCant').value='';
@@ -4607,6 +4608,7 @@ function regPesaje(){
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
   showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
+  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
 window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window.renderPRegPlanilleros=renderPRegPlanilleros;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
@@ -6640,6 +6642,7 @@ const TBSync={
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
   },
   _pushQueued:false,
+  _pushTimer:null,
   schedulePush(){
     if(!_tbSb||this._pushQueued)return;
     const eco=tbMsgEconomy();
@@ -6648,7 +6651,15 @@ const TBSync={
     const now=Date.now();
     const wait=Math.max(deb,(this._pushLastAt+gap)-now);
     this._pushQueued=true;
-    setTimeout(()=>{this._pushQueued=false;this.pushAll();},wait);
+    if(this._pushTimer)clearTimeout(this._pushTimer);
+    this._pushTimer=setTimeout(()=>{this._pushTimer=null;this._pushQueued=false;this.pushAll();},wait);
+  },
+  /** Sube ya moldes/pesajes/armado (cancela el debounce). Tras registrar en planta. */
+  pushImmediate(){
+    if(!_tbSb)return;
+    if(this._pushTimer){clearTimeout(this._pushTimer);this._pushTimer=null;}
+    this._pushQueued=false;
+    this.pushAll();
   },
   _sigRows(rows,pk){
     const list=(rows||[]).slice().sort((a,b)=>String(a[pk]||'').localeCompare(String(b[pk]||'')));
@@ -6663,31 +6674,39 @@ const TBSync={
       const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
       // Presets no se suben desde tablet — origen de verdad: Admin + Supabase
       // moldes (dejar pendiente + unificar con generales marcándolos esGeneral)
-      const moldesRows=(RT.moldes||[]).map(r=>({
+      const moldesRows=(RT.moldes||[]).map(r=>{
+        const pid=r.presetId!=null?r.presetId:r.preset_id;
+        return{
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
         codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
-        producto:r.producto||null,preset_id:validPresetIds.has(r.presetId)?r.presetId:null,
+        producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
         destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,
-        cant:r.cant||null,pendiente:r.pendiente||null,kg:r.kg||null,guia:r.guia||null,
+        cant:r.cant||null,pendiente:r.pendiente||null,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
         fecha:r.fecha||today
-      }));
+      };});
       const sigM=this._sigRows(moldesRows,'id');
       if(moldesRows.length&&sigM!==this._lastSig.moldes){
         const{error}=await _tbSb.from('moldes').upsert(moldesRows,{onConflict:'id'});
-        if(error)console.warn('[sb push moldes]',error.message);
-        else this._lastSig.moldes=sigM;
+        if(error){
+          console.warn('[sb push moldes]',error.message);
+          if(typeof showToast==='function')showToast('No se subieron moldes a Supabase: '+error.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
+        }else this._lastSig.moldes=sigM;
       }
-      const pesajesRows=(RT.pesajes||[]).map(r=>({
+      const pesajesRows=(RT.pesajes||[]).map(r=>{
+        const tid=r.trabId!=null?r.trabId:r.trab_id;
+        return{
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
-        trab_id:validTrabIds.has(r.trabId)?r.trabId:null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
-        especie:r.especie||null,tipo:r.tipo||null,kg:r.kg||null,guia:r.guia||null,
+        trab_id:validTrabIds.has(tid)?tid:null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
+        especie:r.especie||null,tipo:r.tipo||null,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
         fecha:r.fecha||today
-      }));
+      };});
       const sigP=this._sigRows(pesajesRows,'id');
       if(pesajesRows.length&&sigP!==this._lastSig.pesajes){
         const{error}=await _tbSb.from('pesajes').upsert(pesajesRows,{onConflict:'id'});
-        if(error)console.warn('[sb push pesajes]',error.message);
-        else this._lastSig.pesajes=sigP;
+        if(error){
+          console.warn('[sb push pesajes]',error.message);
+          if(typeof showToast==='function')showToast('No se subieron pesajes a Supabase: '+error.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
+        }else this._lastSig.pesajes=sigP;
       }
       // ── Push armado de línea ──────────────────────────────────
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
@@ -6707,8 +6726,10 @@ const TBSync={
       const sigA=this._sigRows(armadoRows,'linea');
       if(armadoRows.length&&sigA!==this._lastSig.armado){
         const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea'});
-        if(armErr)console.warn('[sb push armado_lineas]',armErr.message);
-        else this._lastSig.armado=sigA;
+        if(armErr){
+          console.warn('[sb push armado_lineas]',armErr.message);
+          if(typeof showToast==='function')showToast('Armado línea: '+armErr.message,'error');
+        }else this._lastSig.armado=sigA;
       }
       this._pushLastAt=Date.now();
       this.setStatus('☁ Sync','#16a34a');
