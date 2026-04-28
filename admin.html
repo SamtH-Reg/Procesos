@@ -290,7 +290,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div class="slicer">
       <label class="form-label">Turno</label>
       <select class="select" id="slTurno" onchange="applyFilters()">
-        <option value="">Todos</option><option value="dia">Día</option><option value="noche">Noche</option>
+        <option value="">Todos</option>
       </select>
     </div>
     <div class="slicer" style="flex:1;min-width:200px;">
@@ -814,6 +814,40 @@ DB.load();
 const RT={data:null,load(){try{this.data=JSON.parse(localStorage.getItem(RT_KEY))||{moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};}catch(e){this.data={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};}},save(){localStorage.setItem(RT_KEY,JSON.stringify(this.data));}};
 RT.load();
 
+/** Horarios de Admin → Turnos (misma lógica que tablet/index). */
+function _adminParseHMToMinutes(s){
+  const m=String(s==null?'':s).match(/(\d{1,2})[:\.]?(\d{2})?/);
+  if(!m)return null;
+  const h=Math.min(23,Math.max(0,parseInt(m[1],10)));
+  const mi=Math.min(59,Math.max(0,parseInt(m[2]||'0',10)));
+  return h*60+mi;
+}
+function _adminInferTurnoCodigoPorHorario(){
+  const activos=(DB.data.turnos||[]).filter(t=>t.activo);
+  if(!activos.length)return'dia';
+  const now=new Date().getHours()*60+new Date().getMinutes();
+  for(const t of activos){
+    const a=_adminParseHMToMinutes(t.inicio),b=_adminParseHMToMinutes(t.fin);
+    if(a==null||b==null)continue;
+    let ok=false;
+    if(b>a)ok=now>=a&&now<b;
+    else if(b<a)ok=now>=a||now<b;
+    if(ok)return String(t.codigo||'').trim()||'dia';
+  }
+  const h=new Date().getHours();
+  const fb=(h>=7&&h<19)?'dia':'noche';
+  if(activos.find(x=>String(x.codigo)===fb))return fb;
+  return String(activos[0].codigo||'dia');
+}
+/** Tras traer de Supabase: conserva filas que solo existen en esta PC (tablet sin subir aún). */
+function _rtMergeRemoteWithLocal(localArr,remoteArr){
+  const remote=Array.isArray(remoteArr)?remoteArr:[];
+  const local=Array.isArray(localArr)?localArr:[];
+  const remoteIds=new Set(remote.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
+  const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id)));
+  return remote.concat(extra);
+}
+
 /* ─── Toast ─────────────────────────────── */
 function toast(msg,type='info'){const c=document.getElementById('toasts');const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;c.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
@@ -902,6 +936,8 @@ function saveDashLayout(){localStorage.setItem('friosur_dash_layout',JSON.string
 
 let _filters={desde:null,hasta:null,turno:'',especies:new Set(),lineas:new Set()};
 let _charts={};
+let _dashSlicersUserCleared=false;
+let _dashDefaultsApplied=false;
 
 function _recDate(r){
   if(r.ts)return new Date(r.ts);
@@ -932,28 +968,37 @@ function applyFechaPreset(){
   else if(v==='semana'){const s=new Date(today);s.setDate(s.getDate()-7);d.value=iso(s);h.value=iso(today);}
   else if(v==='mes'){const s=new Date(today.getFullYear(),today.getMonth(),1);d.value=iso(s);h.value=iso(today);}
   else if(v==='turno'){
-    // Turno actual según horarios definidos en DB.data.turnos
-    const now=new Date();const hm=now.getHours()*60+now.getMinutes();
-    const turnos=(DB.data.turnos||[]).filter(t=>t.activo);
-    let tActivo=null;
-    turnos.forEach(t=>{
-      if(!t.inicio||!t.fin)return;
-      const [ih,im]=t.inicio.split(':').map(Number);const [fh,fm]=t.fin.split(':').map(Number);
-      const ini=ih*60+im,fin=fh*60+fm;
-      if(ini<fin){if(hm>=ini&&hm<fin)tActivo=t;}
-      else{if(hm>=ini||hm<fin)tActivo=t;} // cruza medianoche
-    });
-    document.getElementById('slTurno').value=tActivo?tActivo.codigo:'';
+    document.getElementById('slTurno').value=_adminInferTurnoCodigoPorHorario()||'';
     d.value=iso(today);h.value=iso(today);
   }
   applyFilters();
 }
 
+function populateSlTurnoFromDb(){
+  const sel=document.getElementById('slTurno');if(!sel)return;
+  const prev=sel.value;
+  const activos=(DB.data.turnos||[]).filter(t=>t.activo);
+  sel.innerHTML='<option value="">Todos</option>'+activos.map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre)}</option>`).join('');
+  const codes=new Set(activos.map(t=>String(t.codigo)));
+  if(prev&&codes.has(prev))sel.value=prev;
+}
 function renderDashboard(){
+  populateSlTurnoFromDb();
+  if(!_dashDefaultsApplied){
+    _dashDefaultsApplied=true;
+    if(!_dashSlicersUserCleared){
+      const dEl=document.getElementById('slFechaDesde'),hEl=document.getElementById('slFechaHasta'),pEl=document.getElementById('slFechaPreset');
+      if(dEl&&hEl&&pEl&&!dEl.value&&!hEl.value){
+        pEl.value='turno';
+        applyFechaPreset();
+      }
+    }
+  }
   populateSlicers();
   wpBarInit();
   renderWidgetPalette();
   refreshLayoutPicker();
+  applyFilters();
   renderKPIs();
   renderDashGrid();
 }
@@ -1169,11 +1214,12 @@ function applyFilters(){
   renderKPIs();renderDashGrid();
 }
 function clearFilters(){
+  _dashSlicersUserCleared=true;
   _filters={desde:null,hasta:null,turno:'',especies:new Set(),lineas:new Set()};
   ['slFechaDesde','slFechaHasta'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('slFechaPreset').value='todo';
   document.getElementById('slTurno').value='';
-  populateSlicers();renderKPIs();renderDashGrid();
+  populateSlicers();applyFilters();renderKPIs();renderDashGrid();
 }
 function renderKPIs(){
   const moldes=_filterRecs(RT.data.moldes);
@@ -1308,7 +1354,7 @@ function addWidget(){
   m.innerHTML=`<div class="modal"><div class="modal-hdr"><div class="modal-title">Agregar widget</div><button class="modal-x" onclick="closeModal()">×</button></div><div class="modal-body">${body}</div><div class="modal-ftr"><button class="btn ghost" onclick="closeModal()">Cerrar</button></div></div>`;
   document.body.appendChild(m);
 }
-function reloadDashboard(){RT.load();renderDashboard();toast('Datos actualizados','success');}
+function reloadDashboard(){RT.load();populateSlTurnoFromDb();populateSlicers();applyFilters();renderKPIs();renderDashGrid();toast('Datos actualizados','success');}
 
 function _buildChartData(w,all,moldes,pesajes){
   const col=w.color||null;
@@ -2205,9 +2251,14 @@ async function sbPullRuntimeFromCloud(){
   try{
     if(!RT.data)RT.data={};
     for(const t of['moldes','pesajes']){
+      const localBefore=Array.isArray(RT.data[t])?[...RT.data[t]]:[];
       const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
       if(error){sbLog('pull RT '+t+': '+error.message,false);continue;}
-      RT.data[t]=_sbParse(t,data||[]);
+      const remote=_sbParse(t,data||[]);
+      const merged=_rtMergeRemoteWithLocal(localBefore,remote);
+      RT.data[t]=merged;
+      const added=merged.length-remote.length;
+      if(added>0)sbLog(t+': nube '+remote.length+' + solo-local '+added+' (conservados)',true);
     }
     if(RT.save)RT.save();
     try{
@@ -2530,10 +2581,14 @@ async function pullAll(){
       const{data,error}=await _sb.from(t).select('*');
       if(error)throw error;DB.data[t]=_sbParse(t,data);sbLog(t+': '+data.length+' filas ↓');
     }
-    // Operacionales
+    // Operacionales (fusionar: no borrar registros hechos en tablet y aún no en la nube)
     for(const t of['moldes','pesajes']){
+      const localBefore=Array.isArray(RT.data&&RT.data[t])?[...RT.data[t]]:[];
       const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
-      if(error)throw error;if(!RT.data)RT.data={};RT.data[t]=_sbParse(t,data);sbLog(t+': '+data.length+' filas ↓');
+      if(error)throw error;if(!RT.data)RT.data={};
+      const remote=_sbParse(t,data||[]);
+      RT.data[t]=_rtMergeRemoteWithLocal(localBefore,remote);
+      sbLog(t+': '+RT.data[t].length+' filas ↓ (nube '+remote.length+')');
     }
     DB.save();if(RT.save)RT.save();
     renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
@@ -2579,9 +2634,18 @@ function tabletLink(){window.open('index.html','_blank');}
 /* ════════════ IMPORT/EXPORT FILTRADO (moldes/pesajes) ════════════ */
 function populateIEFilters(){
   const sel=document.getElementById('ieTurno');if(!sel)return;
-  sel.innerHTML='<option value="">Todos</option>'+(DB.data.turnos||[]).map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre)} (${esc(t.inicio)}–${esc(t.fin)})</option>`).join('');
+  sel.innerHTML='<option value="">Todos</option>'+(DB.data.turnos||[]).filter(t=>t.activo).map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre)} (${esc(t.inicio)}–${esc(t.fin)})</option>`).join('');
   const rh=document.getElementById('ieRangoHora');
   if(rh){const oldHandler=rh.onchange;rh.onchange=()=>{document.getElementById('ieHoraCustom').style.display=rh.value==='custom'?'':'none';previewFiltered();};}
+  const d=document.getElementById('ieDesde'),h=document.getElementById('ieHasta');
+  if(d&&h&&!d.value&&!h.value){
+    const iso=new Date().toISOString().slice(0,10);
+    d.value=h.value=iso;
+  }
+  if(sel&&!sel.value){
+    const inf=_adminInferTurnoCodigoPorHorario();
+    if([...sel.options].some(o=>o.value===inf))sel.value=inf;
+  }
   previewFiltered();
 }
 function _ieResolveRango(){
