@@ -289,9 +289,21 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     </div>
     <div class="slicer">
       <label class="form-label">Turno</label>
-      <select class="select" id="slTurno" onchange="applyFilters()">
+      <select class="select" id="slTurno" onchange="onDashTurnoChange()">
         <option value="">Todos</option>
       </select>
+    </div>
+    <div class="slicer">
+      <label class="form-label">Hora desde</label>
+      <input type="time" class="input" id="slHoraDesde" onchange="applyFilters()" title="Filtro por hora del registro (opcional si ambas vacías)">
+    </div>
+    <div class="slicer">
+      <label class="form-label">Hora hasta</label>
+      <input type="time" class="input" id="slHoraHasta" onchange="applyFilters()" title="Inclusivo. Si es &lt; desde, rango cruza medianoche (ej. noche 19:00–06:59)">
+    </div>
+    <div class="slicer" style="min-width:130px;">
+      <label class="form-label" style="opacity:.88;">Rango</label>
+      <button type="button" class="btn ghost sm" style="width:100%;" onclick="dashSyncHoraFromTurno(true)" title="Rellenar horas según turno elegido (catálogo Turnos)">↻ Desde turno</button>
     </div>
     <div class="slicer" style="flex:1;min-width:200px;">
       <label class="form-label">Especies (multi)</label>
@@ -939,7 +951,7 @@ const PALETTE=['#3b6fb8','#1e3a66','#16a34a','#dc2626','#f59e0b','#8b5cf6','#06b
 try{const saved=localStorage.getItem('friosur_dash_layout');if(saved)dashWidgets=JSON.parse(saved);}catch(e){}
 function saveDashLayout(){localStorage.setItem('friosur_dash_layout',JSON.stringify(dashWidgets));}
 
-let _filters={desde:null,hasta:null,turno:'',especies:new Set(),lineas:new Set()};
+let _filters={desde:null,hasta:null,turno:'',horaDesdeMin:null,horaHastaMin:null,especies:new Set(),lineas:new Set()};
 let _charts={};
 let _dashSlicersUserCleared=false;
 let _dashDefaultsApplied=false;
@@ -975,6 +987,48 @@ function _recDate(r){
   }
   return null;
 }
+/** Minutos desde medianoche a partir de r.hora (HH:MM o HH:MM:SS). */
+function _dashHoraRecToMin(hora){
+  const m=String(hora==null?'':hora).trim().match(/^(\d{1,2})[:\.](\d{2})/);
+  if(!m)return null;
+  return Math.min(23*60+59,Math.max(0,parseInt(m[1],10)*60+parseInt(m[2],10)));
+}
+function _minutesToHHMM(mins){
+  if(mins==null||isNaN(mins))return'';
+  const m=Math.max(0,Math.min(23*60+59,mins|0));
+  const h=Math.floor(m/60),mi=m%60;
+  return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
+}
+/** Rellena hora desde/hasta según catálogo Turnos (fin de día = minuto anterior al fin catálogo). */
+function dashSyncHoraFromTurno(showToastOk){
+  const tur=(document.getElementById('slTurno')||{}).value;
+  const hd=document.getElementById('slHoraDesde');
+  const hh=document.getElementById('slHoraHasta');
+  if(!hd||!hh)return;
+  if(!tur){hd.value='';hh.value='';if(showToastOk)toast('Elige un turno para copiar horario','info');applyFilters();return;}
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo)===String(tur));
+  if(!t||t.inicio==null||t.fin==null||String(t.inicio).trim()===''||String(t.fin).trim()===''){
+    if(showToastOk)toast('Sin inicio/fin en Turnos (Admin)','warn');
+    return;
+  }
+  const iniM=_adminParseHMToMinutes(t.inicio),finM=_adminParseHMToMinutes(t.fin);
+  if(iniM==null||finM==null){if(showToastOk)toast('Horario de turno no legible','warn');return;}
+  hd.value=_minutesToHHMM(iniM);
+  if(finM<iniM)hh.value=_minutesToHHMM(Math.max(0,finM*1-1));
+  else hh.value=_minutesToHHMM(Math.max(iniM,finM-1));
+  if(showToastOk)toast('Horas: '+hd.value+' – '+hh.value,'success');
+  applyFilters();
+}
+function onDashTurnoChange(){
+  const tur=(document.getElementById('slTurno')||{}).value;
+  if(tur)dashSyncHoraFromTurno(false);
+  else{
+    const hd=document.getElementById('slHoraDesde'),hh=document.getElementById('slHoraHasta');
+    if(hd)hd.value='';
+    if(hh)hh.value='';
+    applyFilters();
+  }
+}
 function _filterRecs(recs){
   return recs.filter(r=>{
     if(_filters.turno){
@@ -989,6 +1043,15 @@ function _filterRecs(recs){
       if(_filters.desde&&d.getTime()<_filters.desde.getTime())return false;
       if(_filters.hasta&&d.getTime()>_filters.hasta.getTime())return false;
     }
+    if(_filters.horaDesdeMin!=null&&_filters.horaHastaMin!=null){
+      const hm=_dashHoraRecToMin(r&&r.hora);
+      if(hm==null)return true;
+      const a=_filters.horaDesdeMin,b=_filters.horaHastaMin;
+      let ok=false;
+      if(a<=b)ok=hm>=a&&hm<=b;
+      else ok=hm>=a||hm<=b;
+      if(!ok)return false;
+    }
     return true;
   });
 }
@@ -996,7 +1059,12 @@ function applyFechaPreset(){
   const v=document.getElementById('slFechaPreset').value;
   const d=document.getElementById('slFechaDesde'),h=document.getElementById('slFechaHasta');
   const today=new Date();today.setHours(0,0,0,0);
-  if(v==='todo'){d.value='';h.value='';}
+  if(v==='todo'){
+    d.value='';h.value='';
+    const hd=document.getElementById('slHoraDesde'),hh=document.getElementById('slHoraHasta');
+    if(hd)hd.value='';
+    if(hh)hh.value='';
+  }
   else if(v==='hoy'){const y=_dateObjToLocalYmd(today);d.value=y;h.value=y;}
   else if(v==='ayer'){const y=new Date(today);y.setDate(y.getDate()-1);const s=_dateObjToLocalYmd(y);d.value=s;h.value=s;}
   else if(v==='semana'){const s=new Date(today);s.setDate(s.getDate()-7);d.value=_dateObjToLocalYmd(s);h.value=_dateObjToLocalYmd(today);}
@@ -1005,6 +1073,7 @@ function applyFechaPreset(){
     document.getElementById('slTurno').value=_adminInferTurnoCodigoPorHorario()||'';
     const y=_dateObjToLocalYmd(today);
     d.value=y;h.value=y;
+    dashSyncHoraFromTurno(false);
   }
   applyFilters();
 }
@@ -1246,13 +1315,26 @@ function applyFilters(){
   _filters.desde=d?_ymdToLocalStart(d):null;
   _filters.hasta=h?_ymdToLocalEnd(h):null;
   _filters.turno=document.getElementById('slTurno').value;
+  const hds=(document.getElementById('slHoraDesde')||{}).value;
+  const hhs=(document.getElementById('slHoraHasta')||{}).value;
+  if(hds&&hhs){
+    _filters.horaDesdeMin=_adminParseHMToMinutes(hds);
+    _filters.horaHastaMin=_adminParseHMToMinutes(hhs);
+    if(_filters.horaDesdeMin==null||_filters.horaHastaMin==null){_filters.horaDesdeMin=null;_filters.horaHastaMin=null;}
+  }else{
+    _filters.horaDesdeMin=null;
+    _filters.horaHastaMin=null;
+  }
   renderKPIs();renderDashGrid();
   try{if(document.getElementById('dashLastKgSync'))dashRefreshKgSummary({silent:true});}catch(e){}
 }
 function clearFilters(){
   _dashSlicersUserCleared=true;
-  _filters={desde:null,hasta:null,turno:'',especies:new Set(),lineas:new Set()};
+  _filters={desde:null,hasta:null,turno:'',horaDesdeMin:null,horaHastaMin:null,especies:new Set(),lineas:new Set()};
   ['slFechaDesde','slFechaHasta'].forEach(id=>document.getElementById(id).value='');
+  const hd=document.getElementById('slHoraDesde'),hh=document.getElementById('slHoraHasta');
+  if(hd)hd.value='';
+  if(hh)hh.value='';
   document.getElementById('slFechaPreset').value='todo';
   document.getElementById('slTurno').value='';
   populateSlicers();applyFilters();renderKPIs();renderDashGrid();
