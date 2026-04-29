@@ -5098,16 +5098,17 @@ function _turnoHourIntsFromDb(turnoCod){
   }
   return out.length?out:null;
 }
-/** Columnas de hora: Todos = solo horas vistas en datos; día/noche/actual = ventana Admin + datos. */
+/** Columnas de hora: solo horas presentes en los datos filtrados (no se añaden huecos del turno vacíos). */
 function _mResumenHourColsFromFiltro(mol,filtro){
   const obs=new Set();
   (mol||[]).forEach(r2=>{const m=(r2.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
-  if(filtro==='todos')return[...obs].sort((a,b)=>a-b);
+  const arr=[...obs];
+  if(!arr.length)return[];
+  if(filtro==='todos')return arr.sort((a,b)=>a-b);
   const code=filtro==='actual'?(_inferTurnoCodigoPorHorario()||'dia'):filtro;
   const db=_turnoHourIntsFromDb(code);
-  if(!db||!db.length)return[...obs].sort((a,b)=>a-b);
-  const merged=[...new Set([...db,...obs])];
-  return merged.sort((a,b)=>{const ia=db.indexOf(a),ib=db.indexOf(b);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return a-b;});
+  if(!db||!db.length)return arr.sort((a,b)=>a-b);
+  return arr.sort((a,b)=>{const ia=db.indexOf(a),ib=db.indexOf(b);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return a-b;});
 }
 
 /* ═══ MOLDES — Resumen por Hora (pivot operario × hora) ═══════════ */
