@@ -2573,7 +2573,10 @@ function setMoldTab(el,id){
   el.classList.add('active');
   document.querySelectorAll('.mold-tab').forEach(t=>t.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
-  if(id==='mArmado'&&window.renderMArmado)renderMArmado();
+  try{if(typeof closeIosPicker==='function')closeIosPicker();}catch(_){}
+  try{if(typeof closeMAddLinea==='function')closeMAddLinea();}catch(_){}
+  try{if(typeof closeMArmado==='function')closeMArmado();}catch(_){}
+  if(id==='mArmado'&&typeof renderMArmado==='function')renderMArmado();
   if(id==='mGeneral'&&window.renderGRegPresets){renderGRegPresets();renderGeneralesTable();}
   if(id==='mVer'&&window.renderMoldesTable)renderMoldesTable();
   if(id==='mResumen'&&window.renderMResumen)renderMResumen();
@@ -2593,6 +2596,7 @@ function setPesTab(el,id){
   el.classList.add('active');
   document.querySelectorAll('.pes-tab').forEach(t=>t.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
+  try{if(typeof closeIosPicker==='function')closeIosPicker();}catch(_){}
   if(id==='pResumen'&&window.renderPResumen)renderPResumen();
   if(id==='pConsol'&&window.renderPConsol)renderPConsol();
   if(id==='pArmado'&&window.renderPArmado)renderPArmado();
@@ -3315,6 +3319,7 @@ function _fechaArmadoOperativa(turnoCod){
 }
 /** Elige código de turno según hora actual y horarios en Admin → Turnos (soporta cruce de medianoche). */
 function _inferTurnoCodigoPorHorario(){
+  if(!DB||!DB.data)return'dia';
   const activos=(DB.data.turnos||[]).filter(t=>t.activo);
   if(!activos.length)return'dia';
   const now=_minutesNowLocal();
@@ -5464,19 +5469,29 @@ window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.r
 
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
 function _ensureArmadoMolde(){
-  if(!RT.armadoMolde)RT.armadoMolde={};
+  let raw=RT.armadoMolde;
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))raw={};
+  RT.armadoMolde=raw;
   const migrated={};
-  Object.keys(RT.armadoMolde).forEach(k=>{
-    const d=RT.armadoMolde[k]||{};
-    if(!Array.isArray(d.trabajadores))d.trabajadores=[];
-    if(!('especie' in d))d.especie=d.producto||'';
-    if(!d.turno)d.turno='dia';
-    if(!d.fecha)d.fecha=nowDate();
-    const meta=_armParseKey(k);
-    const linea=(meta.linea||k||'').trim().toUpperCase();
-    const finalKey=_armScopeKey(linea,d.turno,d.fecha);
-    migrated[finalKey]={...d,turno:d.turno,fecha:d.fecha};
-  });
+  try{
+    Object.keys(RT.armadoMolde).forEach(k=>{
+      let d=RT.armadoMolde[k];
+      if(!d||typeof d!=='object'||Array.isArray(d))d={};
+      if(!Array.isArray(d.trabajadores))d.trabajadores=[];
+      if(!('especie' in d))d.especie=d.producto||'';
+      if(!d.turno)d.turno='dia';
+      if(!d.fecha)d.fecha=nowDate();
+      const meta=_armParseKey(k);
+      const linea=(meta.linea||k||'').trim().toUpperCase();
+      const finalKey=_armScopeKey(linea,d.turno,d.fecha);
+      migrated[finalKey]={...d,turno:d.turno,fecha:d.fecha};
+    });
+  }catch(e){
+    console.error('_ensureArmadoMolde',e);
+    RT.armadoMolde={};
+    try{rtSave();}catch(_){}
+    return;
+  }
   RT.armadoMolde=migrated;
 }
 function _getMArmScopeTurno(){
@@ -5557,9 +5572,11 @@ function _renderMArmadoCopiaBanner(){
   el.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div class="m-armado-copia-hint-body"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
 }
 function renderMArmado(){
+  const box=document.getElementById('mArmadoList');if(!box)return;
+  const trabDbList=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  try{
   _ensureArmadoMolde();
   _setMArmScopeDefaults();
-  const box=document.getElementById('mArmadoList');if(!box)return;
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
   const scopedRows=_armEntriesForScope(turnoScope,fechaScope);
@@ -5597,8 +5614,8 @@ function renderMArmado(){
       </div>
       <div class="worker-chips">
         ${trabs.length?trabs.slice(0,12).map(t=>{
-          const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-          const tDb=DB.data.trabajadores.find(x=>x.id===t.trabId);
+          const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>(x&&x[0])||'').join('').toUpperCase();
+          const tDb=trabDbList.find(x=>x.id===t.trabId);
           const codigo=tDb?tDb.codigo:null;
           const prevCls=t.fromPrevArmado?' wc-from-prev':'';
           return `<div class="worker-chip${prevCls}"><div class="wc-av">${esc(ini)}</div><span>${esc(t.nombre)}</span>${codigo?`<span style="font-size:10px;color:var(--text-3);margin-left:2px;">(${esc(codigo)})</span>`:''}  </div>`;
@@ -5608,6 +5625,11 @@ function renderMArmado(){
     </div>`;
   }).join('');
   _renderMArmadoCopiaBanner();
+  }catch(e){
+    console.error('renderMArmado',e);
+    box.innerHTML='<div class="alert danger" style="margin-top:8px;"><strong>Error al mostrar armado</strong><div style="margin-top:8px;font-size:12px;">'+esc(String(e&&e.message||e))+'</div><div style="margin-top:10px;font-size:12px;">Prueba recargar la página. Si persiste, en Admin exporta datos y revisa el almacenamiento local (armado corrupto).</div></div>';
+    try{_updateMArmScopeStatus();}catch(_){}
+  }
 }
 
 function addMLinea(){
@@ -5725,7 +5747,8 @@ function _pickRandom5(arr){
 function openIosPicker(mode,cb,trabsList){
   // trabsList: lista ya filtrada (modo registro) → mostrar todos
   // null      : modo armado → mostrar 5 aleatorios, buscar en todos
-  const allTrabs=Array.isArray(trabsList)?trabsList:DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  const allTrabs=Array.isArray(trabsList)?trabsList:pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
   const isRegistro=Array.isArray(trabsList); // registro = array (incluso vacío); armado = null
   const hideManual=!!(isRegistro&&trabsList&&trabsList._enArmadoLinea&&allTrabs.length>0);
   // Lista inicial: registro→todos ; armado→5 aleatorios
@@ -5825,7 +5848,8 @@ function _renderIosItems(trabs,q){
 }
 function filterIosPicker(q){
   const list=document.getElementById('iosPickerList');if(!list)return;
-  const trabs=_iosPicker.trabsList||DB.data.trabajadores.filter(t=>t.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  const trabs=_iosPicker.trabsList||pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
   const trimQ=(q||'').trim();
   if(!trimQ){
     // Registro: mostrar todos los asignados ; Armado: volver a 5 aleatorios
@@ -5851,7 +5875,7 @@ function selectIosWorker(id,nombre,codigo){
 }
 function closeIosPicker(){
   // Limpiar listener de teclado virtual
-  if(window.visualViewport&&_iosPicker._vpAdj){
+  if(window.visualViewport&&_iosPicker&&_iosPicker._vpAdj){
     window.visualViewport.removeEventListener('resize',_iosPicker._vpAdj);
     window.visualViewport.removeEventListener('scroll',_iosPicker._vpAdj);
   }
