@@ -936,9 +936,15 @@ const WIDGET_CATALOG=[
   // Tablas (registros completos)
   {type:'tbl-moldes',    title:'Tabla · Ver moldes',    size:'lg', group:'Registros', icon:'≡'},
   {type:'tbl-pesaje',    title:'Tabla · Ver pesajes',   size:'lg', group:'Registros', icon:'≡'},
-  // Pivots
-  {type:'pv-hora-mol',   title:'Moldes · Por hora',     size:'lg', group:'Por hora', icon:'⏱'},
-  {type:'pv-hora-pes',   title:'Pesaje · Por hora',     size:'lg', group:'Por hora', icon:'⏱'},
+  // Pivots (hora × línea × especie × operario; `linea` = una sola línea en el widget)
+  {type:'pv-hora-mol',   title:'Moldes · Por hora (todas las líneas)', size:'lg', group:'Por hora', icon:'⏱'},
+  {type:'pv-hora-mol',   title:'Moldes línea 1',     size:'lg', group:'Por hora', icon:'⏱', linea:'L1'},
+  {type:'pv-hora-mol',   title:'Moldes línea 2',     size:'lg', group:'Por hora', icon:'⏱', linea:'L2'},
+  {type:'pv-hora-mol',   title:'Moldes línea 3',     size:'lg', group:'Por hora', icon:'⏱', linea:'L3'},
+  {type:'pv-hora-pes',   title:'Pesaje · Por hora (todas las líneas)', size:'lg', group:'Por hora', icon:'⏱'},
+  {type:'pv-hora-pes',   title:'Pesaje línea 1',     size:'lg', group:'Por hora', icon:'⏱', linea:'L1'},
+  {type:'pv-hora-pes',   title:'Pesaje línea 2',     size:'lg', group:'Por hora', icon:'⏱', linea:'L2'},
+  {type:'pv-hora-pes',   title:'Pesaje línea 3',     size:'lg', group:'Por hora', icon:'⏱', linea:'L3'},
   // Consolidados
   {type:'pv-consol-mol', title:'Moldes · Consolidado (línea×hora)', size:'lg', group:'Consolidado', icon:'Σ'},
   {type:'pv-consol-pes', title:'Pesaje · Consolidado (op×especie)', size:'lg', group:'Consolidado', icon:'Σ'},
@@ -1319,8 +1325,12 @@ const LAYOUT_TEMPLATES={
   '👤 Planillero · Día':[
     {type:'kpi-moldes',title:'Moldes hoy',size:'sm'},
     {type:'kpi-kg',title:'Kg hoy',size:'sm'},
-    {type:'pv-hora-mol',title:'Moldes por hora',size:'lg'},
-    {type:'pv-hora-pes',title:'Pesaje por hora',size:'lg'},
+    {type:'pv-hora-mol',title:'Moldes línea 1',size:'lg',linea:'L1'},
+    {type:'pv-hora-mol',title:'Moldes línea 2',size:'lg',linea:'L2'},
+    {type:'pv-hora-mol',title:'Moldes línea 3',size:'lg',linea:'L3'},
+    {type:'pv-hora-pes',title:'Pesaje línea 1',size:'lg',linea:'L1'},
+    {type:'pv-hora-pes',title:'Pesaje línea 2',size:'lg',linea:'L2'},
+    {type:'pv-hora-pes',title:'Pesaje línea 3',size:'lg',linea:'L3'},
     {type:'tbl-moldes',title:'Últimos moldes',size:'lg'},
     {type:'tbl-pesaje',title:'Últimos pesajes',size:'lg'},
   ],
@@ -1360,8 +1370,13 @@ const LAYOUT_TEMPLATES={
     {type:'chart-hora',title:'Por hora · L2',size:'md',linea:'L2'},
     {type:'chart-hora',title:'Por hora · L3',size:'md',linea:'L3'},
     {type:'chart-hora-linea',title:'Hora × línea (combinado)',size:'lg'},
-    {type:'pv-hora-mol',title:'Moldes — hora × línea × especie × operario',size:'lg'},
-    {type:'pv-hora-pes',title:'Pesaje — hora × línea × especie × operario',size:'lg'},
+    {type:'pv-hora-mol',title:'Moldes línea 1',size:'lg',linea:'L1'},
+    {type:'pv-hora-mol',title:'Moldes línea 2',size:'lg',linea:'L2'},
+    {type:'pv-hora-mol',title:'Moldes línea 3',size:'lg',linea:'L3'},
+    {type:'pv-hora-pes',title:'Pesaje línea 1',size:'lg',linea:'L1'},
+    {type:'pv-hora-pes',title:'Pesaje línea 2',size:'lg',linea:'L2'},
+    {type:'pv-hora-pes',title:'Pesaje línea 3',size:'lg',linea:'L3'},
+    {type:'pv-hora-pes',title:'Pesaje · todas las líneas',size:'lg'},
     {type:'pv-consol-mol',title:'Consolidado por línea',size:'lg'},
   ],
 };
@@ -1772,15 +1787,19 @@ function drawTableWidget(w,moldes,pesajes){
     html=`<table><thead><tr><th>Hora</th><th>L.</th><th>Trab.</th><th>Especie</th><th>Tipo</th><th class="num">Kg</th><th>Guía</th></tr></thead><tbody>`+
       rows.map(r=>`<tr><td>${esc(r.hora||'')}</td><td>${esc(r.linea||'')}</td><td>${esc(r.nombre||'')}</td><td>${esc(r.especie||'')}</td><td>${esc(r.tipo||'')}</td><td class="num">${_fmt(r.kg)}</td><td>${esc(r.guia||'')}</td></tr>`).join('')+`</tbody></table>`;
   } else if(w.type==='pv-hora-mol'||w.type==='pv-hora-pes'){
-    const src=w.type==='pv-hora-mol'?moldes:pesajes;
-    if(!src.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin registros</div>';return;}
+    const lineF=(w.linea&&String(w.linea).trim())?String(w.linea).trim():'';
+    let src=w.type==='pv-hora-mol'?moldes:pesajes;
+    if(lineF)src=src.filter(r=>String((r.linea||'').trim()).toUpperCase()===lineF.toUpperCase());
+    if(!src.length){
+      host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">'+(lineF?'Sin registros para <strong>'+esc(lineF)+'</strong>':'Sin registros')+'</div>';
+      return;
+    }
     const hoursSet=new Set();src.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
     const hours=[...hoursSet].sort((a,b)=>a-b);
-    // Clave compuesta: linea | especie | nombre — para mostrar agrupado
     const map={};
     src.forEach(r=>{
       const lin=r.linea||'—', esp=r.especie||'—', nom=r.nombre||'—';
-      const k=lin+'\u0001'+esp+'\u0001'+nom;
+      const k=lineF?(esp+'\u0001'+nom):(lin+'\u0001'+esp+'\u0001'+nom);
       if(!map[k])map[k]={lin,esp,nom,byH:{},tot:0,cant:0};
       const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
       const v=+r.kg||0;
@@ -1788,20 +1807,21 @@ function drawTableWidget(w,moldes,pesajes){
       map[k].tot+=v;
       if(w.type==='pv-hora-mol')map[k].cant+=(+r.cant||0);
     });
-    // Ordenar por línea, después especie, después nombre
-    const rows=Object.values(map).sort((a,b)=>(a.lin+a.esp+a.nom).localeCompare(b.lin+b.esp+b.nom));
+    const rows=Object.values(map).sort((a,b)=>lineF?(a.esp+a.nom).localeCompare(b.esp+b.nom):(a.lin+a.esp+a.nom).localeCompare(b.lin+b.esp+b.nom));
     const totCol={};let gt=0;rows.forEach(r=>{hours.forEach(h=>totCol[h]=(totCol[h]||0)+(r.byH[h]||0));gt+=r.tot;});
     const cantHdr=w.type==='pv-hora-mol'?'<th class="num">Cant</th>':'';
     const cantTot=w.type==='pv-hora-mol'?`<th class="num">${_fmtInt(rows.reduce((s,r)=>s+r.cant,0))}</th>`:'';
+    const thLinea=lineF?'':'<th>Línea</th>';
+    const footSpan=lineF?2:3;
     html=`<table>
       <thead><tr>
-        <th>Línea</th><th>Especie</th><th>Operario</th>
+        ${thLinea}<th>Especie</th><th>Operario</th>
         ${hours.map(h=>`<th class="num">${String(h).padStart(2,'0')}h</th>`).join('')}
         ${cantHdr}<th class="num">Total kg</th>
       </tr></thead>
       <tbody>`+
       rows.map(r=>`<tr>
-        <td><strong>${esc(r.lin)}</strong></td>
+        ${lineF?'':`<td><strong>${esc(r.lin)}</strong></td>`}
         <td>${esc(r.esp)}</td>
         <td>${esc(r.nom)}</td>
         ${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}
@@ -1810,7 +1830,7 @@ function drawTableWidget(w,moldes,pesajes){
       </tr>`).join('')+
       `</tbody>
       <tfoot><tr>
-        <td colspan="3">TOTAL</td>
+        <td colspan="${footSpan}">TOTAL</td>
         ${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}
         ${cantTot}
         <td class="num">${_fmt(gt)}</td>
