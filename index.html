@@ -6842,8 +6842,7 @@ const TBSync={
           trabajadores:d.trabajadores||[],
           especie:d.especie||'',
           turno,
-          fecha,
-          updated_at:new Date().toISOString()
+          fecha
         };});
       // Una fila por (línea, turno, fecha) — misma clave que _armScopeKey; evita duplicados en el batch.
       const armadoByKey=new Map();
@@ -6862,7 +6861,12 @@ const TBSync={
         const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea,turno,fecha'});
         if(armErr){
           console.warn('[sb push armado_lineas]',armErr.message);
-          if(typeof showToast==='function')showToast('Armado línea: '+armErr.message,'error');
+          if(typeof showToast==='function'){
+            const hint=/no unique or exclusion constraint/i.test(String(armErr.message||''))
+              ?' · En Supabase ejecuta el SQL del repo: supabase_migrate_armado_lineas_scope.sql'
+              :'';
+            showToast('Armado línea: '+armErr.message+hint,'error');
+          }
         }else this._lastSig.armado=sigA;
       }
       this._pushLastAt=Date.now();
