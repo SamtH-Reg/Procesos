@@ -4766,16 +4766,15 @@ function renderPResumen(){
   pes=pes.filter(r=>!r.fecha||r.fecha===fechaTurno||(!r.fecha&&fechaTurno===today));
   if(lineaVal)pes=pes.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
   if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
-  const hintP='Misma lógica que moldes: <strong>fecha inicio</strong> del registro, <strong>turno de la línea</strong> (catálogo Admin) y <strong>línea</strong>.';
-  const req='<span style="color:#b91c1c;font-weight:700;">*</span>';
+  const hintP='Filtra por <strong>fecha del registro</strong>, turno del <strong>Armado de pesaje</strong> por línea (y catálogo Admin), y <strong>línea</strong>.';
   const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
-    <label class="form-label" style="margin:0;">🗓️ Fecha inicio ${req} <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+    <label class="form-label" style="margin:0;">Fecha (turno)</label>
     <input type="date" class="input" id="pResumenFechaInicio" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderPResumen()">
-    <label class="form-label" style="margin:0;">Turno de la línea ${req}</label>
+    <label class="form-label" style="margin:0;">Turno de línea</label>
     ${_resumenTurnoLineaSelectHtml('pResumenTurnoLinea','renderPResumen',filtro)}
     <label class="form-label" style="margin:0;">Línea</label>
-    <select class="select" id="pResumenFiltroLinea" style="max-width:160px;" onchange="renderPResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
-    <span style="font-size:11px;color:var(--text-3);max-width:480px;">${hintP}</span>
+    <select class="select" id="pResumenFiltroLinea" style="max-width:120px;" onchange="renderPResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
+    <span style="font-size:11px;color:var(--text-3);max-width:520px;">${hintP}</span>
   </div>`;
   if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+(filtro!=='todos'?' · filtro turno':'')+'.</div>';if(sub)sub.textContent='0 pesajes · '+hoyStr+(lineaVal?' · '+lineaVal:'');return;}
   const hours=_mResumenHourColsFromFiltro(pes,filtro);
@@ -5034,7 +5033,7 @@ function _resumenTurnoLineaSelectHtml(selectId,onChangeFn,selectedVal){
     seenCod.add(cod);
     opts.push(`<option value="${esc(cod)}" ${cod===selectedVal?'selected':''}>${esc(_turnoLineaResumenEtiqueta(t))}</option>`);
   });
-  return `<select class="select" id="${selectId}" style="max-width:380px;" onchange="${onChangeFn}()">${opts.join('')}</select>`;
+  return `<select class="select" id="${selectId}" style="max-width:280px;" onchange="${onChangeFn}()">${opts.join('')}</select>`;
 }
 function _readResumenTurnoLineaSelect(selectId){
   const el=document.getElementById(selectId);
@@ -5127,17 +5126,16 @@ function renderMResumen(){
   const filtro=_defaultResumenTurnoSelect(prevTurnoEl,legacyTurno);
   let mol=_mResumenRowsForScope(fechaTurno,filtro,lineaVal||null);
   const hintArmado=_mResumenHasArmadoConPersonasParaFecha(fechaTurno)
-    ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno/línea.'
-    :'Sin armado con personas para esta fecha: se muestran <strong>todos</strong> los moldes del día (configura armado en la pestaña homónima).';
-  const req='<span style="color:#b91c1c;font-weight:700;">*</span>';
+    ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno.'
+    :'Sin armado con personas para esta fecha: se muestran <strong>todos</strong> los moldes del día (configura armado en la pestaña homónima para filtrar por línea).';
   const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
-    <label class="form-label" style="margin:0;">🗓️ Fecha inicio ${req} <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+    <label class="form-label" style="margin:0;">Fecha (turno)</label>
     <input type="date" class="input" id="mResumenFechaInicio" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderMResumen()">
-    <label class="form-label" style="margin:0;">Turno de la línea ${req}</label>
+    <label class="form-label" style="margin:0;">Turno de línea</label>
     ${_resumenTurnoLineaSelectHtml('mResumenTurnoLinea','renderMResumen',filtro)}
     <label class="form-label" style="margin:0;">Línea</label>
-    <select class="select" id="mResumenFiltroLinea" style="max-width:160px;" onchange="renderMResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
-    <span style="font-size:11px;color:var(--text-3);max-width:520px;">${hintArmado}</span>
+    <select class="select" id="mResumenFiltroLinea" style="max-width:120px;" onchange="renderMResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
+    <span style="font-size:11px;color:var(--text-3);max-width:560px;">${hintArmado}</span>
   </div>`;
   if(!mol.length){
     const filtroTxt=filtro==='todos'?'':_resumenFiltroTurnoSub(filtro);
