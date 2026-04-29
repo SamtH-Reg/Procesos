@@ -5679,6 +5679,13 @@ function editPArmadoLinea(ln){
           <input type="date" class="input" id="pArmFecha" required value="${_editPArmado.fecha||''}" onchange="_editPArmado.fecha=this.value;">
         </div>
       </div>
+      <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <button class="btn ghost" type="button" onclick="copiarPArmadoModalDiaAnterior()" title="Misma línea y mismo turno (día/noche): trae planillero y trabajadores del día calendario anterior a la fecha de inicio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar armado día anterior
+        </button>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">Usa la línea <strong>${esc(ln)}</strong> y el turno elegido arriba; los datos vienen del <strong>mismo turno</strong> en la fecha de inicio <strong>menos un día</strong> (calendario). No cambia la fecha de inicio del armado actual.</div>
+      </div>
 
       <!-- PLANILLERO LÍNEA -->
       <div style="padding:14px;background:color-mix(in srgb,var(--safety-green) 8%,var(--surface));border:1.5px solid var(--safety-green);border-radius:var(--radius-sm);margin-bottom:16px;">
@@ -5883,6 +5890,42 @@ function addPArmTrabManual(){
   renderPArmModal();
   showToast(nombre.toUpperCase()+' agregado','success');
 }
+/** Desde el modal de edición: copia planillero + trabajadores de la misma línea y turno (día/noche) en la fecha calendario anterior a la fecha de inicio mostrada. No altera la fecha ni el turno del armado que estás editando. */
+function copiarPArmadoModalDiaAnterior(){
+  if(!_editPLn||!_editPArmado){showToast('Cierra y vuelve a abrir el editor','error');return;}
+  const selTurno=document.getElementById('pArmTurno');
+  let turnoRaw=(selTurno&&selTurno.value)||_editPArmado.turno||'dia';
+  if(turnoRaw!=='dia'&&turnoRaw!=='noche')turnoRaw='dia';
+  const fe=document.getElementById('pArmFecha');
+  const fechaRef=String((fe&&fe.value)||_editPArmado.fecha||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)){showToast('Indica una fecha de inicio válida (AAAA-MM-DD)','error');if(fe)fe.focus();return;}
+  const fechaPrev=_addDaysLocalYmd(fechaRef,-1);
+  _ensureArmadoPesaje();
+  const src=_pArmGetEntry(_editPLn,turnoRaw,fechaPrev);
+  const nTrab=src&&(src.trabajadores||[]).length||0;
+  const hasP=src&&src.planillero&&(src.planillero.trabId||String(src.planillero.nombre||'').trim());
+  if(!src||(!hasP&&nTrab===0)){
+    const tLbl=turnoRaw==='noche'?'Noche':'Día';
+    showToast('No hay armado para '+_editPLn+' · '+tLbl+' · '+fechaPrev.split('-').reverse().join('/'),'error');
+    return;
+  }
+  const fCur=fechaRef.split('-').reverse().join('/');
+  const fAnt=fechaPrev.split('-').reverse().join('/');
+  const tLbl=turnoRaw==='noche'?'noche':'día';
+  if(!confirm('Se copiarán planillero y trabajadores desde '+fAnt+' (misma línea '+_editPLn+', mismo turno '+tLbl+'). La fecha de inicio del armado actual se mantiene: '+fCur+'.\n\n¿Reemplazar lista en este editor?'))return;
+  const wrap={
+    planillero:src.planillero?JSON.parse(JSON.stringify(src.planillero)):null,
+    trabajadores:(src.trabajadores||[]).map(t=>JSON.parse(JSON.stringify(t)))
+  };
+  _stripMarcaCopiaLinea(wrap);
+  _editPArmado.planillero=wrap.planillero;
+  _editPArmado.trabajadores=wrap.trabajadores;
+  _editPArmado.turno=turnoRaw;
+  if(fe&&fe.value)_editPArmado.fecha=fe.value.trim();
+  clearPArmSelection();
+  renderPArmModal();
+  showToast('Copiado desde '+fAnt+' · Revisa fichas y pulsa Guardar línea','success');
+}
 function closePArmado(){
   const m=document.getElementById('pArmadoModal');if(m)m.remove();
   closeIosPicker();
@@ -5915,6 +5958,7 @@ window.onPArmScopeChange=onPArmScopeChange;window.onPArmScopeTurnoPick=onPArmSco
 window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
 window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
+window.copiarPArmadoModalDiaAnterior=copiarPArmadoModalDiaAnterior;
 
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
 function _ensureArmadoMolde(){
