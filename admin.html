@@ -143,11 +143,59 @@ tbody tr:hover{background:var(--surface-alt);}
 .widget-actions button:hover{background:var(--surface-alt);color:var(--text);}
 .widget-body{flex:1;min-height:0;position:relative;overflow:auto;}
 .widget-body canvas{max-height:100%;}
-.widget-body table{width:100%;border-collapse:collapse;font-size:11px;}
-.widget-body table th,.widget-body table td{padding:4px 6px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
-.widget-body table th{background:var(--surface-alt);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;}
-.widget-body table td.num,.widget-body table th.num{text-align:right;font-family:var(--mono);}
-.widget-body table tfoot td{background:var(--brand);color:#fff;font-weight:700;}
+/* Tablas en widgets dashboard — cabecera marca, bandas y hover (tipo Power BI / Looker) */
+.widget-body table{width:100%;border-collapse:collapse;font-size:11px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,.06);}
+.widget-body table thead th{
+  padding:8px 8px;
+  text-align:left;
+  white-space:nowrap;
+  font-weight:700;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.055em;
+  color:#f8fafc;
+  background:linear-gradient(180deg,#355a96 0%,var(--brand) 55%,#15294a 100%);
+  border-bottom:2px solid var(--accent);
+  position:sticky;
+  top:0;
+  z-index:2;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+}
+.widget-body table tbody td{
+  padding:7px 8px;
+  border-bottom:1px solid var(--border);
+  border-right:1px solid #e8ecf2;
+  text-align:left;
+  white-space:nowrap;
+  color:var(--text-2);
+  background:var(--surface);
+  transition:background .12s ease;
+}
+.widget-body table tbody td:last-child{border-right:none;}
+.widget-body table tbody tr:nth-child(even) td{background:#f1f5f9;}
+.widget-body table tbody tr:hover td{background:#e2e8f0;}
+.widget-body table tbody tr:nth-child(even):hover td{background:#d8e0ea;}
+.widget-body table td.num,.widget-body table th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;}
+.widget-body table tfoot td{
+  background:linear-gradient(180deg,#15294a 0%,var(--brand) 40%,#1e3a66 100%);
+  color:#fff;
+  font-weight:700;
+  padding:9px 8px;
+  border-top:2px solid var(--accent);
+  border-right:1px solid rgba(255,255,255,.12);
+  border-bottom:none;
+}
+.widget-body table tfoot td:last-child{border-right:none;}
+/* Tarjeta con fondo oscuro: tabla legible sobre el tile */
+.widget.widget--dark .widget-body table{border-color:rgba(255,255,255,.18);background:rgba(15,23,42,.25);}
+.widget.widget--dark .widget-body table tbody td{color:#e2e8f0;border-bottom-color:rgba(255,255,255,.1);border-right-color:rgba(255,255,255,.08);background:rgba(15,23,42,.2);}
+.widget.widget--dark .widget-body table tbody tr:nth-child(even) td{background:rgba(255,255,255,.06);}
+.widget.widget--dark .widget-body table tbody tr:hover td{background:rgba(59,130,246,.22);}
+.widget.widget--dark .widget-body table tbody tr:nth-child(even):hover td{background:rgba(59,130,246,.18);}
+.widget.widget--dark .widget-body table tfoot td{background:linear-gradient(180deg,#0f172a 0%,var(--brand-dark) 100%);border-top-color:var(--accent);}
+body[data-theme="dark"] .widget-body table{border-color:var(--border-strong);}
+body[data-theme="dark"] .widget-body table tbody tr:nth-child(even) td{background:rgba(255,255,255,.04);}
+body[data-theme="dark"] .widget-body table tbody tr:hover td{background:rgba(255,255,255,.08);}
 .dash-grid.drop-hot{outline:2px dashed var(--accent);outline-offset:4px;border-radius:12px;}
 
 /* Widget palette (drag source) */
