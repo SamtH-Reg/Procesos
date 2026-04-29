@@ -4794,7 +4794,7 @@ function renderPResumen(){
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;});
   const filtroSub=_resumenFiltroTurnoSub(filtro);
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th>'+
-    hours.map(h=>`<th class="num" style="min-width:72px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
+    hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:100px;">SUMA TOTAL</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
@@ -5098,7 +5098,16 @@ function _turnoHourIntsFromDb(turnoCod){
   }
   return out.length?out:null;
 }
-/** Columnas de hora: solo horas presentes en los datos filtrados (no se añaden huecos del turno vacíos). */
+/** Orden visual de horas en un turno: mismo día 7→18; cruce medianoche 19→23 luego 0→6. */
+function _sortHoursChronologicalInTurn(hours,aMin,bMin){
+  if(!hours||!hours.length)return[];
+  if(aMin==null||bMin==null)return hours.slice().sort((x,y)=>x-y);
+  if(bMin>aMin)return hours.slice().sort((x,y)=>x-y);
+  const norm=h=>{const m=h*60+30;return m>=aMin?m:m+24*60;};
+  return hours.slice().sort((x,y)=>norm(x)-norm(y));
+}
+function _fmtHoraResumenTh(h){return String(h)+':'+String(0).padStart(2,'0');}
+/** Columnas de hora: solo horas presentes en los datos; con turno elegido, orden cronológico del turno (noche 19…6). */
 function _mResumenHourColsFromFiltro(mol,filtro){
   const obs=new Set();
   (mol||[]).forEach(r2=>{const m=(r2.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
@@ -5106,9 +5115,10 @@ function _mResumenHourColsFromFiltro(mol,filtro){
   if(!arr.length)return[];
   if(filtro==='todos')return arr.sort((a,b)=>a-b);
   const code=filtro==='actual'?(_inferTurnoCodigoPorHorario()||'dia'):filtro;
-  const db=_turnoHourIntsFromDb(code);
-  if(!db||!db.length)return arr.sort((a,b)=>a-b);
-  return arr.sort((a,b)=>{const ia=db.indexOf(a),ib=db.indexOf(b);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return a-b;});
+  const tu=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===String(code).toLowerCase());
+  const a=tu?_parseHMToMinutes(tu.inicio):null,b=tu?_parseHMToMinutes(tu.fin):null;
+  if(a==null||b==null)return arr.sort((a,b)=>a-b);
+  return _sortHoursChronologicalInTurn(arr,a,b);
 }
 
 /* ═══ MOLDES — Resumen por Hora (pivot operario × hora) ═══════════ */
@@ -5161,7 +5171,7 @@ function renderMResumen(){
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;totGrandKg+=r.totKg;});
   const hoy=new Date().toLocaleDateString('es-CL');
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">PRODUCTO</th>'+
-    hours.map(h=>`<th class="num" style="min-width:72px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
+    hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:100px;">MOLDES</th>'+
     '<th class="num" style="min-width:100px;">KG</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
