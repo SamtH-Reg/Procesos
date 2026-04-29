@@ -6829,22 +6829,37 @@ const TBSync={
       }
       // ── Push armado de línea ──────────────────────────────────
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
-      const armadoRows=Object.entries(RT.armadoMolde||{})
+      const armRaw=Object.entries(RT.armadoMolde||{})
         .filter(([,d])=>d)
         .map(([key,d])=>{
           const meta=_armParseKey(key);
+          const linea=String(meta.linea||'').trim().toUpperCase();
+          const turno=String(d.turno||meta.turno||'dia').trim();
+          const fecha=String(d.fecha||meta.fecha||today).trim();
           return {
-          linea:meta.linea||'',
+          linea,
           planillero:d.planillero||null,
           trabajadores:d.trabajadores||[],
           especie:d.especie||'',
-          turno:d.turno||meta.turno||'dia',
-          fecha:d.fecha||meta.fecha||'',
+          turno,
+          fecha,
           updated_at:new Date().toISOString()
         };});
-      const sigA=this._sigRows(armadoRows,'linea');
+      // Una fila por (línea, turno, fecha) — misma clave que _armScopeKey; evita duplicados en el batch.
+      const armadoByKey=new Map();
+      armRaw.forEach(r=>{
+        const k=r.linea+'\t'+r.turno+'\t'+r.fecha;
+        armadoByKey.set(k,r);
+      });
+      const armadoRows=[...armadoByKey.values()];
+      // Firma estable: ordenar por alcance completo (no solo linea — antes L1+día y L1+noche colisionaban).
+      const sigA=JSON.stringify(armadoRows.slice().sort((a,b)=>{
+        const ka=[a.linea,a.turno,a.fecha].map(x=>String(x||'')).join('\0');
+        const kb=[b.linea,b.turno,b.fecha].map(x=>String(x||'')).join('\0');
+        return ka.localeCompare(kb);
+      }));
       if(armadoRows.length&&sigA!==this._lastSig.armado){
-        const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea'});
+        const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea,turno,fecha'});
         if(armErr){
           console.warn('[sb push armado_lineas]',armErr.message);
           if(typeof showToast==='function')showToast('Armado línea: '+armErr.message,'error');
