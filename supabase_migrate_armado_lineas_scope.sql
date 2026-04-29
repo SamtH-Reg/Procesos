@@ -6,6 +6,14 @@
 --
 -- Ejecutar en Supabase → SQL Editor → Run (una vez). Si falla, lee el mensaje:
 -- puede haber filas duplicadas (misma línea+turno+fecha) que hay que limpiar antes.
+--
+-- ERROR 55000 "does not have a replica identity and publishes updates":
+-- La tabla está en una publicación (p. ej. Realtime). Tras quitar la PK solo en
+-- `linea`, el REPLICA IDENTITY DEFAULT deja de tener clave. Se fuerza FULL antes
+-- de tocar constraints y luego USING INDEX sobre el índice compuesto.
+
+-- 0) Réplica lógica / Realtime: evita 55000 al alterar la tabla sin PK temporalmente
+ALTER TABLE public.armado_lineas REPLICA IDENTITY FULL;
 
 -- 1) Quitar PK o UNIQUE que sea solo sobre "linea" (impide día+noche en la misma línea)
 DO $$
@@ -51,6 +59,9 @@ ALTER TABLE public.armado_lineas ALTER COLUMN linea SET NOT NULL;
 -- 3) Unicidad que usa la tablet: onConflict 'linea,turno,fecha'
 CREATE UNIQUE INDEX IF NOT EXISTS armado_lineas_linea_turno_fecha_uid
   ON public.armado_lineas (linea, turno, fecha);
+
+-- 3b) Sustituir FULL por identidad basada en el índice (menos ancho de banda en réplica)
+ALTER TABLE public.armado_lineas REPLICA IDENTITY USING INDEX armado_lineas_linea_turno_fecha_uid;
 
 -- 4) Columna updated_at (evita 400 si PostgREST espera el campo en el esquema)
 ALTER TABLE public.armado_lineas
