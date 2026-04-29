@@ -4752,31 +4752,29 @@ window.renderPesajeTable=renderPesajeTable;window.renderPesajesRecientes=renderP
 function renderPResumen(){
   const wrap=document.getElementById('pResumenWrap');if(!wrap)return;
   const sub=document.getElementById('pResumenSub');
-  const filtro=_readTurnoLineaFilter('pResumenFiltroTurno');
   const fechasP=_collectCycleDates(RT.pesajes||[],_recordCycleForPesaje);
   const today=nowDate();
-  const prevFe=document.getElementById('pResumenFechaTurno');
+  const prevFe=document.getElementById('pResumenFechaInicio')||document.getElementById('pResumenFechaTurno');
   const fechaTurno=(prevFe&&prevFe.value)||fechasP[0]||today;
   const prevLin=document.getElementById('pResumenFiltroLinea');
   const lineaVal=prevLin?String(prevLin.value||'').trim():'';
   const hoyStr=fechaTurno.split('-').reverse().join('/');
+  const prevTurnoEl=document.getElementById('pResumenTurnoLinea');
+  const legacyTurno=document.getElementById('pResumenFiltroTurno');
+  const filtro=_defaultResumenTurnoSelect(prevTurnoEl,legacyTurno);
   let pes=RT.pesajes||[];
   pes=pes.filter(r=>!r.fecha||r.fecha===fechaTurno||(!r.fecha&&fechaTurno===today));
   if(lineaVal)pes=pes.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
   if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
-  const hintP='Fecha del <strong>registro</strong>, turno según <strong>armado de pesaje</strong> por línea, y línea física.';
+  const hintP='Misma lógica que moldes: <strong>fecha inicio</strong> del registro, <strong>turno de la línea</strong> (catálogo Admin) y <strong>línea</strong>.';
+  const req='<span style="color:#b91c1c;font-weight:700;">*</span>';
   const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
-    <label class="form-label" style="margin:0;">Fecha (turno)</label>
-    <input type="date" class="input" id="pResumenFechaTurno" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderPResumen()">
-    <label class="form-label" style="margin:0;">Turno</label>
-    <select class="select" id="pResumenFiltroTurno" style="max-width:280px;" onchange="renderPResumen()">
-      <option value="todos" ${filtro==='todos'?'selected':''}>Todos</option>
-      <option value="actual" ${filtro==='actual'?'selected':''}>Turno actual</option>
-      <option value="dia" ${filtro==='dia'?'selected':''}>Día (según armado)</option>
-      <option value="noche" ${filtro==='noche'?'selected':''}>Noche (según armado)</option>
-    </select>
+    <label class="form-label" style="margin:0;">🗓️ Fecha inicio ${req} <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+    <input type="date" class="input" id="pResumenFechaInicio" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderPResumen()">
+    <label class="form-label" style="margin:0;">Turno de la línea ${req}</label>
+    ${_resumenTurnoLineaSelectHtml('pResumenTurnoLinea','renderPResumen',filtro)}
     <label class="form-label" style="margin:0;">Línea</label>
-    <select class="select" id="pResumenFiltroLinea" style="max-width:120px;" onchange="renderPResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
+    <select class="select" id="pResumenFiltroLinea" style="max-width:160px;" onchange="renderPResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
     <span style="font-size:11px;color:var(--text-3);max-width:480px;">${hintP}</span>
   </div>`;
   if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+(filtro!=='todos'?' · filtro turno':'')+'.</div>';if(sub)sub.textContent='0 pesajes · '+hoyStr+(lineaVal?' · '+lineaVal:'');return;}
@@ -4795,7 +4793,7 @@ function renderPResumen(){
   const fmt=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
   const totCol={};let totGrand=0;
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;});
-  const filtroSub=filtro==='actual'?'Turno actual':filtro==='todos'?'Todos':filtro==='dia'?'Día':'Noche';
+  const filtroSub=_resumenFiltroTurnoSub(filtro);
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
     '<th class="num" style="min-width:100px;">SUMA TOTAL</th></tr></thead>';
@@ -4901,8 +4899,9 @@ function _pesajeMatchesTurnoLineaFiltro(r,filtro){
   const codAct=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
   const arm=_turnoArmadoPesajeForLinea(r.linea);
   if(filtro==='actual')return arm!=null&&String(arm)===String(codAct);
-  if(arm==null)return false;
-  return arm===filtro;
+  if(r&&r.turno&&String(r.turno)===String(filtro))return true;
+  if(arm!=null&&String(arm)===String(filtro))return true;
+  return false;
 }
 function _cycleTurnoNorm(t){return String(t||'dia').toLowerCase()==='noche'?'noche':'dia';}
 function _cycleDateNorm(f){
@@ -5014,6 +5013,57 @@ function _readResumenFiltroLinea(selectId){
   const v=(el&&el.value||'').trim().toUpperCase();
   return v||null;
 }
+/** Etiqueta tipo formulario: "Noche (19:00 → 07:00 día siguiente)" según Admin → Turnos. */
+function _turnoLineaResumenEtiqueta(t){
+  const a=String(t.inicio||'').trim();
+  const b=String(t.fin||'').trim();
+  const ai=_parseHMToMinutes(a), bi=_parseHMToMinutes(b);
+  const cross=ai!=null&&bi!=null&&bi<=ai;
+  const rango=cross?a+' → '+b+' día siguiente':a+' → '+b;
+  return String(t.nombre||t.codigo||'Turno')+' ('+rango+')';
+}
+function _resumenTurnoLineaSelectHtml(selectId,onChangeFn,selectedVal){
+  const opts=[];
+  opts.push(`<option value="todos" ${selectedVal==='todos'?'selected':''}>Todos los turnos</option>`);
+  opts.push(`<option value="actual" ${selectedVal==='actual'?'selected':''}>Según hora actual</option>`);
+  const activos=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  const seenCod=new Set();
+  activos.forEach(t=>{
+    const cod=String(t.codigo||'').trim();
+    if(!cod||seenCod.has(cod))return;
+    seenCod.add(cod);
+    opts.push(`<option value="${esc(cod)}" ${cod===selectedVal?'selected':''}>${esc(_turnoLineaResumenEtiqueta(t))}</option>`);
+  });
+  return `<select class="select" id="${selectId}" style="max-width:380px;" onchange="${onChangeFn}()">${opts.join('')}</select>`;
+}
+function _readResumenTurnoLineaSelect(selectId){
+  const el=document.getElementById(selectId);
+  if(!el)return'todos';
+  const v=String(el.value||'').trim();
+  if(v===''||v==='todos')return'todos';
+  if(v==='actual')return'actual';
+  return v;
+}
+function _defaultResumenTurnoSelect(prevEl,legacyEl){
+  const v=prevEl?String(prevEl.value||'').trim():'';
+  const codigos=new Set((DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim()).filter(Boolean));
+  if(v==='todos'||v==='actual'||(v&&codigos.has(v)))return v||'todos';
+  if(legacyEl){
+    const old=String(legacyEl.value||'').trim();
+    if(old==='todos'||old==='actual')return old;
+    if((old==='dia'||old==='noche')&&codigos.has(old))return old;
+  }
+  const inf=typeof _inferTurnoCodigoPorHorario==='function'?String(_inferTurnoCodigoPorHorario()):'dia';
+  if(codigos.has(inf))return inf;
+  const first=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim()).find(Boolean);
+  return first||'todos';
+}
+function _resumenFiltroTurnoSub(turnoSel){
+  if(turnoSel==='todos')return'Todos';
+  if(turnoSel==='actual')return'Turno actual';
+  const t=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo)===String(turnoSel));
+  return t?String(t.nombre||t.codigo||turnoSel):String(turnoSel);
+}
 function _resumenLineaOptionsHtml(selected){
   const set=new Set();
   ['L1','L2','L3'].forEach(l=>set.add(l));
@@ -5065,37 +5115,34 @@ function _mResumenHourColsFromFiltro(mol,filtro){
 function renderMResumen(){
   const wrap=document.getElementById('mResumenWrap');if(!wrap)return;
   const sub=document.getElementById('mResumenSub');
-  const prevFiltro=_readTurnoLineaFilter('mResumenFiltroTurno');
   const fechas=_mResumenActiveFechas();
   const today=nowDate();
-  const prevFecha=document.getElementById('mResumenFechaTurno');
+  const prevFecha=document.getElementById('mResumenFechaInicio')||document.getElementById('mResumenFechaTurno');
   const fechaTurno=(prevFecha&&prevFecha.value)||fechas[0]||today;
   const prevLineaEl=document.getElementById('mResumenFiltroLinea');
   const lineaVal=prevLineaEl?String(prevLineaEl.value||'').trim():'';
   const hoyStr=fechaTurno.split('-').reverse().join('/');
-  const filtro=prevFiltro;
+  const prevTurnoEl=document.getElementById('mResumenTurnoLinea');
+  const legacyTurno=document.getElementById('mResumenFiltroTurno');
+  const filtro=_defaultResumenTurnoSelect(prevTurnoEl,legacyTurno);
   let mol=_mResumenRowsForScope(fechaTurno,filtro,lineaVal||null);
   const hintArmado=_mResumenHasArmadoConPersonasParaFecha(fechaTurno)
     ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno/línea.'
     :'Sin armado con personas para esta fecha: se muestran <strong>todos</strong> los moldes del día (configura armado en la pestaña homónima).';
+  const req='<span style="color:#b91c1c;font-weight:700;">*</span>';
   const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
-    <label class="form-label" style="margin:0;">Fecha (turno)</label>
-    <input type="date" class="input" id="mResumenFechaTurno" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderMResumen()">
-    <label class="form-label" style="margin:0;">Turno</label>
-    <select class="select" id="mResumenFiltroTurno" style="max-width:280px;" onchange="renderMResumen()">
-      <option value="todos" ${filtro==='todos'?'selected':''}>Todos</option>
-      <option value="actual" ${filtro==='actual'?'selected':''}>Turno actual (hora + horario Admin)</option>
-      <option value="dia" ${filtro==='dia'?'selected':''}>Día (según armado)</option>
-      <option value="noche" ${filtro==='noche'?'selected':''}>Noche (según armado)</option>
-    </select>
+    <label class="form-label" style="margin:0;">🗓️ Fecha inicio ${req} <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
+    <input type="date" class="input" id="mResumenFechaInicio" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderMResumen()">
+    <label class="form-label" style="margin:0;">Turno de la línea ${req}</label>
+    ${_resumenTurnoLineaSelectHtml('mResumenTurnoLinea','renderMResumen',filtro)}
     <label class="form-label" style="margin:0;">Línea</label>
-    <select class="select" id="mResumenFiltroLinea" style="max-width:120px;" onchange="renderMResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
+    <select class="select" id="mResumenFiltroLinea" style="max-width:160px;" onchange="renderMResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
     <span style="font-size:11px;color:var(--text-3);max-width:520px;">${hintArmado}</span>
   </div>`;
   if(!mol.length){
-    const filtroTxt=filtro==='actual'?'turno actual':filtro==='dia'?'Día':filtro==='noche'?'Noche':'';
-    wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes para '+esc(hoyStr)+(filtro!=='todos'?' · '+esc(filtroTxt):'')+(lineaVal?' · línea '+esc(lineaVal):'')+'.</div>';
-    if(sub)sub.textContent='0 moldes · '+hoyStr+(lineaVal?' · '+lineaVal:'')+(filtro!=='todos'?' · filtro':'');return;
+    const filtroTxt=filtro==='todos'?'':_resumenFiltroTurnoSub(filtro);
+    wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes para '+esc(hoyStr)+(filtroTxt?' · '+esc(filtroTxt):'')+(lineaVal?' · línea '+esc(lineaVal):'')+'.</div>';
+    if(sub)sub.textContent='0 moldes · '+hoyStr+(lineaVal?' · '+lineaVal:'')+(filtro!=='todos'?' · '+filtroTxt:'');return;
   }
   const hours=_mResumenHourColsFromFiltro(mol,filtro);
   if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin horas en datos ni en Admin → Turnos para este filtro.</div>';if(sub)sub.textContent='0 h · '+hoyStr+(lineaVal?' · '+esc(lineaVal):'');return;}
@@ -5134,7 +5181,7 @@ function renderMResumen(){
     </tr>
   </tfoot>`;
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
-  const filtroSub=filtro==='actual'?'Turno actual ('+String(_inferTurnoCodigoPorHorario()||'dia')+')':filtro==='todos'?'Todos':filtro==='dia'?'Día':'Noche';
+  const filtroSub=_resumenFiltroTurnoSub(filtro);
   const lineaSub=lineaVal?' · Línea '+lineaVal:'';
   if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmt(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub;
 }
