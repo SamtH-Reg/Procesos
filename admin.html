@@ -1538,11 +1538,11 @@ function renderDashGrid(){
   }
   const newKey=_calcDashStructKey();
   if(newKey!==_dashStructKey){
-    // Estructura cambió: reconstruir DOM (add/remove/reorder/resize/color)
+    // Estructura cambió: reconstruir DOM (add/remove/reorder/resize/color/bg)
     _dashStructKey=newKey;
-    // Destruir charts de widgets eliminados
-    const activeIds=new Set(dashWidgets.map(w=>w.id));
-    Object.keys(_charts).forEach(id=>{if(!activeIds.has(id)){try{_charts[id].destroy();}catch(e){}delete _charts[id];}});
+    // Chart.js queda ligado al canvas anterior; al reemplazar innerHTML hay que destruir
+    // todas las instancias (no solo widgets borrados) o drawWidget haría update() en un nodo huérfano → gráfico en blanco.
+    Object.keys(_charts).forEach(id=>{try{_charts[id].destroy();}catch(e){}delete _charts[id];});
     grid.innerHTML=dashWidgets.map(w=>_widgetShellHTML(w)).join('');
     setupDragDrop();
   }
