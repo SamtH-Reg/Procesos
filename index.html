@@ -5503,13 +5503,25 @@ function _getMArmScopeFecha(){
   if(el&&el.value)return el.value.trim();
   return _fechaArmadoOperativa(_getMArmScopeTurno());
 }
+function _isValidYmd(v){
+  return/^\d{4}-\d{2}-\d{2}$/.test(String(v||'').trim());
+}
+/** Evita bucle: al asignar turno/fecha por código algunos navegadores disparan onchange → render otra vez. */
 function _setMArmScopeDefaults(){
   const tEl=document.getElementById('mArmScopeTurno');
   const fEl=document.getElementById('mArmScopeFecha');
-  if(tEl&&!tEl.value)tEl.value=_inferTurnoCodigoPorHorario();
-  if(fEl&&!fEl.value)fEl.value=_fechaArmadoOperativa(tEl.value||'dia');
+  if(!tEl||!fEl)return;
+  const infer=_inferTurnoCodigoPorHorario();
+  const fv=String(fEl.value||'').trim();
+  if(!_isValidYmd(fv)){
+    tEl.value=infer;
+    fEl.value=_fechaArmadoOperativa(infer);
+    return;
+  }
+  if(!String(tEl.value||'').trim())tEl.value=infer;
 }
 function onMArmScopeTurnoPick(){
+  if((window.__mArmRenderDepth||0)>0)return;
   const fe=document.getElementById('mArmScopeFecha');
   const tEl=document.getElementById('mArmScopeTurno');
   if(fe&&tEl&&tEl.value)fe.value=_fechaArmadoOperativa(tEl.value);
@@ -5525,6 +5537,7 @@ function _updateMArmScopeStatus(){
   el.textContent=`${n} línea(s) configurada(s) para ${t} · ${fecha}`;
 }
 function onMArmScopeChange(){
+  if((window.__mArmRenderDepth||0)>0)return;
   renderMArmado();
   if(window.renderMRegLinea)renderMRegLinea();
   if(window.renderMRegTrab)renderMRegTrab();
@@ -5573,6 +5586,7 @@ function _renderMArmadoCopiaBanner(){
 }
 function renderMArmado(){
   const box=document.getElementById('mArmadoList');if(!box)return;
+  window.__mArmRenderDepth=(window.__mArmRenderDepth||0)+1;
   const trabDbList=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
   try{
   _ensureArmadoMolde();
@@ -5629,6 +5643,8 @@ function renderMArmado(){
     console.error('renderMArmado',e);
     box.innerHTML='<div class="alert danger" style="margin-top:8px;"><strong>Error al mostrar armado</strong><div style="margin-top:8px;font-size:12px;">'+esc(String(e&&e.message||e))+'</div><div style="margin-top:10px;font-size:12px;">Prueba recargar la página. Si persiste, en Admin exporta datos y revisa el almacenamiento local (armado corrupto).</div></div>';
     try{_updateMArmScopeStatus();}catch(_){}
+  }finally{
+    window.__mArmRenderDepth=Math.max(0,(window.__mArmRenderDepth||1)-1);
   }
 }
 
