@@ -2533,13 +2533,16 @@ const DIAS_ES=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MESES_ES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 function _fmtFecha(d){return DIAS_ES[d.getDay()]+' '+String(d.getDate()).padStart(2,'0')+' '+MESES_ES[d.getMonth()]+' '+d.getFullYear();}
 function _turnoActual(d){
+  const db=typeof window!=='undefined'&&window.DB&&window.DB.data?window.DB:null;
   const cod=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():((d.getHours()>=7&&d.getHours()<19)?'dia':'noche');
-  const row=(DB.data.turnos||[]).find(x=>String(x.codigo)===String(cod));
+  const turnos=(db&&db.data&&Array.isArray(db.data.turnos))?db.data.turnos:[];
+  const row=turnos.find(x=>String(x.codigo)===String(cod));
   const rango=row?`${row.inicio}–${row.fin}`:(cod==='noche'?'19:00–07:00':'07:00–19:00');
   const nombre=row?row.nombre:(cod==='noche'?'Noche':'Día');
   return{nombre,rango:rango+(cod==='dia'?' (mismo día)':' (hasta 06:00 día sig.)')};
 }
-(function tick(){
+/** Reloj barra superior: NO arrancar aquí — `const DB` va más abajo; antes causaba TDZ ("Cannot access DB before initialization"). */
+function _ctxClockTick(){
   const d=new Date();
   const pad=n=>String(n).padStart(2,'0');
   const elH=document.getElementById('ctxHora');
@@ -2548,8 +2551,8 @@ function _turnoActual(d){
   if(elF)elF.textContent=_fmtFecha(d);
   const elT=document.getElementById('ctxTurno');
   if(elT){const t=_turnoActual(d);elT.textContent=t.nombre+' · '+t.rango;}
-  setTimeout(tick,1000);
-})();
+  setTimeout(_ctxClockTick,1000);
+}
 /* Usuario activo (desde DB.data.usuario si existe) */
 function renderUserChip(){
   const u=(window.DB&&DB.data&&DB.data.usuario)||{nombre:'C. Rodríguez',rol:'Supervisor'};
@@ -2782,6 +2785,7 @@ const DB={
 DB.load();
 _bumpCatalogSnap();
 window.DB=DB;
+_ctxClockTick();
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
