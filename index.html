@@ -4907,21 +4907,24 @@ function _cycleFromIndex(idx){
 }
 function _cycleDateLabel(f){return _cycleDateNorm(f).split('-').reverse().join('/');}
 function _consolCycleToolbar(cfg){
-  const opts=cfg.availableDates.map(f=>`<option value="${esc(f)}" ${f===cfg.fromDate?'selected':''}>${esc(_cycleDateLabel(f))}</option>`).join('');
+  const mk=sel=>cfg.availableDates.map(f=>`<option value="${esc(f)}" ${f===sel?'selected':''}>${esc(_cycleDateLabel(f))}</option>`).join('');
+  const optsFrom=mk(cfg.fromDate),optsTo=mk(cfg.toDate);
+  const extra=cfg.extraHint?`<span style="font-size:11px;color:var(--text-3);max-width:480px;">${cfg.extraHint}</span>`:'';
   return `<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
     <label class="form-label" style="margin:0;">Desde</label>
-    <select class="select" id="${cfg.prefix}DesdeFecha" style="max-width:170px;" onchange="${cfg.onChange}()">${opts}</select>
+    <select class="select" id="${cfg.prefix}DesdeFecha" style="max-width:170px;" onchange="${cfg.onChange}()">${optsFrom}</select>
     <select class="select" id="${cfg.prefix}DesdeTurno" style="max-width:150px;" onchange="${cfg.onChange}()">
       <option value="dia" ${cfg.fromTurno==='dia'?'selected':''}>Día</option>
       <option value="noche" ${cfg.fromTurno==='noche'?'selected':''}>Noche</option>
     </select>
     <label class="form-label" style="margin:0;">Hasta</label>
-    <select class="select" id="${cfg.prefix}HastaFecha" style="max-width:170px;" onchange="${cfg.onChange}()">${opts}</select>
+    <select class="select" id="${cfg.prefix}HastaFecha" style="max-width:170px;" onchange="${cfg.onChange}()">${optsTo}</select>
     <select class="select" id="${cfg.prefix}HastaTurno" style="max-width:150px;" onchange="${cfg.onChange}()">
       <option value="dia" ${cfg.toTurno==='dia'?'selected':''}>Día</option>
       <option value="noche" ${cfg.toTurno==='noche'?'selected':''}>Noche</option>
     </select>
     <span style="font-size:11px;color:var(--text-3);max-width:520px;">Filtro por <strong>ciclos de turno</strong> (fecha+turno), ideal para cortes desde/hasta.</span>
+    ${extra}
   </div>`;
 }
 function _consolReadRange(prefix,defaultDate){
@@ -4959,59 +4962,71 @@ function _collectCycleDates(rows,mapper){
   const list=[...set];
   return list.sort((a,b)=>String(a).localeCompare(String(b)));
 }
-function _mResumenActiveFechas(){
-  const scopes=_armadoMoldeActiveScopes();
-  const fechas=[...new Set(scopes.map(s=>s.fecha).filter(Boolean))];
-  return fechas.sort((a,b)=>String(b).localeCompare(String(a)));
-}
 function _mResumenHasArmadoConPersonasParaFecha(fecha){
   return['dia','noche'].some(t=>_armEntriesForScope(t,fecha).some(row=>_armadoMoldeHasPeople(row.data)));
 }
-function _mResumenRowsForScope(fecha,turno){
-  let mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(r.fecha===fecha||(!r.fecha&&fecha===nowDate())));
-  const exigirArmado=_mResumenHasArmadoConPersonasParaFecha(fecha);
-  mol=mol.filter(r=>{
-    const rt=String((r&&r.turno)||'dia');
-    if(turno!=='todos'&&rt!==String(turno))return false;
-    if(!exigirArmado)return true;
-    const arm=_armGetEntry(r.linea,rt,fecha);
-    return _armadoMoldeHasPeople(arm);
-  });
-  return mol;
+/** Horas de reloj (0–23) que caen dentro del turno `turnoCod` según Admin → Turnos (cruce medianoche). */
+function _turnoHourIntsFromDb(turnoCod){
+  if(!DB||!DB.data)return null;
+  const code=String(turnoCod||'dia').toLowerCase();
+  const list=(DB.data.turnos||[]).filter(t=>t.activo!==false);
+  const tu=list.find(x=>String(x.codigo||'').toLowerCase()===code);
+  if(!tu)return null;
+  const a=_parseHMToMinutes(tu.inicio), b=_parseHMToMinutes(tu.fin);
+  if(a==null||b==null)return null;
+  const out=[];
+  for(let H=0;H<24;H++){
+    const mid=H*60+30;
+    let ok=false;
+    if(b>a)ok=mid>=a&&mid<b;
+    else if(b<a)ok=mid>=a||mid<b;
+    if(ok)out.push(H);
+  }
+  return out.length?out:null;
+}
+function _mResumenHourColumns(mol, r){
+  const obs=new Set();
+  (mol||[]).forEach(r2=>{const m=(r2.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
+  const fromDb=new Set();
+  for(let i=r.idxFrom;i<=r.idxTo;i++){
+    const c=_cycleFromIndex(i);
+    const db=_turnoHourIntsFromDb(c.turno);
+    if(db&&db.length)db.forEach(h=>fromDb.add(h));
+  }
+  const merged=[...new Set([...fromDb,...obs])];
+  if(!merged.length)return[];
+  if(fromDb.size&&r.idxFrom===r.idxTo){
+    const ord=_turnoHourIntsFromDb(_cycleFromIndex(r.idxFrom).turno)||[];
+    if(ord.length)return merged.sort((a,b)=>{const ia=ord.indexOf(a),ib=ord.indexOf(b);if(ia>=0&&ib>=0)return ia-ib;if(ia>=0)return -1;if(ib>=0)return 1;return a-b;});
+  }
+  return merged.sort((a,b)=>a-b);
+}
+function _mResumenRecordPassesArmadoGate(r){
+  const c=_recordCycleForMolde(r);
+  if(!_mResumenHasArmadoConPersonasParaFecha(c.fecha))return true;
+  const arm=_armGetEntry(r.linea,c.turno,c.fecha);
+  return _armadoMoldeHasPeople(arm);
 }
 
 /* ═══ MOLDES — Resumen por Hora (pivot operario × hora) ═══════════ */
 function renderMResumen(){
   const wrap=document.getElementById('mResumenWrap');if(!wrap)return;
   const sub=document.getElementById('mResumenSub');
-  const prevFiltro=_readTurnoLineaFilter('mResumenFiltroTurno');
-  const fechas=_mResumenActiveFechas();
-  const today=nowDate();
-  const fechaSel=((document.getElementById('mResumenFiltroFecha')||{}).value)||fechas[0]||today;
-  const hoyStr=fechaSel.split('-').reverse().join('/');
-  const filtro=prevFiltro;
-  let mol=_mResumenRowsForScope(fechaSel,filtro);
-  const fechaOpts=fechas.length
-    ?fechas.map(f=>`<option value="${esc(f)}" ${f===fechaSel?'selected':''}>${esc(f.split('-').reverse().join('/'))}</option>`).join('')
-    :`<option value="${esc(today)}">${esc(today.split('-').reverse().join('/'))}</option>`;
-  const hintArmado=_mResumenHasArmadoConPersonasParaFecha(fechaSel)
-    ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno.'
-    :'Sin armado con personas para esta fecha: se muestran <strong>todos</strong> los moldes del día (configura armado en la pestaña homónima para filtrar por línea).';
-  const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
-    <label class="form-label" style="margin:0;">Fecha de armado</label>
-    <select class="select" id="mResumenFiltroFecha" style="max-width:200px;" onchange="renderMResumen()">${fechaOpts}</select>
-    <label class="form-label" style="margin:0;">Turno de línea</label>
-    <select class="select" id="mResumenFiltroTurno" style="max-width:260px;" onchange="renderMResumen()">
-      <option value="todos" ${filtro==='todos'?'selected':''}>Todos</option>
-      <option value="dia" ${filtro==='dia'?'selected':''}>Día (según armado)</option>
-      <option value="noche" ${filtro==='noche'?'selected':''}>Noche (según armado)</option>
-    </select>
-    <span style="font-size:11px;color:var(--text-3);max-width:560px;">${hintArmado}</span>
-  </div>`;
-  if(!mol.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes para armado '+hoyStr+(filtro!=='todos'?' · turno '+(filtro==='dia'?'Día':'Noche'):'')+'.</div>';if(sub)sub.textContent='0 moldes · '+hoyStr+(filtro!=='todos'?' · filtro activo':'');return;}
-  const hoursSet=new Set();
-  mol.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
-  const hours=[...hoursSet].sort((a,b)=>a-b);
+  const allMol=(RT.moldes||[]).filter(r=>!r.esGeneral);
+  const rangeLbl=r=>_cycleDateLabel(r.fromDate)+' '+(_cycleTurnoNorm(r.fromTurno)==='noche'?'Noche':'Día')+' → '+_cycleDateLabel(r.toDate)+' '+(_cycleTurnoNorm(r.toTurno)==='noche'?'Noche':'Día');
+  if(!allMol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados aún.</div>';if(sub)sub.textContent='0 moldes';return;}
+  const availableDates=_collectCycleDates(allMol,_recordCycleForMolde);
+  const fd=availableDates[0]||nowDate(),td=availableDates[availableDates.length-1]||fd;
+  const fallback={fromDate:fd,fromTurno:'dia',toDate:td,toTurno:'noche',idxFrom:_cycleIndex(fd,'dia'),idxTo:_cycleIndex(td,'noche')};
+  const r=_consolKeepRangeFromDom('mResumen',fallback);
+  const hintArmado='Si esa <strong>fecha de calendario</strong> tiene armado con personas, solo se cuentan registros de líneas en ese armado; si no, se muestran todos los moldes del rango.';
+  const toolbar=_consolCycleToolbar({prefix:'mResumen',onChange:'renderMResumen',availableDates,fromDate:r.fromDate,fromTurno:r.fromTurno,toDate:r.toDate,toTurno:r.toTurno,extraHint:hintArmado});
+  let mol=allMol.filter(x=>{const c=_recordCycleForMolde(x);return c.idx>=r.idxFrom&&c.idx<=r.idxTo;});
+  mol=mol.filter(_mResumenRecordPassesArmadoGate);
+  const rLab=rangeLbl(r);
+  if(!mol.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes en ese rango de ciclos.</div>';if(sub)sub.textContent='0 moldes · '+rLab;return;}
+  const hours=_mResumenHourColumns(mol,r);
+  if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin columnas de hora (revisa horarios en Admin → Turnos).</div>';if(sub)sub.textContent='0 h · '+rLab;return;}
   const map={};
   mol.forEach(r=>{
     const key=(r.trabId||r.nombre||'—')+'||'+(r.producto||'—');
@@ -5026,7 +5041,6 @@ function renderMResumen(){
   const fmtKg=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
   const totCol={};let totGrand=0,totGrandKg=0;
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;totGrandKg+=r.totKg;});
-  const hoy=new Date().toLocaleDateString('es-CL');
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">PRODUCTO</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${String(h).padStart(2,'0')}:00</th>`).join('')+
     '<th class="num" style="min-width:100px;">MOLDES</th>'+
@@ -5040,14 +5054,14 @@ function renderMResumen(){
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
     <tr>
-      <td colspan="2">Total ${esc(hoy)}</td>
+      <td colspan="2">Total <span style="font-weight:600;">${esc(rLab)}</span></td>
       ${hours.map(h=>`<td class="num">${fmt(totCol[h])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
       <td class="num" style="font-weight:700;">${fmtKg(totGrandKg)}</td>
     </tr>
   </tfoot>`;
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
-  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmt(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg'+(filtro!=='todos'?' · turno línea: '+(filtro==='dia'?'Día':'Noche'):'');
+  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmt(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg · '+rLab;
 }
 
 /* ═══ MOLDES — Consolidado (kg acumulados por persona, hoy) ═══════ */
