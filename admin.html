@@ -123,17 +123,21 @@ tbody tr:hover{background:var(--surface-alt);}
 
 /* Dashboard Drag & Drop */
 .dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;min-height:300px;grid-auto-flow:dense;}
-.widget{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow-sm);cursor:grab;position:relative;transition:.15s;display:flex;flex-direction:column;gap:8px;min-height:160px;}
-.widget.size-sm{grid-column:span 3;min-height:120px;}
-.widget.size-md{grid-column:span 6;min-height:240px;}
-.widget.size-lg{grid-column:span 12;min-height:280px;}
+/* Ancho tipo Power BI / Looker: rejilla 12 columnas con --w-span (inline o por clase size-*). */
+.widget{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow-sm);cursor:grab;position:relative;transition:background .15s,border-color .15s,box-shadow .15s;display:flex;flex-direction:column;gap:8px;grid-column:span var(--w-span,6);}
+.widget.size-sm{--w-span:3;min-height:120px;}
+.widget.size-md{--w-span:6;min-height:240px;}
+.widget.size-lg{--w-span:12;min-height:280px;}
 .widget.size-sm .widget-body{align-items:center;justify-content:center;display:flex;}
-@media(max-width:1100px){.widget.size-sm{grid-column:span 6;}.widget.size-md{grid-column:span 12;}}
+@media(max-width:1100px){.dash-grid > .widget{grid-column:span 12;}}
 .widget:hover{border-color:var(--accent);box-shadow:var(--shadow-md);}
 .widget.dragging{opacity:.4;cursor:grabbing;}
 .widget.drop-target{border-style:dashed;border-color:var(--accent);background:var(--surface-alt);}
 .widget-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .widget-title{font-weight:700;font-size:13px;letter-spacing:-.01em;}
+.widget.widget--dark .widget-title{color:#f1f5f9;}
+.widget.widget--dark .widget-actions button{color:#cbd5e1;}
+.widget.widget--dark .widget-actions button:hover{background:rgba(255,255,255,.12);color:#fff;}
 .widget-actions{display:flex;gap:4px;}
 .widget-actions button{background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:4px;border-radius:4px;}
 .widget-actions button:hover{background:var(--surface-alt);color:var(--text);}
@@ -273,7 +277,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 <!-- ═══ DASHBOARD ═══ -->
 <div class="page active" id="page-dashboard">
   <div class="page-hdr">
-    <div><h1 class="page-title">Dashboard</h1><div class="page-sub">KPIs operacionales en tiempo real · arrastra widgets para reordenar</div></div>
+    <div><h1 class="page-title">Dashboard</h1><div class="page-sub">KPIs en tiempo real · arrastra para reordenar · 🎨 acento + fondo de tarjeta · ⇔ ancho en columnas (3–12)</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ghost sm" onclick="reloadDashboard()">↻ Actualizar</button>
       <button class="btn sm" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes desde Supabase (kg incluidos) y fusiona con datos locales">↻ Actualizar desde Supabase (kg)</button>
@@ -956,6 +960,56 @@ try{const s=localStorage.getItem(LAYOUTS_KEY);if(s)dashLayouts=JSON.parse(s);}ca
 function saveDashLayouts(){localStorage.setItem(LAYOUTS_KEY,JSON.stringify(dashLayouts));}
 
 const PALETTE=['#3b6fb8','#1e3a66','#16a34a','#dc2626','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#64748b'];
+/** Fondos suaves tipo tile de Looker / Power BI (solo tarjeta; no sustituye el acento del gráfico). */
+const PALETTE_BG=['#f8fafc','#eff6ff','#ecfdf5','#fef9c3','#ffedd5','#faf5ff','#fce7f3','#e0f2fe','#f1f5f9'];
+const WIDGET_SPAN_ORDER=[3,4,6,8,9,12];
+function _sanitizeCssColor(s){
+  const v=String(s==null?'':s).trim();
+  if(!v)return'';
+  if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)){
+    if(v.length===4)return'#'+v[1]+v[1]+v[2]+v[2]+v[3]+v[3];
+    return v;
+  }
+  const m=v.replace(/\s/g,'').match(/^rgba?\((\d{1,3}),(\d{1,3}),(\d{1,3})(?:,([0-9.]+))?\)$/i);
+  if(!m)return'';
+  const r=Math.min(255,Math.max(0,parseInt(m[1],10))),g=Math.min(255,Math.max(0,parseInt(m[2],10))),b=Math.min(255,Math.max(0,parseInt(m[3],10)));
+  if(m[4]!=null){const a=Math.max(0,Math.min(1,parseFloat(m[4])));return isNaN(a)?'':`rgba(${r},${g},${b},${a})`;}
+  return`rgb(${r},${g},${b})`;
+}
+function _hexToRgb(hex){
+  const h=_sanitizeCssColor(hex);
+  if(!h||h[0]!=='#')return null;
+  let x=h.slice(1);
+  if(x.length===3)x=x.split('').map(c=>c+c).join('');
+  if(x.length!==6)return null;
+  return{r:parseInt(x.slice(0,2),16),g:parseInt(x.slice(2,4),16),b:parseInt(x.slice(4,6),16)};
+}
+function _relativeLuminanceHex(hex){
+  const rgb=_hexToRgb(hex);
+  if(!rgb)return null;
+  const lin=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);};
+  const R=lin(rgb.r),G=lin(rgb.g),B=lin(rgb.b);
+  return .2126*R+.7152*G+.0722*B;
+}
+function _isDarkTileBg(s){
+  const safe=_sanitizeCssColor(s);
+  if(!safe||safe[0]!=='#')return false;
+  const L=_relativeLuminanceHex(safe);
+  return L!=null&&L<.52;
+}
+function _widgetSpan(w){
+  const c=w&&w.cols;
+  if(Number.isFinite(c)){const n=c|0;if(n>=3&&n<=12)return n;}
+  const sz=String((w&&w.size)||'md').toLowerCase();
+  if(sz==='sm')return 3;
+  if(sz==='lg')return 12;
+  return 6;
+}
+function _widgetSizeClassForSpan(span){
+  if(span<=3)return'sm';
+  if(span<=6)return'md';
+  return'lg';
+}
 /* cargar layout guardado */
 try{const saved=localStorage.getItem('friosur_dash_layout');if(saved)dashWidgets=JSON.parse(saved);}catch(e){}
 function saveDashLayout(){localStorage.setItem('friosur_dash_layout',JSON.stringify(dashWidgets));}
@@ -1339,21 +1393,56 @@ function deleteCurrentLayout(){
   sel.value='';toast('Layout eliminado','success');
 }
 
-/* ─── Color por widget ─── */
+/* ─── Color / fondo por widget (estilo tile BI: acento ≠ fondo) ─── */
 function setWidgetColor(id,color){
   const w=dashWidgets.find(x=>x.id===id);if(!w)return;
-  w.color=color;saveDashLayout();renderDashGrid();
+  const c=_sanitizeCssColor(String(color==null?'':color));
+  if(c)w.color=c;else delete w.color;
+  saveDashLayout();renderDashGrid();
 }
-function openColorPicker(id){
+function setWidgetBg(id,bg){
   const w=dashWidgets.find(x=>x.id===id);if(!w)return;
+  const b=_sanitizeCssColor(bg);
+  if(!b)delete w.bg;else w.bg=b;
+  saveDashLayout();renderDashGrid();
+}
+function openColorPicker(id,ev){
+  const w=dashWidgets.find(x=>x.id===id);if(!w)return;
+  const anchor=(ev&&ev.currentTarget)||(typeof event!=='undefined'&&event.currentTarget)||null;
   const pop=document.createElement('div');
-  pop.style.cssText='position:fixed;z-index:3000;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:10px;box-shadow:var(--shadow-lg);display:flex;flex-wrap:wrap;gap:6px;max-width:220px;';
-  pop.innerHTML=PALETTE.map(c=>`<button type="button" style="width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #ccc;background:${c};cursor:pointer;" onclick="setWidgetColor('${id}','${c}');this.parentElement.remove();"></button>`).join('')+
-    `<button type="button" style="width:100%;font-size:11px;padding:4px;margin-top:4px;" onclick="setWidgetColor('${id}','');this.parentElement.remove();">Color por defecto</button>`;
-  const btn=event.currentTarget;const r=btn.getBoundingClientRect();
-  pop.style.top=(r.bottom+4)+'px';pop.style.left=Math.max(8,r.right-220)+'px';
+  pop.className='widget-color-pop';
+  pop.style.cssText='position:fixed;z-index:3000;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:12px;box-shadow:var(--shadow-lg);max-width:280px;font-size:11px;color:var(--text-2);';
+  const rowAccent=`<div style="font-weight:700;margin-bottom:6px;color:var(--text);">Acento (título · barra · datos)</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">`+
+    PALETTE.map(c=>`<button type="button" title="${esc(c)}" style="width:26px;height:26px;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--border);background:${c};cursor:pointer;padding:0;" data-act="accent" data-val="${esc(c)}"></button>`).join('')+
+    `</div><button type="button" class="btn ghost sm" style="width:100%;margin-bottom:14px;" data-act="accent" data-val="">Quitar acento (por defecto)</button>`;
+  const rowBg=`<div style="font-weight:700;margin-bottom:6px;color:var(--text);">Fondo de la tarjeta</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">`+
+    PALETTE_BG.map(c=>`<button type="button" title="${esc(c)}" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:${c};cursor:pointer;padding:0;" data-act="bg" data-val="${esc(c)}"></button>`).join('')+
+    `</div><button type="button" class="btn ghost sm" style="width:100%;margin-bottom:10px;" data-act="bg" data-val="">Sin color de fondo</button>`;
+  const hexId='__wpHex_'+String(w.id).replace(/[^a-zA-Z0-9_-]/g,'');
+  const hexRow=`<div style="display:flex;gap:6px;align-items:center;"><input type="text" class="input" id="${hexId}" placeholder="#RRGGBB o rgb()" style="flex:1;min-width:0;height:34px;font-size:12px;" value="${esc(w.bg||w.color||'')}"><button type="button" class="btn sm" data-act="apply-hex">Aplicar fondo</button></div><div style="font-size:10px;color:var(--text-3);margin-top:6px;">«Aplicar fondo» aplica el valor solo al <strong>fondo</strong> de la tarjeta. El acento del gráfico sigue siendo la paleta superior.</div>`;
+  pop.innerHTML=rowAccent+rowBg+hexRow;
+  pop.addEventListener('click',function(ev2){
+    const t=ev2.target.closest('[data-act]');if(!t)return;
+    const act=t.getAttribute('data-act');
+    if(act==='accent'){setWidgetColor(id,t.getAttribute('data-val')||'');pop.remove();return;}
+    if(act==='bg'){setWidgetBg(id,t.getAttribute('data-val')||'');pop.remove();return;}
+    if(act==='apply-hex'){
+      const inp=pop.querySelector('#'+hexId);
+      const raw=inp?String(inp.value||'').trim():'';
+      if(!raw){toast('Escribe un color (#hex o rgb)','warn');return;}
+      const v=_sanitizeCssColor(raw);
+      if(!v){toast('Color no válido','warn');return;}
+      setWidgetBg(id,v);pop.remove();
+    }
+  });
+  const r=(anchor||document.querySelector('.dash-grid')||document.body).getBoundingClientRect();
+  pop.style.top=(r.bottom+6)+'px';
+  pop.style.left=Math.min(Math.max(8,r.right-280),window.innerWidth-292)+'px';
   document.body.appendChild(pop);
-  setTimeout(()=>{const close=e=>{if(!pop.contains(e.target)){pop.remove();document.removeEventListener('click',close);}};document.addEventListener('click',close);},10);
+  setTimeout(()=>{
+    const close=function(ev3){if(!pop.contains(ev3.target)){pop.remove();document.removeEventListener('click',close,true);}};
+    document.addEventListener('click',close,true);
+  },20);
 }
 function populateSlicers(){
   const ems=document.getElementById('slEspecies');
@@ -1412,21 +1501,27 @@ function renderKPIs(){
 
 /* Clave de estructura: cambia solo si se agrega/quita/reordena/resiza un widget */
 let _dashStructKey='';
-function _calcDashStructKey(){return dashWidgets.map(w=>w.id+':'+w.type+':'+w.size+':'+(w.color||'')).join('|');}
+function _calcDashStructKey(){return dashWidgets.map(w=>w.id+':'+w.type+':'+w.size+':'+(w.cols==null?'':w.cols)+':'+(w.color||'')+':'+(w.bg||'')).join('|');}
 function _widgetShellHTML(w){
   const isTable=w.type.startsWith('tbl-')||w.type.startsWith('pv-');
   const body=isTable?`<div class="widget-body" id="c_${w.id}"></div>`
     :`<div class="widget-body"><canvas id="c_${w.id}"></canvas></div>`;
-  const accent=w.color||'';
-  const accentBar=accent?`<div style="position:absolute;top:0;left:0;right:0;height:4px;background:${accent};border-radius:var(--radius) var(--radius) 0 0;"></div>`:'';
-  return `<div class="widget size-${w.size}" draggable="true" data-id="${w.id}" style="${accent?'border-top-color:'+accent+';':''}">
+  const accent=w.color?_sanitizeCssColor(w.color):'';
+  const bg=w.bg?_sanitizeCssColor(w.bg):'';
+  const span=_widgetSpan(w);
+  const sizeCls=_widgetSizeClassForSpan(span);
+  const dark=_isDarkTileBg(bg);
+  const accentBar=accent?`<div style="position:absolute;top:0;left:0;right:0;height:4px;background:${accent};border-radius:var(--radius) var(--radius) 0 0;pointer-events:none;"></div>`:'';
+  const bgPart=bg?`background:${bg};box-shadow:inset 0 0 0 1px rgba(15,23,42,.06),var(--shadow-sm);`:'';
+  const borderPart=accent?`border-top-color:${accent};`:'';
+  return `<div class="widget size-${sizeCls}${dark?' widget--dark':''}" draggable="true" data-id="${w.id}" style="--w-span:${span};${bgPart}${borderPart}">
     ${accentBar}
     <div class="widget-hdr">
-      <div class="widget-title" style="${accent?'color:'+accent+';':''}">${esc(w.title)}</div>
+      <div class="widget-title" style="${accent&&!dark?'color:'+accent+';':''}">${esc(w.title)}</div>
       <div class="widget-actions">
-        <button onclick="openColorPicker('${w.id}')" title="Color">🎨</button>
-        <button onclick="cycleSize('${w.id}')" title="Tamaño sm/md/lg">⇔</button>
-        <button onclick="removeWidget('${w.id}')" title="Eliminar">✕</button>
+        <button type="button" onclick="openColorPicker('${esc(w.id)}',event)" title="Color de acento y fondo">🎨</button>
+        <button type="button" onclick="cycleSize('${esc(w.id)}')" title="Ancho en columnas (12 = fila completa)">⇔</button>
+        <button type="button" onclick="removeWidget('${esc(w.id)}')" title="Eliminar">✕</button>
       </div>
     </div>
     ${body}
@@ -1517,7 +1612,15 @@ function setupDragDrop(){
     saveDashLayout();renderDashGrid();toast('Widget agregado','success');
   });
 }
-function cycleSize(id){const w=dashWidgets.find(x=>x.id===id);if(!w)return;w.size=w.size==='sm'?'md':w.size==='md'?'lg':'sm';saveDashLayout();renderDashGrid();}
+function cycleSize(id){
+  const w=dashWidgets.find(x=>x.id===id);if(!w)return;
+  const cur=_widgetSpan(w);
+  const i=WIDGET_SPAN_ORDER.indexOf(cur);
+  const next=WIDGET_SPAN_ORDER[(i<0?0:(i+1))%WIDGET_SPAN_ORDER.length];
+  w.cols=next;
+  w.size=_widgetSizeClassForSpan(next);
+  saveDashLayout();renderDashGrid();
+}
 function removeWidget(id){if(!confirm('¿Eliminar widget?'))return;dashWidgets=dashWidgets.filter(w=>w.id!==id);saveDashLayout();renderDashGrid();}
 function addWidget(){
   // Abre picker visual con todo el catálogo
@@ -1533,7 +1636,8 @@ function addWidget(){
 function reloadDashboard(){RT.load();populateSlTurnoFromDb();populateSlicers();applyFilters();renderKPIs();renderDashGrid();toast('Datos actualizados','success');}
 
 function _buildChartData(w,all,moldes,pesajes){
-  const col=w.color||null;
+  const colRaw=w&&w.color?_sanitizeCssColor(w.color):'';
+  const col=colRaw||null;
   const palette=['#3b6fb8','#16a34a','#f59e0b','#dc2626','#8b5cf6','#06b6d4','#ec4899','#1e3a66'];
   let data,opts;
   if(w.type==='chart-hora'){
@@ -1589,7 +1693,10 @@ function drawWidget(w){
   if(w.type.startsWith('kpi-')){
     const ctx=cv.getContext('2d');const p=cv.parentElement;cv.width=p.clientWidth;cv.height=p.clientHeight;
     ctx.clearRect(0,0,cv.width,cv.height);
-    ctx.fillStyle=w.color||getComputedStyle(document.body).getPropertyValue('--brand').trim();
+    const bgSafe=w.bg?_sanitizeCssColor(w.bg):'';
+    const darkKpi=bgSafe&&_isDarkTileBg(bgSafe);
+    const accent=_sanitizeCssColor(w.color||'')||getComputedStyle(document.body).getPropertyValue('--brand').trim();
+    ctx.fillStyle=darkKpi?'#f8fafc':accent;
     ctx.font='800 42px Inter';ctx.textAlign='center';ctx.textBaseline='middle';
     let val='—';
     if(w.type==='kpi-moldes')val=moldes.reduce((s,r)=>s+(r.cant||0),0);
