@@ -143,59 +143,12 @@ tbody tr:hover{background:var(--surface-alt);}
 .widget-actions button:hover{background:var(--surface-alt);color:var(--text);}
 .widget-body{flex:1;min-height:0;position:relative;overflow:auto;}
 .widget-body canvas{max-height:100%;}
-/* Tablas en widgets dashboard — cabecera marca, bandas y hover (tipo Power BI / Looker) */
-.widget-body table{width:100%;border-collapse:collapse;font-size:11px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,.06);}
-.widget-body table thead th{
-  padding:8px 8px;
-  text-align:left;
-  white-space:nowrap;
-  font-weight:700;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.055em;
-  color:#f8fafc;
-  background:linear-gradient(180deg,#355a96 0%,var(--brand) 55%,#15294a 100%);
-  border-bottom:2px solid var(--accent);
-  position:sticky;
-  top:0;
-  z-index:2;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
-}
-.widget-body table tbody td{
-  padding:7px 8px;
-  border-bottom:1px solid var(--border);
-  border-right:1px solid #e8ecf2;
-  text-align:left;
-  white-space:nowrap;
-  color:var(--text-2);
-  background:var(--surface);
-  transition:background .12s ease;
-}
-.widget-body table tbody td:last-child{border-right:none;}
-.widget-body table tbody tr:nth-child(even) td{background:#f1f5f9;}
-.widget-body table tbody tr:hover td{background:#e2e8f0;}
-.widget-body table tbody tr:nth-child(even):hover td{background:#d8e0ea;}
-.widget-body table td.num,.widget-body table th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;}
-.widget-body table tfoot td{
-  background:linear-gradient(180deg,#15294a 0%,var(--brand) 40%,#1e3a66 100%);
-  color:#fff;
-  font-weight:700;
-  padding:9px 8px;
-  border-top:2px solid var(--accent);
-  border-right:1px solid rgba(255,255,255,.12);
-  border-bottom:none;
-}
-.widget-body table tfoot td:last-child{border-right:none;}
-/* Tarjeta con fondo oscuro: tabla legible sobre el tile */
-.widget.widget--dark .widget-body table{border-color:rgba(255,255,255,.18);background:rgba(15,23,42,.25);}
-.widget.widget--dark .widget-body table tbody td{color:#e2e8f0;border-bottom-color:rgba(255,255,255,.1);border-right-color:rgba(255,255,255,.08);background:rgba(15,23,42,.2);}
-.widget.widget--dark .widget-body table tbody tr:nth-child(even) td{background:rgba(255,255,255,.06);}
-.widget.widget--dark .widget-body table tbody tr:hover td{background:rgba(59,130,246,.22);}
-.widget.widget--dark .widget-body table tbody tr:nth-child(even):hover td{background:rgba(59,130,246,.18);}
-.widget.widget--dark .widget-body table tfoot td{background:linear-gradient(180deg,#0f172a 0%,var(--brand-dark) 100%);border-top-color:var(--accent);}
-body[data-theme="dark"] .widget-body table{border-color:var(--border-strong);}
-body[data-theme="dark"] .widget-body table tbody tr:nth-child(even) td{background:rgba(255,255,255,.04);}
-body[data-theme="dark"] .widget-body table tbody tr:hover td{background:rgba(255,255,255,.08);}
+.widget-body table{width:100%;border-collapse:collapse;font-size:11px;}
+.widget-body table th,.widget-body table td{padding:4px 6px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+/* Solo contraste que faltaba: cabecera y pie se distinguen del cuerpo (diseño simple anterior) */
+.widget-body table thead th{background:#e8edf4;color:var(--text);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;z-index:1;}
+.widget-body table td.num,.widget-body table th.num{text-align:right;font-family:var(--mono);}
+.widget-body table tfoot td{background:var(--brand);color:#fff;font-weight:700;}
 .dash-grid.drop-hot{outline:2px dashed var(--accent);outline-offset:4px;border-radius:12px;}
 
 /* Widget palette (drag source) */
@@ -971,7 +924,10 @@ const WIDGET_CATALOG=[
   {type:'kpi-pesajes',   title:'KPI · Pesajes',    size:'sm', group:'KPI', icon:'P'},
   {type:'kpi-operarios', title:'KPI · Operarios',  size:'sm', group:'KPI', icon:'O'},
   // Charts
-  {type:'chart-hora',         title:'Gráfico · Por hora',           size:'md', group:'Gráficos', icon:'▌'},
+  {type:'chart-hora',         title:'Gráfico · Por hora (todas)',   size:'md', group:'Gráficos', icon:'▌'},
+  {type:'chart-hora',         title:'Gráfico · Por hora · L1',      size:'md', group:'Gráficos', icon:'▌', linea:'L1'},
+  {type:'chart-hora',         title:'Gráfico · Por hora · L2',      size:'md', group:'Gráficos', icon:'▌', linea:'L2'},
+  {type:'chart-hora',         title:'Gráfico · Por hora · L3',      size:'md', group:'Gráficos', icon:'▌', linea:'L3'},
   {type:'chart-hora-linea',   title:'Gráfico · Por hora × línea',   size:'lg', group:'Gráficos', icon:'≣'},
   {type:'chart-especie',      title:'Gráfico · Por especie',        size:'md', group:'Gráficos', icon:'◔'},
   {type:'chart-linea',        title:'Gráfico · Por línea',          size:'md', group:'Gráficos', icon:'▬'},
@@ -995,9 +951,11 @@ const DEFAULT_WIDGETS=[
   {id:'w2',type:'kpi-kg',title:'Kg producidos',size:'sm'},
   {id:'w3',type:'kpi-pesajes',title:'Pesajes',size:'sm'},
   {id:'w4',type:'kpi-operarios',title:'Operarios activos',size:'sm'},
-  {id:'w5',type:'chart-hora',title:'Producción por hora',size:'md'},
-  {id:'w6',type:'chart-especie',title:'Distribución por especie',size:'md'},
-  {id:'w7',type:'chart-linea',title:'Rendimiento por línea',size:'lg'},
+  {id:'w5',type:'chart-hora',title:'Por hora · L1',size:'md',linea:'L1'},
+  {id:'w6',type:'chart-hora',title:'Por hora · L2',size:'md',linea:'L2'},
+  {id:'w7',type:'chart-hora',title:'Por hora · L3',size:'md',linea:'L3'},
+  {id:'w8',type:'chart-especie',title:'Distribución por especie',size:'md'},
+  {id:'w9',type:'chart-linea',title:'Rendimiento por línea',size:'lg'},
 ];
 let dashWidgets=JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
 
@@ -1309,9 +1267,9 @@ function renderWidgetPalette(){
         <span class="wp-chev">▾</span><span>${esc(g)}</span><span class="wp-count">${groups[g].length}</span>
       </div>
       <div class="wp-chips-inner">${groups[g].map(c=>
-        `<div class="wp-chip" draggable="true" data-palette="1" data-wtype="${esc(c.type)}" data-wsize="${c.size}" data-wtitle="${esc(c.title)}" title="${esc(c.title)} — arrastra o pulsa +">
+        `<div class="wp-chip" draggable="true" data-palette="1" data-wtype="${esc(c.type)}" data-wsize="${c.size}" data-wtitle="${esc(c.title)}" data-wlinea="${esc(c.linea||'')}" title="${esc(c.title)} — arrastra o pulsa +">
           <span class="wp-icon">${c.icon}</span>${esc(cleanTitle(c))}
-          <button class="wp-add" type="button" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}')" title="Agregar">+</button>
+          <button class="wp-add" type="button" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${esc(c.size)}','${esc(c.linea||'')}')" title="Agregar">+</button>
         </div>`
       ).join('')}</div>
     </div>`;
@@ -1323,6 +1281,7 @@ function renderWidgetPalette(){
       e.dataTransfer.setData('text/widget-type',el.dataset.wtype);
       e.dataTransfer.setData('text/widget-size',el.dataset.wsize);
       e.dataTransfer.setData('text/widget-title',el.dataset.wtitle);
+      e.dataTransfer.setData('text/widget-linea',el.dataset.wlinea||'');
       el.classList.add('dragging');
       document.getElementById('dashGrid').classList.add('drop-hot');
     });
@@ -1332,8 +1291,10 @@ function renderWidgetPalette(){
     });
   });
 }
-function addWidgetByType(type,title,size){
-  dashWidgets.push({id:'w'+Date.now(),type,title:title||type,size:size||'md'});
+function addWidgetByType(type,title,size,linea){
+  const o={id:'w'+Date.now(),type,title:title||type,size:size||'md'};
+  if(linea!=null&&String(linea).trim())o.linea=String(linea).trim();
+  dashWidgets.push(o);
   saveDashLayout();renderDashGrid();toast('Widget agregado','success');
 }
 function resetDashLayout(){
@@ -1349,7 +1310,9 @@ const LAYOUT_TEMPLATES={
     {type:'kpi-kg',title:'Kg producidos',size:'sm'},
     {type:'kpi-pesajes',title:'Pesajes',size:'sm'},
     {type:'kpi-operarios',title:'Operarios',size:'sm'},
-    {type:'chart-hora-linea',title:'Producción por hora × línea',size:'lg'},
+    {type:'chart-hora',title:'Por hora · L1',size:'md',linea:'L1'},
+    {type:'chart-hora',title:'Por hora · L2',size:'md',linea:'L2'},
+    {type:'chart-hora',title:'Por hora · L3',size:'md',linea:'L3'},
     {type:'chart-especie',title:'Distribución por especie',size:'md'},
     {type:'chart-linea-especie',title:'Línea × especie',size:'md'},
   ],
@@ -1366,7 +1329,9 @@ const LAYOUT_TEMPLATES={
     {type:'kpi-kg',title:'Kg totales',size:'sm'},
     {type:'kpi-pesajes',title:'Pesajes',size:'sm'},
     {type:'kpi-operarios',title:'Operarios',size:'sm'},
-    {type:'chart-hora',title:'Por hora',size:'md'},
+    {type:'chart-hora',title:'Por hora · L1',size:'md',linea:'L1'},
+    {type:'chart-hora',title:'Por hora · L2',size:'md',linea:'L2'},
+    {type:'chart-hora',title:'Por hora · L3',size:'md',linea:'L3'},
     {type:'chart-linea',title:'Por línea',size:'md'},
     {type:'chart-turno',title:'Por turno',size:'md'},
     {type:'pv-consol-mol',title:'Consolidado moldes',size:'lg'},
@@ -1377,7 +1342,9 @@ const LAYOUT_TEMPLATES={
     {type:'kpi-moldes',title:'Moldes',size:'sm'},
     {type:'kpi-pesajes',title:'Pesajes',size:'sm'},
     {type:'kpi-operarios',title:'Operarios',size:'sm'},
-    {type:'chart-hora-linea',title:'Producción horaria',size:'lg'},
+    {type:'chart-hora',title:'Por hora · L1',size:'md',linea:'L1'},
+    {type:'chart-hora',title:'Por hora · L2',size:'md',linea:'L2'},
+    {type:'chart-hora',title:'Por hora · L3',size:'md',linea:'L3'},
     {type:'chart-especie',title:'Mix de especies',size:'md'},
     {type:'chart-turno',title:'Día vs Noche',size:'md'},
   ],
@@ -1389,7 +1356,10 @@ const LAYOUT_TEMPLATES={
     {type:'pv-esp-pes',title:'Pesajes por especie',size:'lg'},
   ],
   '⏱ Por hora detalle':[
-    {type:'chart-hora-linea',title:'Hora × línea',size:'lg'},
+    {type:'chart-hora',title:'Por hora · L1',size:'md',linea:'L1'},
+    {type:'chart-hora',title:'Por hora · L2',size:'md',linea:'L2'},
+    {type:'chart-hora',title:'Por hora · L3',size:'md',linea:'L3'},
+    {type:'chart-hora-linea',title:'Hora × línea (combinado)',size:'lg'},
     {type:'pv-hora-mol',title:'Moldes — hora × línea × especie × operario',size:'lg'},
     {type:'pv-hora-pes',title:'Pesaje — hora × línea × especie × operario',size:'lg'},
     {type:'pv-consol-mol',title:'Consolidado por línea',size:'lg'},
@@ -1549,7 +1519,7 @@ function renderKPIs(){
 
 /* Clave de estructura: cambia solo si se agrega/quita/reordena/resiza un widget */
 let _dashStructKey='';
-function _calcDashStructKey(){return dashWidgets.map(w=>w.id+':'+w.type+':'+w.size+':'+(w.cols==null?'':w.cols)+':'+(w.color||'')+':'+(w.bg||'')).join('|');}
+function _calcDashStructKey(){return dashWidgets.map(w=>w.id+':'+w.type+':'+w.size+':'+(w.cols==null?'':w.cols)+':'+(w.color||'')+':'+(w.bg||'')+':'+(w.linea||'')).join('|');}
 function _widgetShellHTML(w){
   const isTable=w.type.startsWith('tbl-')||w.type.startsWith('pv-');
   const body=isTable?`<div class="widget-body" id="c_${w.id}"></div>`
@@ -1627,8 +1597,11 @@ function setupDragDrop(){
       if(pType){
         const size=e.dataTransfer.getData('text/widget-size')||'md';
         const title=e.dataTransfer.getData('text/widget-title')||pType;
+        const linea=(e.dataTransfer.getData('text/widget-linea')||'').trim();
         const idx=dashWidgets.findIndex(w=>w.id===el.dataset.id);
-        dashWidgets.splice(Math.max(0,idx),0,{id:'w'+Date.now(),type:pType,title,size});
+        const nw={id:'w'+Date.now(),type:pType,title,size};
+        if(linea)nw.linea=linea;
+        dashWidgets.splice(Math.max(0,idx),0,nw);
         saveDashLayout();renderDashGrid();toast('Widget agregado','success');return;
       }
       if(!_draggingEl||el===_draggingEl)return;
@@ -1656,7 +1629,10 @@ function setupDragDrop(){
     if(!_guardDrop())return;
     const size=e.dataTransfer.getData('text/widget-size')||'md';
     const title=e.dataTransfer.getData('text/widget-title')||pType;
-    dashWidgets.push({id:'w'+Date.now(),type:pType,title,size});
+    const linea=(e.dataTransfer.getData('text/widget-linea')||'').trim();
+    const nw={id:'w'+Date.now(),type:pType,title,size};
+    if(linea)nw.linea=linea;
+    dashWidgets.push(nw);
     saveDashLayout();renderDashGrid();toast('Widget agregado','success');
   });
 }
@@ -1673,7 +1649,7 @@ function removeWidget(id){if(!confirm('¿Eliminar widget?'))return;dashWidgets=d
 function addWidget(){
   // Abre picker visual con todo el catálogo
   const body='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;max-height:440px;overflow:auto;">'+
-    WIDGET_CATALOG.map(c=>`<button type="button" class="btn ghost" style="text-align:left;padding:12px;display:block;width:100%;" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}');closeModal();">
+    WIDGET_CATALOG.map(c=>`<button type="button" class="btn ghost" style="text-align:left;padding:12px;display:block;width:100%;" onclick="addWidgetByType('${esc(c.type)}','${esc(c.title)}','${c.size}','${esc(c.linea||'')}');closeModal();">
       <div style="font-weight:700;font-size:13px;">${esc(c.icon)} ${esc(c.title)}</div>
       <div style="font-size:11px;color:var(--text-3);margin-top:2px;">${esc(c.group)} · tamaño ${c.size}</div>
     </button>`).join('')+'</div>';
@@ -1689,9 +1665,12 @@ function _buildChartData(w,all,moldes,pesajes){
   const palette=['#3b6fb8','#16a34a','#f59e0b','#dc2626','#8b5cf6','#06b6d4','#ec4899','#1e3a66'];
   let data,opts;
   if(w.type==='chart-hora'){
-    const map={};all.forEach(r=>{const h=(r.hora||'').slice(0,2);if(!h)return;map[h]=(map[h]||0)+(r.kg||0);});
+    const L=(w.linea&&String(w.linea).trim())?String(w.linea).trim():'';
+    const src=L?all.filter(r=>String((r.linea||'').trim()).toUpperCase()===L.toUpperCase()):all;
+    const map={};src.forEach(r=>{const h=(r.hora||'').slice(0,2);if(!h)return;map[h]=(map[h]||0)+(r.kg||0);});
     const labels=Object.keys(map).sort();
-    data={labels,datasets:[{label:'kg',data:labels.map(l=>map[l]),backgroundColor:col||'#3b6fb8'}]};
+    const dsLab=L?('kg · '+L):'kg';
+    data={labels,datasets:[{label:dsLab,data:labels.map(l=>map[l]),backgroundColor:col||'#3b6fb8'}]};
     opts={type:'bar'};
   } else if(w.type==='chart-especie'){
     const map={};all.forEach(r=>{const e=r.especie||'—';map[e]=(map[e]||0)+(r.kg||0);});
@@ -1704,11 +1683,13 @@ function _buildChartData(w,all,moldes,pesajes){
     data={labels,datasets:[{label:'kg',data:labels.map(l=>map[l]),backgroundColor:col||'#16a34a'}]};
     opts={type:'bar',indexAxis:'y'};
   } else if(w.type==='chart-hora-linea'){
+    const L=(w.linea&&String(w.linea).trim())?String(w.linea).trim():'';
+    const src=L?all.filter(r=>String((r.linea||'').trim()).toUpperCase()===L.toUpperCase()):all;
     const hoursSet=new Set();const lineSet=new Set();
-    all.forEach(r=>{const h=(r.hora||'').slice(0,2);if(h){hoursSet.add(h);lineSet.add(r.linea||'—');}});
+    src.forEach(r=>{const h=(r.hora||'').slice(0,2);if(h){hoursSet.add(h);lineSet.add(r.linea||'—');}});
     const hours=[...hoursSet].sort();const lines=[...lineSet].sort();
     const datasets=lines.map((l,i)=>{
-      const dat=hours.map(h=>{let s=0;all.forEach(r=>{if((r.hora||'').slice(0,2)===h&&(r.linea||'—')===l)s+=+r.kg||0;});return s;});
+      const dat=hours.map(h=>{let s=0;src.forEach(r=>{if((r.hora||'').slice(0,2)===h&&(r.linea||'—')===l)s+=+r.kg||0;});return s;});
       return{label:l,data:dat,backgroundColor:col?_shade(col,(i-2)*15):palette[i%palette.length]};
     });
     data={labels:hours.map(h=>h+'h'),datasets};opts={type:'bar'};
