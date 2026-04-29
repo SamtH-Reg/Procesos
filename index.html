@@ -2578,10 +2578,10 @@ function setMoldTab(el,id){
   try{if(typeof closeMArmado==='function')closeMArmado();}catch(_){}
   if(id==='mArmado'&&typeof renderMArmado==='function')renderMArmado();
   if(id==='mGeneral'&&window.renderGRegPresets){renderGRegPresets();renderGeneralesTable();}
-  if(id==='mVer'&&window.renderMoldesTable)renderMoldesTable();
-  if(id==='mResumen'&&window.renderMResumen)renderMResumen();
-  if(id==='mConsol'&&window.renderMConsol)renderMConsol();
-  if(id==='mEspecie'&&window.renderMEspecie)renderMEspecie();
+  if(id==='mVer'&&typeof renderMoldesTable==='function')renderMoldesTable();
+  if(id==='mResumen'&&typeof renderMResumen==='function')renderMResumen();
+  if(id==='mConsol'&&typeof renderMConsol==='function')renderMConsol();
+  if(id==='mEspecie'&&typeof renderMEspecie==='function')renderMEspecie();
   if(id==='mRegistrar'){
     _mRegEnsureFechaDefault();
     if(window.renderMRegTurnos)renderMRegTurnos();
@@ -2597,9 +2597,9 @@ function setPesTab(el,id){
   document.querySelectorAll('.pes-tab').forEach(t=>t.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
   try{if(typeof closeIosPicker==='function')closeIosPicker();}catch(_){}
-  if(id==='pResumen'&&window.renderPResumen)renderPResumen();
-  if(id==='pConsol'&&window.renderPConsol)renderPConsol();
-  if(id==='pArmado'&&window.renderPArmado)renderPArmado();
+  if(id==='pResumen'&&typeof renderPResumen==='function')renderPResumen();
+  if(id==='pConsol'&&typeof renderPConsol==='function')renderPConsol();
+  if(id==='pArmado'&&typeof renderPArmado==='function')renderPArmado();
 }
 
 function showToast(msg,type){
@@ -3846,7 +3846,10 @@ function _mVerFillSelects(){
   }
 }
 function _mVerRowsInActiveArmado(rows){
-  return (rows||[]).filter(r=>{
+  const fe=(document.getElementById('mVerFecha')||{}).value||nowDate();
+  const exigir=_mResumenHasArmadoConPersonasParaFecha(fe);
+  if(!exigir)return(rows||[]).slice();
+  return(rows||[]).filter(r=>{
     const turno=(r&&r.turno)||'dia';
     const fecha=(r&&r.fecha)||nowDate();
     const arm=_armGetEntry(r.linea,turno,fecha);
@@ -4803,7 +4806,8 @@ function renderPConsol(){
   const allPes=RT.pesajes||[];
   if(!allPes.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes registrados aún.</div>';if(sub)sub.textContent='0 pesajes';return;}
   const availableDates=_collectCycleDates(allPes,_recordCycleForPesaje);
-  const fallback={fromDate:availableDates[0]||nowDate(),fromTurno:'dia',toDate:availableDates[availableDates.length-1]||nowDate(),toTurno:'noche',idxFrom:0,idxTo:0};
+  const fd=availableDates[0]||nowDate(),td=availableDates[availableDates.length-1]||fd;
+  const fallback={fromDate:fd,fromTurno:'dia',toDate:td,toTurno:'noche',idxFrom:_cycleIndex(fd,'dia'),idxTo:_cycleIndex(td,'noche')};
   const r=_consolKeepRangeFromDom('pConsol',fallback);
   const toolbar=_consolCycleToolbar({prefix:'pConsol',onChange:'renderPConsol',availableDates,fromDate:r.fromDate,fromTurno:r.fromTurno,toDate:r.toDate,toTurno:r.toTurno});
   const pes=allPes.filter(x=>{const c=_recordCycleForPesaje(x);return c.idx>=r.idxFrom&&c.idx<=r.idxTo;});
@@ -4928,7 +4932,11 @@ function _consolReadRange(prefix,defaultDate){
 }
 function _consolKeepRangeFromDom(prefix,fallbackRange){
   const cur=_consolReadRange(prefix,fallbackRange.fromDate||nowDate());
-  if(!Number.isFinite(cur.idxFrom)||!Number.isFinite(cur.idxTo))return fallbackRange;
+  if(!Number.isFinite(cur.idxFrom)||!Number.isFinite(cur.idxTo)){
+    const fd=fallbackRange.fromDate||nowDate(),td=fallbackRange.toDate||fallbackRange.fromDate||nowDate();
+    const ft=fallbackRange.fromTurno||'dia',tt=fallbackRange.toTurno||'noche';
+    return{...fallbackRange,fromDate:fd,toDate:td,fromTurno:ft,toTurno:tt,idxFrom:_cycleIndex(fd,ft),idxTo:_cycleIndex(td,tt)};
+  }
   return cur;
 }
 function _recordCycleForMolde(r){
@@ -4952,11 +4960,16 @@ function _mResumenActiveFechas(){
   const fechas=[...new Set(scopes.map(s=>s.fecha).filter(Boolean))];
   return fechas.sort((a,b)=>String(b).localeCompare(String(a)));
 }
+function _mResumenHasArmadoConPersonasParaFecha(fecha){
+  return['dia','noche'].some(t=>_armEntriesForScope(t,fecha).some(row=>_armadoMoldeHasPeople(row.data)));
+}
 function _mResumenRowsForScope(fecha,turno){
   let mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(r.fecha===fecha||(!r.fecha&&fecha===nowDate())));
+  const exigirArmado=_mResumenHasArmadoConPersonasParaFecha(fecha);
   mol=mol.filter(r=>{
     const rt=String((r&&r.turno)||'dia');
     if(turno!=='todos'&&rt!==String(turno))return false;
+    if(!exigirArmado)return true;
     const arm=_armGetEntry(r.linea,rt,fecha);
     return _armadoMoldeHasPeople(arm);
   });
@@ -4977,6 +4990,9 @@ function renderMResumen(){
   const fechaOpts=fechas.length
     ?fechas.map(f=>`<option value="${esc(f)}" ${f===fechaSel?'selected':''}>${esc(f.split('-').reverse().join('/'))}</option>`).join('')
     :`<option value="${esc(today)}">${esc(today.split('-').reverse().join('/'))}</option>`;
+  const hintArmado=_mResumenHasArmadoConPersonasParaFecha(fechaSel)
+    ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno.'
+    :'Sin armado con personas para esta fecha: se muestran <strong>todos</strong> los moldes del día (configura armado en la pestaña homónima para filtrar por línea).';
   const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
     <label class="form-label" style="margin:0;">Fecha de armado</label>
     <select class="select" id="mResumenFiltroFecha" style="max-width:200px;" onchange="renderMResumen()">${fechaOpts}</select>
@@ -4986,7 +5002,7 @@ function renderMResumen(){
       <option value="dia" ${filtro==='dia'?'selected':''}>Día (según armado)</option>
       <option value="noche" ${filtro==='noche'?'selected':''}>Noche (según armado)</option>
     </select>
-    <span style="font-size:11px;color:var(--text-3);max-width:520px;">Solo incluye registros que existen dentro del <strong>armado actual</strong> de la fecha/turno seleccionado.</span>
+    <span style="font-size:11px;color:var(--text-3);max-width:560px;">${hintArmado}</span>
   </div>`;
   if(!mol.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes para armado '+hoyStr+(filtro!=='todos'?' · turno '+(filtro==='dia'?'Día':'Noche'):'')+'.</div>';if(sub)sub.textContent='0 moldes · '+hoyStr+(filtro!=='todos'?' · filtro activo':'');return;}
   const hoursSet=new Set();
@@ -5037,7 +5053,8 @@ function renderMConsol(){
   const allMol=(RT.moldes||[]).filter(r=>!r.esGeneral);
   if(!allMol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados aún.</div>';if(sub)sub.textContent='0 moldes';return;}
   const availableDates=_collectCycleDates(allMol,_recordCycleForMolde);
-  const fallback={fromDate:availableDates[0]||nowDate(),fromTurno:'dia',toDate:availableDates[availableDates.length-1]||nowDate(),toTurno:'noche',idxFrom:0,idxTo:0};
+  const fd=availableDates[0]||nowDate(),td=availableDates[availableDates.length-1]||fd;
+  const fallback={fromDate:fd,fromTurno:'dia',toDate:td,toTurno:'noche',idxFrom:_cycleIndex(fd,'dia'),idxTo:_cycleIndex(td,'noche')};
   const r=_consolKeepRangeFromDom('mConsol',fallback);
   const toolbar=_consolCycleToolbar({prefix:'mConsol',onChange:'renderMConsol',availableDates,fromDate:r.fromDate,fromTurno:r.fromTurno,toDate:r.toDate,toTurno:r.toTurno});
   const mol=allMol.filter(x=>{const c=_recordCycleForMolde(x);return c.idx>=r.idxFrom&&c.idx<=r.idxTo;});
