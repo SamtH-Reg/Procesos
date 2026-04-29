@@ -1877,15 +1877,22 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
               </div>
             </div>
             <div class="card-body">
-              <div class="form-grid cols-2">
+              <div class="form-grid cols-3">
                 <div class="form-field">
-                  <label class="form-label">Turno</label>
+                  <label class="form-label">Turno de armado <span class="required">*</span></label>
                   <select class="select filled" id="pRegTurno" onchange="onPRegTurnoChange()"></select>
+                  <div id="pRegTurnoHint" style="font-size:10px;color:var(--text-3);margin-top:4px;display:none;"></div>
+                </div>
+                <div class="form-field">
+                  <label class="form-label">Fecha de armado <span class="required">*</span></label>
+                  <input type="date" class="input filled" id="pRegFechaArmado" onchange="onPRegFechaArmadoChange()">
                 </div>
                 <div class="form-field">
                   <label class="form-label">Línea</label>
                   <select class="select filled" id="pRegLinea" onchange="onPRegLineaChange()"></select>
                 </div>
+              </div>
+              <div class="form-grid cols-2" style="margin-top:4px;">
                 <div class="form-field">
                   <label class="form-label">Planillero</label>
                   <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false,_getPRegPickerPlanilleros)">
@@ -2003,6 +2010,23 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 
     <!-- PESAJE — ARMADO (asignación planillero+trabajadores por línea) -->
     <div id="pArmado" class="pes-tab hidden">
+      <div class="form-grid cols-3" style="margin-bottom:10px;">
+        <div class="form-field">
+          <label class="form-label">Turno de armado</label>
+          <select class="select" id="pArmScopeTurno" onchange="onPArmScopeTurnoPick()">
+            <option value="dia">Día (07:00–18 h, mismo día)</option>
+            <option value="noche">Noche (19:00 hoy → 06:00 día siguiente)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Fecha de armado</label>
+          <input type="date" class="input" id="pArmScopeFecha" onchange="onPArmScopeChange()">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Estado</label>
+          <div class="input" id="pArmScopeStatus" style="display:flex;align-items:center;min-height:42px;background:var(--surface-alt);color:var(--text-2);font-size:12px;">Configura líneas para este turno y fecha.</div>
+        </div>
+      </div>
       <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;">
         <button class="btn" type="button" onclick="addPLinea()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -2018,6 +2042,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           Guardar día
         </button>
       </div>
+      <div id="pArmadoCopiaHint" class="m-armado-copia-hint" style="display:none;margin-bottom:12px;"></div>
       <div class="alert info" style="margin-bottom:14px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         <div><strong>Armado de pesaje</strong> — cada línea tiene un <strong>planillero línea</strong> y trabajadores con su <strong>ficha</strong>. Edita para agregar, cambiar ficha o eliminar.</div>
@@ -2604,6 +2629,10 @@ function setPesTab(el,id){
   if(id==='pResumen'&&typeof renderPResumen==='function')renderPResumen();
   if(id==='pConsol'&&typeof renderPConsol==='function')renderPConsol();
   if(id==='pArmado'&&typeof renderPArmado==='function')renderPArmado();
+  if(id==='pRegistrar'){
+    if(typeof renderPRegLinea==='function')renderPRegLinea();
+    if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
+  }
 }
 
 function showToast(msg,type){
@@ -3379,6 +3408,39 @@ function _armDeleteEntry(linea,turno,fecha){
 function _armEntriesForScope(turno,fecha){
   const out=[];
   const src=RT.armadoMolde||{};
+  Object.entries(src).forEach(([k,d])=>{
+    const meta=_armParseKey(k);
+    const mt=d&&d.turno?d.turno:meta.turno;
+    const mf=d&&d.fecha?d.fecha:meta.fecha;
+    if(String(mt||'dia')!==String(turno||'dia'))return;
+    if(String(mf||'')!==String(fecha||''))return;
+    out.push({key:k,linea:meta.linea,data:d});
+  });
+  out.sort((a,b)=>String(a.linea).localeCompare(String(b.linea)));
+  return out;
+}
+function _pArmGetEntry(linea,turno,fecha){
+  if(!RT.armadoPesaje||!linea)return null;
+  const scopedKey=_armScopeKey(linea,turno,fecha);
+  if(RT.armadoPesaje[scopedKey])return RT.armadoPesaje[scopedKey];
+  const legacy=RT.armadoPesaje[linea];
+  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&String(legacy.fecha||'')===String(fecha||''))return legacy;
+  return null;
+}
+function _pArmSetEntry(linea,data,turno,fecha){
+  if(!RT.armadoPesaje)RT.armadoPesaje={};
+  const k=_armScopeKey(linea,turno,fecha);
+  RT.armadoPesaje[k]=data;
+  return k;
+}
+function _pArmDeleteEntry(linea,turno,fecha){
+  if(!RT.armadoPesaje)return;
+  const k=_armScopeKey(linea,turno,fecha);
+  if(k in RT.armadoPesaje)delete RT.armadoPesaje[k];
+}
+function _pArmEntriesForScope(turno,fecha){
+  const out=[];
+  const src=RT.armadoPesaje||{};
   Object.entries(src).forEach(([k,d])=>{
     const meta=_armParseKey(k);
     const mt=d&&d.turno?d.turno:meta.turno;
@@ -4418,22 +4480,63 @@ window.iniciarCongelacion=iniciarCongelacion;window.finalizarCongelacion=finaliz
 window.renderEquipos=renderEquipos;
 
 /* ═══ PESAJE — Registrar ═══════════════════════════════════════ */
+function _pArmRegFecha(){
+  const el=document.getElementById('pRegFechaArmado');
+  const v=(el&&el.value||'').trim();
+  return v||nowDate();
+}
+function _pArmRegTurno(){
+  const el=document.getElementById('pRegTurno');
+  return (el&&el.value)||'';
+}
+function _pRegEnsureFechaDefault(){
+  const fe=document.getElementById('pRegFechaArmado');
+  const tEl=document.getElementById('pRegTurno');
+  const tc=(tEl&&tEl.value)||_inferTurnoCodigoPorHorario();
+  if(fe&&!fe.value)fe.value=_fechaArmadoOperativa(tc);
+}
+function onPRegFechaArmadoChange(){
+  _pRegEnsureFechaDefault();
+  renderPRegLinea();
+  if(window.renderPRegTrab)renderPRegTrab();
+  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
+}
 function renderPRegTurnos(){
   const sel=document.getElementById('pRegTurno');if(!sel)return;
-  const activos=DB.data.turnos.filter(t=>t.activo);
-  sel.innerHTML=activos.map(t=>`<option value="${t.codigo}">${esc(t.nombre)} · ${esc(t.inicio)} – ${esc(t.fin)}</option>`).join('');
-  const code=_inferTurnoCodigoPorHorario();
-  if(activos.find(t=>t.codigo===code))sel.value=code;
+  const prev=sel.value;
+  const activos=(DB.data.turnos||[]).filter(t=>t.activo);
+  if(!activos.length){
+    sel.innerHTML='<option value="">— Sin turnos activos —</option>';
+    const hint=document.getElementById('pRegTurnoHint');
+    if(hint){hint.style.display='';hint.textContent='Activa turnos en Admin → Turnos.';}
+    return;
+  }
+  sel.innerHTML=activos.map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre)} · ${esc(t.inicio)} – ${esc(t.fin)}</option>`).join('');
+  _pRegEnsureFechaDefault();
+  const inferred=_inferTurnoCodigoPorHorario();
+  const hint=document.getElementById('pRegTurnoHint');
+  if(hint){
+    hint.style.display='';
+    hint.textContent='Por defecto según hora actual ('+nowHM()+') y turnos en Admin. Noche 00:00–06:59: fecha de armado = día anterior (turno desde 19:00).';
+  }
+  let appliedDefault=false;
+  if(prev&&activos.some(t=>String(t.codigo)===String(prev)))sel.value=prev;
+  else if(activos.find(t=>String(t.codigo)===String(inferred))){sel.value=inferred;appliedDefault=true;}
+  else if(activos[0]){sel.value=activos[0].codigo;appliedDefault=true;}
+  const fe=document.getElementById('pRegFechaArmado');
+  if(fe&&sel.value&&(!String(fe.value||'').trim()||appliedDefault))fe.value=_fechaArmadoOperativa(sel.value);
 }
-/* ─ Copia exacta de la lógica de Moldes Registrar, adaptada a Pesaje ─ */
+/* ─ Misma lógica que Moldes Registrar: líneas por turno + fecha de armado ─ */
 function renderPRegLinea(){
   const sel=document.getElementById('pRegLinea');if(!sel)return;
   _ensureArmadoPesaje&&_ensureArmadoPesaje();
-  const arm=RT.armadoPesaje||{};
-  const lineasActivas=Object.keys(arm).filter(ln=>{
-    const d=arm[ln];
+  const turno=_pArmRegTurno();
+  const fecha=_pArmRegFecha();
+  const arm=_pArmEntriesForScope(turno,fecha);
+  const lineasActivas=arm.filter(row=>{
+    const d=row.data;
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
-  }).sort();
+  }).map(row=>row.linea).sort();
   const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3',L4:'L4 — Línea 4',L5:'L5 — Línea 5',L6:'L6 — Línea 6'};
   const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
@@ -4453,7 +4556,7 @@ function _getPRegPickerPlanilleros(){
   // Solo muestra el planillero de la línea seleccionada (igual que _getMRegPickerPlanilleros)
   const linea=(document.getElementById('pRegLinea')||{}).value||'';
   if(!RT.armadoPesaje||!linea)return null;
-  const data=RT.armadoPesaje[linea];
+  const data=_pArmGetEntry(linea,_pArmRegTurno(),_pArmRegFecha());
   if(!data||!data.planillero)return null;
   const p=data.planillero;
   const workers=[];
@@ -4475,7 +4578,7 @@ function _getPRegPickerWorkers(){
   // Copia de _getMRegPickerWorkers adaptada a pesaje
   const linea=(document.getElementById('pRegLinea')||{}).value||'';
   if(!RT.armadoPesaje||!linea)return null;
-  const data=RT.armadoPesaje[linea];
+  const data=_pArmGetEntry(linea,_pArmRegTurno(),_pArmRegFecha());
   if(!data)return null;
   const workers=[];
   (data.trabajadores||[]).forEach(entry=>{
@@ -4503,9 +4606,10 @@ function renderPRegTrab(){
   // Copia de renderMRegTrab adaptada a pesaje (con ficha)
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
+  const armLinea=linea?_pArmGetEntry(linea,_pArmRegTurno(),_pArmRegFecha()):null;
   let fromArmado=[];
-  if(RT.armadoPesaje&&linea&&RT.armadoPesaje[linea]){
-    const d=RT.armadoPesaje[linea];
+  if(armLinea){
+    const d=armLinea;
     (d.trabajadores||[]).forEach(entry=>{
       if(entry.trabId){
         const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
@@ -4516,8 +4620,8 @@ function renderPRegTrab(){
       }
     });
   }
-  const tieneArmado=linea&&RT.armadoPesaje&&RT.armadoPesaje[linea]&&
-    ((RT.armadoPesaje[linea].trabajadores||[]).length>0||RT.armadoPesaje[linea].planillero);
+  const tieneArmado=linea&&armLinea&&
+    ((armLinea.trabajadores||[]).length>0||armLinea.planillero);
   const placeholder=linea&&!tieneArmado
     ?'— Sin armado en esta línea —'
     :(fromArmado.length?'— Selecciona trabajador —':'— Selecciona línea primero —');
@@ -4527,15 +4631,26 @@ function renderPRegTrab(){
   // Badge con cantidad en armado
   const info=document.getElementById('pRegArmadoInfo');
   if(info){
-    const armData=linea&&RT.armadoPesaje&&RT.armadoPesaje[linea];
+    const armData=linea?armLinea:null;
     if(armData&&fromArmado.length){
-      info.textContent=fromArmado.length+' en armado';
+      const fechaStr=armData.fecha?(' · 📅 '+armData.fecha.split('-').reverse().join('/')):'';
+      const tc=String(armData.turno||'');
+      const tu=(DB.data.turnos||[]).find(x=>String(x.codigo)===tc);
+      const turnoLbl=tu?tu.nombre:(tc==='noche'?'Noche':'Día');
+      info.textContent=fromArmado.length+' en armado · '+turnoLbl+fechaStr;
       info.style.display='';
     } else { info.style.display='none'; }
   }
   onPRegTrabChange();
 }
-function onPRegTurnoChange(){renderPRegLinea();renderPRegPlanilleros();}
+function onPRegTurnoChange(){
+  const fe=document.getElementById('pRegFechaArmado');
+  const tEl=document.getElementById('pRegTurno');
+  if(fe&&tEl&&tEl.value)fe.value=_fechaArmadoOperativa(tEl.value);
+  else _pRegEnsureFechaDefault();
+  renderPRegLinea();renderPRegPlanilleros();
+  if(window.renderPRegTrab)renderPRegTrab();
+}
 function onPRegEspecieChange(){/* placeholder */}
 function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
@@ -4579,7 +4694,7 @@ function onPRegTrabChange(){
   const id=parseInt(val)||0;
   const t=id?DB.data.trabajadores.find(x=>x.id===id):null;
   const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
-  const armadoLinea=(RT.armadoPesaje&&lineaSel&&RT.armadoPesaje[lineaSel])?RT.armadoPesaje[lineaSel]:null;
+  const armadoLinea=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
   const entryArmado=armadoLinea?(armadoLinea.trabajadores||[]).find(e=>String(e.trabId)===String(id)):null;
   const opt=sel.options[sel.selectedIndex];
   const nombreDisp=t?t.nombre:(opt&&opt.dataset.nombre)||val;
@@ -4621,7 +4736,7 @@ function regPesaje(){
   if(!ficha){showToast('N° Ficha es obligatorio','error');document.getElementById('pRegFicha').focus();return;}
   // Validar contra la ficha efectiva del flujo de pesaje (armado/selección), no contra código maestro.
   const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
-  const armadoLinea=(RT.armadoPesaje&&lineaSel&&RT.armadoPesaje[lineaSel])?RT.armadoPesaje[lineaSel]:null;
+  const armadoLinea=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
   const entryArmado=armadoLinea?(armadoLinea.trabajadores||[]).find(e=>String(e.trabId)===String(t.id)):null;
   const optSel=selT.options[selT.selectedIndex];
   const fichaMaestra=((optSel&&optSel.dataset&&optSel.dataset.ficha)
@@ -4660,7 +4775,9 @@ function regPesaje(){
   if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
+window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
 window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window.renderPRegPlanilleros=renderPRegPlanilleros;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
+window._ensureArmadoPesaje=_ensureArmadoPesaje;window._pArmGetEntry=_pArmGetEntry;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
 function renderPesajeTable(){
@@ -4868,10 +4985,11 @@ function _turnoArmadoMoldesForLinea(linea,fecha){
   if(!d)return null;
   return d.turno==='noche'?'noche':'dia';
 }
-function _turnoArmadoPesajeForLinea(linea){
+function _turnoArmadoPesajeForLinea(linea,fecha){
   if(!linea)return null;
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
-  const d=RT.armadoPesaje&&RT.armadoPesaje[linea];
+  const fd=_cycleDateNorm(fecha||nowDate());
+  const d=_pArmGetEntry(linea,'dia',fd)||_pArmGetEntry(linea,'noche',fd);
   if(!d)return null;
   return d.turno==='noche'?'noche':'dia';
 }
@@ -4896,7 +5014,7 @@ function _moldeMatchesTurnoLineaFiltro(r,filtro){
 function _pesajeMatchesTurnoLineaFiltro(r,filtro){
   if(filtro==='todos')return true;
   const codAct=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
-  const arm=_turnoArmadoPesajeForLinea(r.linea);
+  const arm=_turnoArmadoPesajeForLinea(r.linea,r&&r.fecha||'');
   if(filtro==='actual')return arm!=null&&String(arm)===String(codAct);
   if(r&&r.turno&&String(r.turno)===String(filtro))return true;
   if(arm!=null&&String(arm)===String(filtro))return true;
@@ -4972,7 +5090,7 @@ function _recordCycleForMolde(r){
 }
 function _recordCycleForPesaje(r){
   const fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
-  const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoPesajeForLinea((r&&r.linea)||'')||'dia');
+  const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoPesajeForLinea((r&&r.linea)||'',fecha)||'dia');
   return {fecha,turno,idx:_cycleIndex(fecha,turno)};
 }
 function _collectCycleDates(rows,mapper){
@@ -5278,26 +5396,137 @@ function renderMEspecie(){
 }
 window.renderMResumen=renderMResumen;window.renderMConsol=renderMConsol;window.renderMEspecie=renderMEspecie;
 
-/* ═══ PESAJE — Armado (asignación por línea con planillero + fichas) ═══ */
-/* RT.armadoPesaje = { 'L1': {planillero, trabajadores, turno, fecha}, ... }
-   RT.armadoPesajeSnapshot = {fecha, data: <mismo formato>} — "día anterior" */
+/* ═══ PESAJE — Armado (claves L1@@dia@@YYYY-MM-DD, misma lógica que moldes) ═══ */
 function _ensureArmadoPesaje(){
-  if(!RT.armadoPesaje)RT.armadoPesaje={};
-  if(Object.keys(RT.armadoPesaje).length===0){
-    ['L1','L2','L3'].forEach(ln=>{RT.armadoPesaje[ln]={planillero:null,trabajadores:[],turno:'dia',fecha:''};});
+  let raw=RT.armadoPesaje;
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))raw={};
+  RT.armadoPesaje=raw;
+  const migrated={};
+  try{
+    Object.keys(RT.armadoPesaje).forEach(k=>{
+      let d=RT.armadoPesaje[k];
+      if(!d||typeof d!=='object'||Array.isArray(d))d={};
+      if(!Array.isArray(d.trabajadores))d.trabajadores=[];
+      if(!d.turno)d.turno='dia';
+      if(!d.fecha)d.fecha=nowDate();
+      const meta=_armParseKey(k);
+      const linea=(meta.linea||k||'').trim().toUpperCase();
+      const finalKey=_armScopeKey(linea,d.turno,d.fecha);
+      migrated[finalKey]={...d,turno:d.turno,fecha:d.fecha};
+    });
+  }catch(e){
+    console.error('_ensureArmadoPesaje',e);
+    RT.armadoPesaje={};
+    try{rtSave();}catch(_){}
+    return;
   }
-  Object.keys(RT.armadoPesaje).forEach(ln=>{
-    if(!RT.armadoPesaje[ln].turno)RT.armadoPesaje[ln].turno='dia';
-    if(!('fecha' in RT.armadoPesaje[ln]))RT.armadoPesaje[ln].fecha='';
+  RT.armadoPesaje=migrated;
+  if(!Object.keys(RT.armadoPesaje).length){
+    const fd=nowDate();
+    ['L1','L2','L3'].forEach(ln=>{
+      RT.armadoPesaje[_armScopeKey(ln,'dia',fd)]={planillero:null,trabajadores:[],turno:'dia',fecha:fd};
+    });
+  }
+}
+function _getPArmScopeTurno(){
+  const el=document.getElementById('pArmScopeTurno');
+  return (el&&el.value)||_inferTurnoCodigoPorHorario();
+}
+function _getPArmScopeFecha(){
+  const el=document.getElementById('pArmScopeFecha');
+  if(el&&el.value)return el.value.trim();
+  return _fechaArmadoOperativa(_getPArmScopeTurno());
+}
+function _setPArmScopeDefaults(){
+  const tEl=document.getElementById('pArmScopeTurno');
+  const fEl=document.getElementById('pArmScopeFecha');
+  if(!tEl||!fEl)return;
+  const infer=_inferTurnoCodigoPorHorario();
+  const fv=String(fEl.value||'').trim();
+  if(!_isValidYmd(fv)){
+    tEl.value=infer;
+    fEl.value=_fechaArmadoOperativa(infer);
+    return;
+  }
+  if(!String(tEl.value||'').trim())tEl.value=infer;
+}
+function onPArmScopeTurnoPick(){
+  if((window.__pArmRenderDepth||0)>0)return;
+  const fe=document.getElementById('pArmScopeFecha');
+  const tEl=document.getElementById('pArmScopeTurno');
+  if(fe&&tEl&&tEl.value)fe.value=_fechaArmadoOperativa(tEl.value);
+  onPArmScopeChange();
+}
+function _updatePArmScopeStatus(){
+  const el=document.getElementById('pArmScopeStatus');
+  if(!el)return;
+  const turno=_getPArmScopeTurno();
+  const fecha=_getPArmScopeFecha();
+  const n=_pArmEntriesForScope(turno,fecha).length;
+  const t=turno==='noche'?'Noche':'Día';
+  el.textContent=`${n} línea(s) configurada(s) para ${t} · ${fecha}`;
+}
+function onPArmScopeChange(){
+  if((window.__pArmRenderDepth||0)>0)return;
+  renderPArmado();
+  if(window.renderPRegLinea)renderPRegLinea();
+  if(window.renderPRegTrab)renderPRegTrab();
+  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
+}
+function _clonePArmadoSinMarcasCopia(){
+  const turno=_getPArmScopeTurno();
+  const fecha=_getPArmScopeFecha();
+  const raw={};
+  _pArmEntriesForScope(turno,fecha).forEach(row=>{
+    raw[row.linea]=JSON.parse(JSON.stringify(row.data||{}));
+  });
+  Object.keys(raw).forEach(k=>_stripMarcaCopiaLinea(raw[k]));
+  return raw;
+}
+function _applyMarcaCopiaArmadoPesaje(fechaSnap,guardadoSnap){
+  if(!RT.armadoPesaje)return;
+  const turno=_getPArmScopeTurno();
+  const fecha=_getPArmScopeFecha();
+  const fechaLbl=(fechaSnap&&String(fechaSnap).trim())||'—';
+  _pArmEntriesForScope(turno,fecha).forEach(row=>{
+    const d=row.data;
+    if(!d||typeof d!=='object')return;
+    d.origenCopiaDesdeFecha=fechaLbl;
+    if(guardadoSnap)d.origenCopiaGuardadoEn=String(guardadoSnap);
+    else delete d.origenCopiaGuardadoEn;
+    if(d.planillero)d.planillero={...d.planillero,fromPrevArmado:true};
+    (d.trabajadores||[]).forEach(t=>{t.fromPrevArmado=true;});
   });
 }
+function _renderPArmadoCopiaBanner(){
+  const el=document.getElementById('pArmadoCopiaHint');
+  if(!el)return;
+  const m=RT.armadoPesajeUltimaCopia;
+  if(!m||!m.copiadoEn){el.style.display='none';el.innerHTML='';return;}
+  const partGuard=m.guardadoEn?` · Referencia guardada: <strong>${esc(m.guardadoEn)}</strong>`:'';
+  el.style.display='flex';
+  el.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div class="m-armado-copia-hint-body"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
+}
 function renderPArmado(){
-  _ensureArmadoPesaje();
   const box=document.getElementById('pArmadoList');if(!box)return;
-  const lineas=Object.keys(RT.armadoPesaje).sort();
-  if(!lineas.length){box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';return;}
-  box.innerHTML=lineas.map(ln=>{
-    const data=RT.armadoPesaje[ln]||{planillero:null,trabajadores:[],fecha:''};
+  window.__pArmRenderDepth=(window.__pArmRenderDepth||0)+1;
+  const trabDbList=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  try{
+  _ensureArmadoPesaje();
+  _setPArmScopeDefaults();
+  const turnoScope=_getPArmScopeTurno();
+  const fechaScope=_getPArmScopeFecha();
+  const scopedRows=_pArmEntriesForScope(turnoScope,fechaScope);
+  const lineas=scopedRows.map(x=>x.linea);
+  _updatePArmScopeStatus();
+  if(!lineas.length){
+    box.innerHTML='<div class="empty"><div class="empty-title">Sin líneas para este turno/fecha</div><div class="empty-sub">Pulsa "Agregar línea" para comenzar</div></div>';
+    _renderPArmadoCopiaBanner();
+    return;
+  }
+  box.innerHTML=scopedRows.map(row=>{
+    const ln=row.linea;
+    const data=row.data||{planillero:null,trabajadores:[],fecha:''};
     const trabs=data.trabajadores||[];
     const p=data.planillero;
     const fechaStr=data.fecha?String(data.fecha).split('-').reverse().join('/'):'';
@@ -5306,10 +5535,11 @@ function renderPArmado(){
         <div class="line-id">${esc(ln)}</div>
         <div style="flex:1;min-width:0;">
           <div class="line-title">Línea ${esc(ln)}</div>
-          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}</div>
+          <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong'+(p.fromPrevArmado?' class="wc-plan-from-prev"':'')+'>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}${data.origenCopiaDesdeFecha?' · <span style="color:#6d28d9;font-weight:600;" title="'+(data.origenCopiaGuardadoEn?esc('Ref. '+data.origenCopiaGuardadoEn):'')+'">Copiado del armado del '+esc(data.origenCopiaDesdeFecha)+'</span>':''}</div>
         </div>
         <div class="section-spacer"></div>
         ${fechaStr?`<span class="badge slate" style="font-size:10px;"><span class="badge-dot"></span>${esc(fechaStr)}</span>`:''}
+        ${data.origenCopiaDesdeFecha?`<span class="badge" style="font-size:10px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-weight:600;" title="${data.origenCopiaGuardadoEn?esc('Referencia guardada: '+data.origenCopiaGuardadoEn):'Copiado desde snapshot'}">📋 ${esc(data.origenCopiaDesdeFecha)}</span>`:''}
         <span class="badge ${data.turno==='noche'?'navy':'amber'}" title="Turno"><span class="badge-dot"></span>${data.turno==='noche'?'Noche':'Día'}</span>
         <span class="badge ${p&&trabs.length?'green':'amber'}"><span class="badge-dot"></span>${p&&trabs.length?'Armada':'Pendiente'}</span>
         <button class="btn ghost sm" type="button" onclick="editPArmadoLinea('${esc(ln)}')">
@@ -5320,18 +5550,30 @@ function renderPArmado(){
       </div>
       <div class="worker-chips">
         ${trabs.length?trabs.slice(0,12).map(t=>{
-          const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-          return `<div class="worker-chip"><div class="wc-av">${esc(ini)}</div>${esc(t.nombre)} · <strong class="mono">F${esc(t.ficha||'—')}</strong></div>`;
+          const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>(x&&x[0])||'').join('').toUpperCase();
+          const prevCls=t.fromPrevArmado?' wc-from-prev':'';
+          return `<div class="worker-chip${prevCls}"><div class="wc-av">${esc(ini)}</div>${esc(t.nombre)} · <strong class="mono">F${esc(t.ficha||'—')}</strong></div>`;
         }).join(''):'<div style="color:var(--text-3);font-size:12px;padding:8px 0;">Sin trabajadores — pulsa <em>Editar</em> para agregar</div>'}
         ${trabs.length>12?`<div class="worker-chip" style="background:var(--slate-100);font-weight:600;">+${trabs.length-12} más</div>`:''}
       </div>
     </div>`;
   }).join('');
+  _renderPArmadoCopiaBanner();
+  }catch(e){
+    console.error('renderPArmado',e);
+    box.innerHTML='<div class="alert danger" style="margin-top:8px;"><strong>Error al mostrar armado</strong><div style="margin-top:8px;font-size:12px;">'+esc(String(e&&e.message||e))+'</div><div style="margin-top:10px;font-size:12px;">Prueba recargar la página.</div></div>';
+    try{_updatePArmScopeStatus();}catch(_){}
+  }finally{
+    window.__pArmRenderDepth=Math.max(0,(window.__pArmRenderDepth||1)-1);
+  }
 }
 
 function addPLinea(){
   _ensureArmadoPesaje();
-  const existentes=Object.keys(RT.armadoPesaje);
+  _setPArmScopeDefaults();
+  const turnoScope=_getPArmScopeTurno();
+  const fechaScope=_getPArmScopeFecha();
+  const existentes=_pArmEntriesForScope(turnoScope,fechaScope).map(r=>r.linea);
   let nextN=1;while(existentes.indexOf('L'+nextN)>=0)nextN++;
   const sugerido='L'+nextN;
   // Modal propio (prompt() es poco fiable en tablet)
@@ -5358,25 +5600,56 @@ function confirmPAddLinea(){
   const inp=document.getElementById('pAddLineaInput');if(!inp)return;
   const key=(inp.value||'').trim().toUpperCase();
   if(!key){showToast('Nombre inválido','error');inp.focus();return;}
-  if(RT.armadoPesaje[key]){showToast('Esa línea ya existe','error');inp.focus();return;}
-  RT.armadoPesaje[key]={planillero:null,trabajadores:[],turno:'dia',fecha:''};
+  const turnoScope=_getPArmScopeTurno();
+  const fechaScope=_getPArmScopeFecha();
+  if(_pArmGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');inp.focus();return;}
+  _pArmSetEntry(key,{planillero:null,trabajadores:[],turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
 function removePLinea(ln){
-  if(!confirm('¿Eliminar la línea '+ln+' completa?'))return;
-  delete RT.armadoPesaje[ln];
+  const turnoScope=_getPArmScopeTurno();
+  const fechaScope=_getPArmScopeFecha();
+  if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+  _pArmDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();renderPArmado();showToast('Línea '+ln+' eliminada','success');
 }
 function copiarPArmadoDia(){
   const snap=RT.armadoPesajeSnapshot;
   if(!snap||!snap.data){showToast('No hay snapshot de día anterior. Pulsa "Guardar día" para crearlo.','error');return;}
-  if(!confirm('Se reemplazará el armado actual con el snapshot del '+(snap.fecha||'día anterior')+'. ¿Continuar?'))return;
-  RT.armadoPesaje=JSON.parse(JSON.stringify(snap.data));
-  rtSave();renderPArmado();showToast('Armado copiado desde '+(snap.fecha||'día anterior'),'success');
+  const nRef=Object.keys(snap.data||{}).length;
+  let msg='Se reemplazará el armado del turno/fecha actual por la referencia guardada con «Guardar día».\n\n';
+  msg+='• Fecha del snapshot: '+(snap.fecha||'—')+'\n';
+  if(snap.guardadoEn)msg+='• Referencia guardada el: '+(snap.guardadoEn)+'\n';
+  msg+='• Entradas en la referencia: '+nRef+'\n\n¿Continuar?';
+  if(!confirm(msg))return;
+  const turnoScope=_getPArmScopeTurno();
+  const fechaScope=_getPArmScopeFecha();
+  _pArmEntriesForScope(turnoScope,fechaScope).forEach(row=>_pArmDeleteEntry(row.linea,turnoScope,fechaScope));
+  Object.entries(snap.data||{}).forEach(([k,d])=>{
+    const meta=_armParseKey(k);
+    const ln=(meta.linea||k||'').trim().toUpperCase();
+    const rec=JSON.parse(JSON.stringify(d||{}));
+    rec.turno=turnoScope;
+    rec.fecha=fechaScope;
+    _pArmSetEntry(ln,rec,turnoScope,fechaScope);
+  });
+  _ensureArmadoPesaje();
+  _applyMarcaCopiaArmadoPesaje(snap.fecha,snap.guardadoEn);
+  RT.armadoPesajeUltimaCopia={
+    snapshotFecha:snap.fecha||'',
+    guardadoEn:snap.guardadoEn||'',
+    copiadoEn:new Date().toLocaleString('es-CL')
+  };
+  rtSave();renderPArmado();showToast('Armado copiado desde '+(snap.fecha||'día anterior')+'. Revisa el cartel y los nombres en violeta.','success');
 }
 function guardarPArmadoSnapshot(){
   _ensureArmadoPesaje();
-  RT.armadoPesajeSnapshot={fecha:new Date().toLocaleDateString('es-CL'),data:JSON.parse(JSON.stringify(RT.armadoPesaje))};
+  _setPArmScopeDefaults();
+  RT.armadoPesajeSnapshot={
+    fecha:new Date().toLocaleDateString('es-CL'),
+    guardadoEn:new Date().toLocaleString('es-CL'),
+    data:_clonePArmadoSinMarcasCopia()
+  };
   rtSave();showToast('Armado guardado como referencia de día anterior','success');
 }
 
@@ -5384,10 +5657,11 @@ function guardarPArmadoSnapshot(){
 let _editPLn=null;
 function editPArmadoLinea(ln){
   _ensureArmadoPesaje();
+  _setPArmScopeDefaults();
   _editPLn=ln;
-  const data=RT.armadoPesaje[ln]||{planillero:null,trabajadores:[],fecha:''};
+  const data=_pArmGetEntry(ln,_getPArmScopeTurno(),_getPArmScopeFecha())||{planillero:null,trabajadores:[],turno:_getPArmScopeTurno(),fecha:_getPArmScopeFecha()};
   // Trabajar en una copia en memoria; al guardar se vuelca a RT
-  _editPArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),turno:data.turno||'dia',fecha:data.fecha||''};
+  _editPArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),turno:data.turno||_getPArmScopeTurno()||'dia',fecha:data.fecha||_getPArmScopeFecha()};
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='pArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
     <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Pesaje</div><button class="modal-x" onclick="closePArmado()">×</button></div>
@@ -5468,7 +5742,7 @@ function renderPArmModal(){
       pBox.innerHTML=`<div style="display:flex;align-items:center;gap:10px;">
         <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#34c759,#30b0c7);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0;">${esc(ini)}</div>
         <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;">${esc(p.nombre)}</div>
+          <div style="font-weight:700;font-size:14px;"${p.fromPrevArmado?' class="wc-plan-from-prev"':''}>${esc(p.nombre)}</div>
           ${tDb?`<div style="font-size:11px;color:var(--text-3);">Código: ${esc(tDb.codigo||'—')}</div>`:''}
         </div>
         <button class="btn ghost sm" type="button" onclick="_editPArmado.planillero=null;renderPArmModal();">Cambiar</button>
@@ -5624,11 +5898,20 @@ function savePArmado(){
   const fecha=(fe&&fe.value||'').trim();
   if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
   _editPArmado.fecha=fecha;
-  RT.armadoPesaje[_editPLn]=JSON.parse(JSON.stringify(_editPArmado));
-  rtSave();closePArmado();renderPArmado();
-  showToast('Línea actualizada','success');
+  _pArmDeleteEntry(_editPLn,_getPArmScopeTurno(),_getPArmScopeFecha());
+  const target=JSON.parse(JSON.stringify(_editPArmado));
+  _pArmSetEntry(_editPLn,target,turnoRaw,fecha);
+  _stripMarcaCopiaLinea(target);
+  rtSave();
+  const ln=_editPLn;
+  closePArmado();renderPArmado();
+  if(window.renderPRegLinea)renderPRegLinea();
+  if(window.renderPRegTrab)renderPRegTrab();
+  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
+  showToast('Línea '+ln+' actualizada','success');
 }
 window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.copiarPArmadoDia=copiarPArmadoDia;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
+window.onPArmScopeChange=onPArmScopeChange;window.onPArmScopeTurnoPick=onPArmScopeTurnoPick;
 window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
 window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
@@ -6113,7 +6396,7 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
         displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
       }else if(selectId==='pRegPlanillero'){
         const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
-        const arm=RT.armadoPesaje&&lineaSel&&RT.armadoPesaje[lineaSel];
+        const arm=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
         const p=arm&&arm.planillero;
         const fichaArm=(p&&String(p.trabId)===String(id)&&p.ficha!=null&&String(p.ficha).trim()!=='')?String(p.ficha).trim():'';
         const fichaTxt=(opt&&opt.dataset&&opt.dataset.ficha)||fichaArm||((tDb&&tDb.ficha)||'');
