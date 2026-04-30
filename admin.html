@@ -1077,14 +1077,28 @@ async function sbPushDashboardCloud(){
     const{error}=await _sb.from('app_kv').upsert({key:DASH_CLOUD_KEY,value:payload},{onConflict:'key'});
     if(error)throw error;
     sbLog('Dashboard widgets/layouts → Supabase',true);
-  }catch(e){sbLog('push dashboard: '+e.message,false);}
+  }catch(e){
+    const msg=e&&(e.message||e.error_description)?(e.message||e.error_description):String(e);
+    sbLog('push dashboard: '+msg,false);
+    const low=String(msg).toLowerCase();
+    if(low.includes('403')||low.includes('permission denied')||low.includes('row-level')||low.includes('rls')||low.includes('violates')||(e&&e.code==='42501')){
+      toast('No se pudo guardar el dashboard en Supabase (tabla app_kv o RLS). Ejecuta en el SQL Editor el archivo supabase_app_kv.sql del repositorio.','warn');
+    }
+  }
 }
 async function sbPullDashboardCloud(opts){
   opts=opts||{};
   if(!_sb)return false;
   try{
     const{data,error}=await _sb.from('app_kv').select('key,value,updated_at').eq('key',DASH_CLOUD_KEY).maybeSingle();
-    if(error){if(!opts.silent)sbLog('pull dashboard: '+error.message,false);return false;}
+    if(error){
+      if(!opts.silent){
+        sbLog('pull dashboard: '+error.message,false);
+        const m=String(error.message||'').toLowerCase();
+        if(m.includes('403')||m.includes('permission')||m.includes('rls'))toast('No se pudo leer app_kv (RLS). Aplica supabase_app_kv.sql en Supabase.','warn');
+      }
+      return false;
+    }
     const val=data&&data.value;
     if(!val||typeof val!=='object')return false;
     const ch=applyDashboardFromPayload(val);

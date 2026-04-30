@@ -200,6 +200,31 @@ end $$;
 --   (4,'operario',    '{"moldes":{"read":true,"write":false},"pesaje":{"read":true,"write":false}}')
 -- on conflict (id) do nothing;
 
+-- ═══════════════ CONFIG COMPARTIDA (dashboard admin, etc.) ═══════
+
+create table if not exists app_kv(
+  key        text primary key,
+  value      jsonb not null default '{}'::jsonb,
+  updated_at timestamptz default now()
+);
+
+drop trigger if exists trg_app_kv_updated on app_kv;
+create trigger trg_app_kv_updated before update on app_kv
+  for each row execute function set_updated_at();
+
+-- RLS app_kv (evita 403 en upsert desde admin autenticado). Idempotente.
+alter table app_kv enable row level security;
+drop policy if exists "app_kv_select_authenticated" on app_kv;
+drop policy if exists "app_kv_insert_authenticated" on app_kv;
+drop policy if exists "app_kv_update_authenticated" on app_kv;
+drop policy if exists "app_kv_delete_authenticated" on app_kv;
+drop policy if exists "app_kv_read" on app_kv;
+drop policy if exists "app_kv_write" on app_kv;
+drop policy if exists "app_kv_update" on app_kv;
+create policy "app_kv_select_authenticated" on app_kv for select to authenticated using (true);
+create policy "app_kv_insert_authenticated" on app_kv for insert to authenticated with check (true);
+create policy "app_kv_update_authenticated" on app_kv for update to authenticated using (true) with check (true);
+
 -- ═══════════════ REALTIME (index.html escucha cambios del admin) ══
 -- En Dashboard → Database → Publications → supabase_realtime, añadir tablas,
 -- o ejecutar (idempotente si ya están):
