@@ -949,9 +949,36 @@ td.num,th.num{font-family:var(--mono);font-weight:600;text-align:center;}
 .mono{font-family:var(--mono);font-weight:600;}
 
 /* Chart mini */
-.chart-bars{display:flex;align-items:flex-end;gap:4px;height:60px;padding:6px 0;}
-.chart-bars .bar{flex:1;background:var(--brand);border-radius:3px 3px 0 0;min-height:4px;opacity:.8;}
-.chart-bars .bar.hi{background:var(--safety-green);opacity:1;}
+/* Teclado numérico kg — Pesaje registrar (tablet) */
+.p-reg-kg-pad{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;
+}
+.p-reg-kg-pad .pk{
+  min-height:52px;
+  padding:0 8px;
+  font-size:clamp(20px,4.2vw,26px);
+  font-weight:800;
+  font-family:var(--mono);
+  color:var(--text);
+  background:var(--surface-alt);
+  border:2px solid var(--border-strong);
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+  transition:background .12s,border-color .12s,transform .08s;
+}
+.p-reg-kg-pad .pk:active{transform:scale(0.97);}
+.p-reg-kg-pad .pk:hover{border-color:var(--brand);}
+.p-reg-kg-pad .pk-op{background:color-mix(in srgb,var(--navy-700) 10%,var(--surface));font-size:15px;font-weight:700;}
+.p-reg-kg-pad .pk-wide{grid-column:1/-1;min-height:48px;font-size:15px;}
+.p-reg-kg-pad-hint{font-size:12px;color:var(--text-3);line-height:1.45;margin:0 0 12px;}
+@media (min-width:900px){
+  .p-reg-kg-pad .pk{min-height:58px;font-size:26px;}
+}
+body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--slate-100);border-color:var(--border-strong);color:var(--text);}
 
 /* ═══ RESPONSIVE ══════════════════════════════════════════════ */
 
@@ -1284,6 +1311,72 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
 .ios-picker-trigger .trigger-name{flex:1;text-align:left;font-weight:600;color:var(--text);}
 .ios-picker-trigger .trigger-code{font-size:11px;color:var(--text-3);}
 .ios-picker-trigger .trigger-arrow{width:16px;height:16px;opacity:.4;flex-shrink:0;}
+/* Moldes / Pesaje — Registrar: selectores más legibles (contraste) */
+#mRegistrar .ios-picker-trigger,
+#pRegistrar .ios-picker-trigger{
+  background:#fff;
+  border:2px solid var(--navy-600);
+  color:var(--text);
+  box-shadow:0 1px 2px rgba(10,22,40,.06);
+}
+#mRegistrar .ios-picker-trigger:hover,
+#pRegistrar .ios-picker-trigger:hover{
+  border-color:var(--brand);
+  background:color-mix(in srgb,var(--brand-accent) 6%,#fff);
+  box-shadow:0 0 0 3px var(--focus-ring);
+}
+#mRegistrar .ios-picker-trigger .trigger-name,
+#pRegistrar .ios-picker-trigger .trigger-name{
+  color:var(--text);
+  font-weight:700;
+}
+#mRegistrar .ios-picker-trigger .trigger-arrow,
+#pRegistrar .ios-picker-trigger .trigger-arrow{
+  opacity:.85;
+  color:var(--navy-700);
+  stroke:currentColor;
+}
+#mRegistrar .select,
+#pRegistrar .select{
+  border-width:2px;
+  border-color:var(--navy-600);
+  font-weight:600;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%231e3a66' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+}
+#mRegistrar .input[type="date"],
+#pRegistrar .input[type="date"]{
+  border-width:2px;
+  border-color:var(--navy-600);
+  font-weight:600;
+}
+#mRegistrar .input.filled,
+#pRegistrar .input.filled{
+  border-color:#15803d;
+}
+body[data-theme="dark"] #mRegistrar .ios-picker-trigger,
+body[data-theme="dark"] #pRegistrar .ios-picker-trigger{
+  background:var(--surface-alt);
+  border-color:var(--border-strong);
+  color:var(--text);
+}
+body[data-theme="dark"] #mRegistrar .ios-picker-trigger .trigger-name,
+body[data-theme="dark"] #pRegistrar .ios-picker-trigger .trigger-name{
+  color:var(--text);
+}
+body[data-theme="dark"] #mRegistrar .ios-picker-trigger .trigger-arrow,
+body[data-theme="dark"] #pRegistrar .ios-picker-trigger .trigger-arrow{
+  color:var(--text-2);
+  opacity:1;
+}
+body[data-theme="dark"] #mRegistrar .select,
+body[data-theme="dark"] #pRegistrar .select{
+  border-color:var(--border-strong);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+}
+body[data-theme="dark"] #mRegistrar .input[type="date"],
+body[data-theme="dark"] #pRegistrar .input[type="date"]{
+  border-color:var(--border-strong);
+}
 .input.ficha-fixed{border-color:#16a34a !important;background:#ecfdf3;color:#166534;font-weight:700;}
 body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;background:rgba(34,197,94,.16);color:#bbf7d0;}
 </style>
@@ -1464,7 +1557,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <label class="form-label">Trabajador <span id="mRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
           <button class="ios-picker-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange',true,_getMRegPickerWorkers)">
             <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+            <span class="trigger-name">— Selecciona —</span>
             <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="mRegTrab" onchange="onMRegTrabChange()"></select>
@@ -1883,7 +1976,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                   <label class="form-label">Planillero</label>
                   <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false,_getPRegPickerPlanilleros)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+                    <span class="trigger-name">— Selecciona —</span>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
                   <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegPlanillero"></select>
@@ -1924,7 +2017,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                   <label class="form-label">Trabajador <span class="required">*</span> <span id="pRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
                   <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+                    <span class="trigger-name">— Selecciona —</span>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
                   <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegTrab" onchange="onPRegTrabChange()"></select>
@@ -1959,34 +2052,32 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           </div>
         </div>
 
-        <!-- Columna derecha: resumen live -->
+        <!-- Columna derecha: teclado numérico kg (tablet) -->
         <div>
-          <div class="card">
-            <div class="card-hdr">
-              <div class="card-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Productividad por hora
+          <div class="card" id="pRegKgPadCard">
+            <div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div class="card-title" style="display:flex;align-items:center;gap:8px;margin:0;">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h.01M15 9h.01M9 15h.01M15 15h.01"/></svg>
+                Teclado kilos
               </div>
-              <div class="card-sub">L2 · últimas 8h</div>
+              <button type="button" class="btn ghost sm" id="pRegKgPadToggleBtn" onclick="pRegKgPadToggleMode()">Usar teclado del sistema</button>
             </div>
-            <div class="card-body">
-              <div class="chart-bars">
-                <div class="bar" style="height:40%;"></div>
-                <div class="bar" style="height:55%;"></div>
-                <div class="bar" style="height:68%;"></div>
-                <div class="bar" style="height:72%;"></div>
-                <div class="bar hi" style="height:95%;"></div>
-                <div class="bar" style="height:78%;"></div>
-                <div class="bar" style="height:82%;"></div>
-                <div class="bar" style="height:65%;"></div>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--slate-500);font-family:var(--mono);margin-top:4px;">
-                <span>07</span><span>09</span><span>11</span><span>13</span><span>14</span>
-              </div>
-              <div style="display:flex;gap:16px;margin-top:12px;padding-top:12px;border-top:1px solid var(--slate-100);">
-                <div><div style="font-size:10px;color:var(--slate-500);text-transform:uppercase;letter-spacing:.6px;font-weight:600;">Pico</div><div class="mono" style="font-size:18px;font-weight:700;color:var(--safety-green-dark);">42,1 kg</div></div>
-                <div><div style="font-size:10px;color:var(--slate-500);text-transform:uppercase;letter-spacing:.6px;font-weight:600;">Promedio</div><div class="mono" style="font-size:18px;font-weight:700;">28,6 kg</div></div>
-                <div><div style="font-size:10px;color:var(--slate-500);text-transform:uppercase;letter-spacing:.6px;font-weight:600;">Total</div><div class="mono" style="font-size:18px;font-weight:700;">228,9 kg</div></div>
+            <div class="card-body" style="padding-top:10px;">
+              <p class="p-reg-kg-pad-hint" id="pRegKgPadHint"></p>
+              <div id="pRegKgPad" class="p-reg-kg-pad" role="group" aria-label="Teclado numérico para kilos">
+                <button type="button" class="pk" onclick="pRegKgPadKey('7')">7</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('8')">8</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('9')">9</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('4')">4</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('5')">5</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('6')">6</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('1')">1</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('2')">2</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('3')">3</button>
+                <button type="button" class="pk pk-op" onclick="pRegKgPadKey(',')">,</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('0')">0</button>
+                <button type="button" class="pk pk-op" onclick="pRegKgPadKey('bs')" title="Borrar último">⌫</button>
+                <button type="button" class="pk pk-op pk-wide" onclick="pRegKgPadKey('C')">Borrar todo</button>
               </div>
             </div>
           </div>
@@ -3705,7 +3796,7 @@ function onMRegTrabChange(){
     if(btn){
       btn.innerHTML=`
       <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+      <span class="trigger-name">— Selecciona —</span>
       <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
     }
     if(window.renderMRegPresets)renderMRegPresets();
@@ -4795,6 +4886,65 @@ function onPRegTrabChange(){
     fichaInp.classList.add('ficha-fixed');
   }
 }
+const PREG_KG_NUMPAD_KEY='friosur_pRegKg_numPad';
+function pRegKgPadIsCustom(){
+  try{return localStorage.getItem(PREG_KG_NUMPAD_KEY)!=='0';}catch(e){return true;}
+}
+function pRegKgPadSetCustom(on){
+  try{localStorage.setItem(PREG_KG_NUMPAD_KEY,on?'1':'0');}catch(e){}
+  pRegKgPadApplyMode();
+}
+function pRegKgPadToggleMode(){pRegKgPadSetCustom(!pRegKgPadIsCustom());}
+function pRegKgPadApplyMode(){
+  const inp=document.getElementById('pRegKg');
+  const pad=document.getElementById('pRegKgPad');
+  const hint=document.getElementById('pRegKgPadHint');
+  const btn=document.getElementById('pRegKgPadToggleBtn');
+  if(!inp)return;
+  const custom=pRegKgPadIsCustom();
+  if(inp._pRegKgFocusTrap){
+    inp.removeEventListener('focus',inp._pRegKgFocusTrap,true);
+    inp._pRegKgFocusTrap=null;
+  }
+  if(custom){
+    inp.setAttribute('readonly','readonly');
+    inp.setAttribute('inputmode','none');
+    inp.setAttribute('autocomplete','off');
+    if(pad)pad.style.display='grid';
+    if(hint)hint.textContent='Usa las teclas para ingresar kg. El campo queda sin teclado del sistema para no solaparse con este panel.';
+    if(btn)btn.textContent='Usar teclado del sistema';
+    inp._pRegKgFocusTrap=function(){if(pRegKgPadIsCustom())try{inp.blur();}catch(e){}};
+    inp.addEventListener('focus',inp._pRegKgFocusTrap,true);
+    try{inp.blur();}catch(e){}
+  }else{
+    inp.removeAttribute('readonly');
+    inp.setAttribute('inputmode','decimal');
+    inp.setAttribute('autocomplete','off');
+    if(pad)pad.style.display='none';
+    if(hint)hint.textContent='Toca «Kilos procesados» a la izquierda para escribir con el teclado del dispositivo.';
+    if(btn)btn.textContent='Mostrar teclado numérico';
+    try{inp.blur();}catch(e){}
+  }
+}
+function pRegKgPadKey(key){
+  if(!pRegKgPadIsCustom())return;
+  const inp=document.getElementById('pRegKg');
+  if(!inp)return;
+  let v=String(inp.value||'');
+  if(key==='C'){inp.value='';return;}
+  if(key==='bs'){inp.value=v.slice(0,-1);return;}
+  if(key===','){
+    if(v.includes(','))return;
+    if(!v.length)inp.value='0,';
+    else inp.value=v+',';
+    return;
+  }
+  if(!/^\d$/.test(key))return;
+  const parts=v.split(',');
+  if(parts[1]!=null&&parts[1].length>=2)return;
+  if(v==='0'&&!v.includes(','))v='';
+  inp.value=v+key;
+}
 function regPesaje(){
   const selT=document.getElementById('pRegTrab');const valT=selT.value;
   if(!valT||valT==='__manual__'){showToast('Selecciona un trabajador','error');selT.focus();return;}
@@ -4830,8 +4980,8 @@ function regPesaje(){
   }
   const kgRaw=document.getElementById('pRegKg').value.trim().replace(',','.');
   const kg=parseFloat(kgRaw);
-  if(!kgRaw||isNaN(kg)||kg<=0){showToast('Ingresa kilos válidos','error');document.getElementById('pRegKg').focus();return;}
-  if(kg<0.2||kg>20){showToast('Rango permitido: 0,2 – 20 kg','error');return;}
+  if(!kgRaw||isNaN(kg)||kg<=0){showToast('Ingresa kilos válidos','error');if(!pRegKgPadIsCustom())document.getElementById('pRegKg').focus();return;}
+  if(kg<0.2||kg>20){showToast('Rango permitido: 0,2 – 20 kg','error');if(!pRegKgPadIsCustom())document.getElementById('pRegKg').focus();return;}
   const guia=document.getElementById('pRegGuia').value.trim();
   if(!guia){showToast('N° Guía es obligatorio','error');document.getElementById('pRegGuia').focus();return;}
   const rec={
@@ -4856,6 +5006,7 @@ function regPesaje(){
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
 window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
 window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window.renderPRegPlanilleros=renderPRegPlanilleros;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
+window.pRegKgPadToggleMode=pRegKgPadToggleMode;window.pRegKgPadApplyMode=pRegKgPadApplyMode;window.pRegKgPadKey=pRegKgPadKey;window.pRegKgPadIsCustom=pRegKgPadIsCustom;
 window._ensureArmadoPesaje=_ensureArmadoPesaje;window._pArmGetEntry=_pArmGetEntry;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
@@ -5989,6 +6140,45 @@ function copiarPArmadoModalDiaAnterior(){
   renderPArmModal();
   showToast('Copiado desde '+fAnt+' · Revisa fichas y pulsa Guardar línea','success');
 }
+/** Igual que pesaje: copia planillero + trabajadores del armado de moldes del día calendario anterior (misma línea y turno). No cambia fecha ni turno del editor; la especie del formulario se conserva. */
+function copiarMArmadoModalDiaAnterior(){
+  if(!_editMLn||!_editMArmado){showToast('Cierra y vuelve a abrir el editor','error');return;}
+  const selTurno=document.getElementById('mArmTurno');
+  let turnoRaw=(selTurno&&selTurno.value)||_editMArmado.turno||'dia';
+  if(turnoRaw!=='dia'&&turnoRaw!=='noche')turnoRaw='dia';
+  const fe=document.getElementById('mArmFecha');
+  const fechaRef=String((fe&&fe.value)||_editMArmado.fecha||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)){showToast('Indica una fecha de inicio válida (AAAA-MM-DD)','error');if(fe)fe.focus();return;}
+  const fechaPrev=_addDaysLocalYmd(fechaRef,-1);
+  _ensureArmadoMolde();
+  const src=_armGetEntry(_editMLn,turnoRaw,fechaPrev);
+  const nTrab=src&&(src.trabajadores||[]).length||0;
+  const hasP=src&&src.planillero&&(src.planillero.trabId||String(src.planillero.nombre||'').trim());
+  if(!src||(!hasP&&nTrab===0)){
+    const tLbl=turnoRaw==='noche'?'Noche':'Día';
+    showToast('No hay armado para '+_editMLn+' · '+tLbl+' · '+fechaPrev.split('-').reverse().join('/'),'error');
+    return;
+  }
+  const fCur=fechaRef.split('-').reverse().join('/');
+  const fAnt=fechaPrev.split('-').reverse().join('/');
+  const tLbl=turnoRaw==='noche'?'noche':'día';
+  if(!confirm('Se copiarán planillero y trabajadores desde '+fAnt+' (misma línea '+_editMLn+', mismo turno '+tLbl+'). La fecha de inicio del armado actual se mantiene: '+fCur+'.\n\n¿Reemplazar lista en este editor?'))return;
+  const wrap={
+    planillero:src.planillero?JSON.parse(JSON.stringify(src.planillero)):null,
+    trabajadores:(src.trabajadores||[]).map(t=>JSON.parse(JSON.stringify(t)))
+  };
+  _stripMarcaCopiaLinea(wrap);
+  const selEsp=document.getElementById('mArmEspecie');
+  const keepEsp=(selEsp&&selEsp.value||'').trim()||_editMArmado.especie||'';
+  _editMArmado.planillero=wrap.planillero;
+  _editMArmado.trabajadores=wrap.trabajadores;
+  _editMArmado.turno=turnoRaw;
+  if(fe&&fe.value)_editMArmado.fecha=fe.value.trim();
+  if(keepEsp)_editMArmado.especie=keepEsp;
+  renderMArmModal();
+  _mArmUpdatePresetHint();
+  showToast('Copiado desde '+fAnt+' · Revisa datos y pulsa Guardar línea','success');
+}
 function closePArmado(){
   const m=document.getElementById('pArmadoModal');if(m)m.remove();
   closeIosPicker();
@@ -6022,6 +6212,7 @@ window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;wind
 window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
 window.copiarPArmadoModalDiaAnterior=copiarPArmadoModalDiaAnterior;
+window.copiarMArmadoModalDiaAnterior=copiarMArmadoModalDiaAnterior;
 
 /* ═══ MOLDES — Armado de Línea (misma lógica que Pesaje, SIN ficha) ═ */
 function _ensureArmadoMolde(){
@@ -6484,7 +6675,7 @@ function _updateRegPickerDisplay(selectId,nombre,codigo){
   btn.innerHTML=`
     <div class="trigger-av">${esc(ini)}</div>
     <div style="flex:1;text-align:left;min-width:0;">
-      <div class="trigger-name" style="color:var(--text);">${esc(nombre)}</div>
+      <div class="trigger-name">${esc(nombre)}</div>
       ${codigo?`<div class="trigger-code">${esc(codigo)}</div>`:''}
     </div>
     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
@@ -6495,7 +6686,7 @@ function clearRegPicker(selectId,changeFnName){
   if(btn){
     btn.innerHTML=`
       <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span class="trigger-name" style="color:var(--text-3);">— Selecciona —</span>
+      <span class="trigger-name">— Selecciona —</span>
       <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
   }
   if(changeFnName&&window[changeFnName])window[changeFnName]();
@@ -6508,7 +6699,8 @@ function editMArmadoLinea(ln){
   _editMLn=ln;
   const data=_armGetEntry(ln,_getMArmScopeTurno(),_getMArmScopeFecha())||{planillero:null,trabajadores:[],especie:'',turno:_getMArmScopeTurno(),fecha:_getMArmScopeFecha()};
   const currentEspecie=data.especie||data.producto||'';
-  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia',fecha:data.fecha||''};
+  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia',fecha:data.fecha||_getMArmScopeFecha()||''};
+  _mArmPrefillPlanilleroDesdePesaje(ln);
   const especies=_getEspecies();
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
@@ -6528,15 +6720,26 @@ function editMArmadoLinea(ln){
         </div>
         <div class="form-field">
           <label class="form-label">Turno de la línea <span class="required">*</span></label>
-          <select class="select" id="mArmTurno" required onchange="_editMArmado.turno=this.value;">
+          <select class="select" id="mArmTurno" required onchange="_editMArmado.turno=this.value;_armModalUpdateCopySourceHint('m');">
             <option value="dia" ${_editMArmado.turno==='dia'?'selected':''}>Día (07:00–18 h, mismo día)</option>
             <option value="noche" ${_editMArmado.turno==='noche'?'selected':''}>Noche (19:00 → 06:00 día siguiente)</option>
           </select>
         </div>
         <div class="form-field">
-          <label class="form-label">📅 Fecha inicio <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
-          <input type="date" class="input" id="mArmFecha" required value="${_editMArmado.fecha||''}" onchange="_editMArmado.fecha=this.value;">
+          <label class="form-label">📅 Fecha inicio <span class="required">*</span></label>
+          <input type="date" class="input" id="mArmFecha" required value="${_editMArmado.fecha||''}" onchange="_editMArmado.fecha=this.value;_armModalUpdateCopySourceHint('m');">
         </div>
+      </div>
+
+      <div style="margin-bottom:14px;padding:12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;">
+          Origen de la copia (misma línea <strong>${esc(ln)}</strong> y mismo turno): armado del <strong id="mArmModalCopySourceDate" style="color:#0369a1;font-size:15px;">—</strong>
+        </div>
+        <button class="btn ghost" type="button" onclick="copiarMArmadoModalDiaAnterior()" title="Misma línea y mismo turno (día/noche): trae planillero y trabajadores del día calendario anterior a la fecha de inicio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar armado día anterior
+        </button>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong> al copiar; solo se rellenan planillero y trabajadores desde el día indicado arriba.</div>
       </div>
 
       <!-- PLANILLERO LÍNEA -->
@@ -6575,8 +6778,26 @@ function editMArmadoLinea(ln){
     </div>
   </div>`;
   document.body.appendChild(modal);
+  _armModalUpdateCopySourceHint('m');
   _mArmUpdatePresetHint();
   renderMArmModal();
+}
+/** Si el armado de moldes no tiene planillero, toma el del armado de pesaje misma línea/turno/fecha (fuente operativa en planta). */
+function _mArmPrefillPlanilleroDesdePesaje(ln){
+  if(!ln||!_editMArmado)return;
+  _ensureArmadoPesaje&&_ensureArmadoPesaje();
+  const turno=String(_editMArmado.turno||_getMArmScopeTurno()||'dia').trim();
+  const fecha=String(_editMArmado.fecha||_getMArmScopeFecha()||'').trim();
+  if(!fecha)return;
+  const p=_editMArmado.planillero;
+  const hasM=p&&(p.trabId||String(p.nombre||'').trim());
+  if(hasM)return;
+  const pes=_pArmGetEntry(ln,turno,fecha);
+  if(!pes||!pes.planillero)return;
+  const pp=pes.planillero;
+  if(!(pp.trabId||String(pp.nombre||'').trim()))return;
+  _editMArmado.planillero=JSON.parse(JSON.stringify(pp));
+  if(_editMArmado.planillero&&typeof _editMArmado.planillero==='object')delete _editMArmado.planillero.fromPrevArmado;
 }
 function _mArmUpdatePresetHint(){
   const hint=document.getElementById('mArmPresetHint');if(!hint)return;
@@ -6711,7 +6932,7 @@ window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;wind
 window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
-window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;
+window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
 window.onMArmScopeChange=onMArmScopeChange;window.onMArmScopeTurnoPick=onMArmScopeTurnoPick;
 
 /* ═══ EMPAQUE — Registrar + lotes ══════════════════════════════ */
@@ -7044,6 +7265,7 @@ function initRuntime(){
   _safeRun(renderPConsol,'renderPConsol');
   _safeRun(renderAnalisis,'renderAnalisis');
   _safeRun(idxRefreshMoldesKpis,'idxRefreshMoldesKpis');
+  _safeRun(pRegKgPadApplyMode,'pRegKgPadApplyMode');
   if(window.renderUserChip)renderUserChip();
 }
 /* Recarga catálogo desde localStorage (misma clave que admin.html) y actualiza pantallas operativas */
