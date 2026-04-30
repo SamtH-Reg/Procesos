@@ -949,34 +949,36 @@ td.num,th.num{font-family:var(--mono);font-weight:600;text-align:center;}
 .mono{font-family:var(--mono);font-weight:600;}
 
 /* Chart mini */
-/* Teclado numérico kg — Pesaje registrar (tablet) */
+/* Teclado numérico kg — Pesaje registrar (compacto, orden 1…9) */
 .p-reg-kg-pad{
   display:grid;
   grid-template-columns:repeat(3,1fr);
-  gap:10px;
+  gap:5px;
   touch-action:manipulation;
   -webkit-user-select:none;user-select:none;
 }
 .p-reg-kg-pad .pk{
-  min-height:52px;
-  padding:0 8px;
-  font-size:clamp(20px,4.2vw,26px);
+  min-height:40px;
+  padding:0 4px;
+  font-size:clamp(17px,3.2vw,21px);
   font-weight:800;
   font-family:var(--mono);
   color:var(--text);
   background:var(--surface-alt);
-  border:2px solid var(--border-strong);
-  border-radius:var(--radius-sm);
+  border:1.5px solid var(--border-strong);
+  border-radius:8px;
   cursor:pointer;
   transition:background .12s,border-color .12s,transform .08s;
 }
 .p-reg-kg-pad .pk:active{transform:scale(0.97);}
 .p-reg-kg-pad .pk:hover{border-color:var(--brand);}
-.p-reg-kg-pad .pk-op{background:color-mix(in srgb,var(--navy-700) 10%,var(--surface));font-size:15px;font-weight:700;}
-.p-reg-kg-pad .pk-wide{grid-column:1/-1;min-height:48px;font-size:15px;}
-.p-reg-kg-pad-hint{font-size:12px;color:var(--text-3);line-height:1.45;margin:0 0 12px;}
+.p-reg-kg-pad .pk:disabled{opacity:.38;cursor:not-allowed;transform:none;}
+.p-reg-kg-pad .pk-op{background:color-mix(in srgb,var(--navy-700) 8%,var(--surface));font-size:13px;font-weight:700;}
+.p-reg-kg-pad .pk-wide{grid-column:1/-1;min-height:34px;font-size:12px;font-weight:700;}
+.p-reg-kg-pad-hint{font-size:11px;color:var(--text-3);line-height:1.4;margin:0 0 8px;}
 @media (min-width:900px){
-  .p-reg-kg-pad .pk{min-height:58px;font-size:26px;}
+  .p-reg-kg-pad .pk{min-height:46px;font-size:22px;}
+  .p-reg-kg-pad{gap:7px;}
 }
 body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--slate-100);border-color:var(--border-strong);color:var(--text);}
 
@@ -2065,15 +2067,15 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
             <div class="card-body" style="padding-top:10px;">
               <p class="p-reg-kg-pad-hint" id="pRegKgPadHint"></p>
               <div id="pRegKgPad" class="p-reg-kg-pad" role="group" aria-label="Teclado numérico para kilos">
-                <button type="button" class="pk" onclick="pRegKgPadKey('7')">7</button>
-                <button type="button" class="pk" onclick="pRegKgPadKey('8')">8</button>
-                <button type="button" class="pk" onclick="pRegKgPadKey('9')">9</button>
-                <button type="button" class="pk" onclick="pRegKgPadKey('4')">4</button>
-                <button type="button" class="pk" onclick="pRegKgPadKey('5')">5</button>
-                <button type="button" class="pk" onclick="pRegKgPadKey('6')">6</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('1')">1</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('2')">2</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('3')">3</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('4')">4</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('5')">5</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('6')">6</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('7')">7</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('8')">8</button>
+                <button type="button" class="pk" onclick="pRegKgPadKey('9')">9</button>
                 <button type="button" class="pk pk-op" onclick="pRegKgPadKey(',')">,</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('0')">0</button>
                 <button type="button" class="pk pk-op" onclick="pRegKgPadKey('bs')" title="Borrar último">⌫</button>
@@ -4714,13 +4716,12 @@ function renderPRegLinea(){
     :'<option value="">— Sin líneas armadas —</option>';
   if(lineasActivas.includes(prevVal))sel.value=prevVal;
   else if(lineasActivas.length)sel.value=lineasActivas[0];
+  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
   renderPRegTrab();
 }
 function onPRegLineaChange(){
   if(window.renderPRegPlanilleros)renderPRegPlanilleros();
-  clearRegPicker('pRegPlanillero','onPRegPlanilleroChange');
   if(window.renderPRegTrab)renderPRegTrab();
-  clearRegPicker('pRegTrab','onPRegTrabChange');
 }
 function _getPRegPickerPlanilleros(){
   // Solo muestra el planillero de la línea seleccionada (igual que _getMRegPickerPlanilleros)
@@ -4766,11 +4767,42 @@ function _getPRegPickerWorkers(){
   if(!workers.length)return null; // null → fallback a todos (igual que moldes)
   return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
 }
+function _pRegPlanilleroDisplayMeta(w){
+  const tDb=(typeof w.id==='number'||/^\d+$/.test(String(w.id)))?DB.data.trabajadores.find(x=>x.id===parseInt(String(w.id),10)):null;
+  const codStr=(tDb&&tDb.codigo)?String(tDb.codigo):'';
+  const fich=(w.ficha!=null&&String(w.ficha).trim()!=='')?String(w.ficha).trim():((tDb&&tDb.ficha)||'');
+  return codStr?(`Código: ${codStr} · Ficha: ${fich||'—'}`):(`Ficha: ${fich||'—'}`);
+}
 function renderPRegPlanilleros(){
   const sel=document.getElementById('pRegPlanillero');if(!sel)return;
+  const linea=(document.getElementById('pRegLinea')||{}).value||'';
+  const arm=linea?_pArmGetEntry(linea,_pArmRegTurno(),_pArmRegFecha()):null;
   const workers=_getPRegPickerPlanilleros()||[];
   sel.innerHTML='<option value="">— Selecciona —</option>'
-    +workers.map(t=>`<option value="${t.id}" data-nombre="${esc(t.nombre)}" data-ficha="${esc((t.ficha!=null&&String(t.ficha)!=='')?t.ficha:'')}">${esc(t.nombre)}</option>`).join('');
+    +workers.map(t=>`<option value="${esc(String(t.id))}" data-nombre="${esc(t.nombre)}" data-ficha="${esc((t.ficha!=null&&String(t.ficha)!=='')?t.ficha:'')}">${esc(t.nombre)}</option>`).join('');
+  if(workers.length===1){
+    const w=workers[0];
+    sel.value=String(w.id);
+    _updateRegPickerDisplay('pRegPlanillero',w.nombre,_pRegPlanilleroDisplayMeta(w));
+  }else if(workers.length>1&&arm&&arm.planillero&&arm.planillero.trabId!=null){
+    const tid=String(arm.planillero.trabId);
+    if([...sel.options].some(o=>String(o.value)===tid)){
+      sel.value=tid;
+      const w=workers.find(x=>String(x.id)===tid);
+      if(w)_updateRegPickerDisplay('pRegPlanillero',w.nombre,_pRegPlanilleroDisplayMeta(w));
+    }
+  }else if(!workers.length){
+    const pb=document.getElementById('pRegPlanilleroPicker');
+    if(pb){
+      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">— Selecciona —</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+    }
+  }else if(workers.length&&!String(sel.value||'').trim()){
+    const pb=document.getElementById('pRegPlanilleroPicker');
+    if(pb){
+      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">— Selecciona —</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+    }
+  }
+  if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
 }
 function renderPRegTrab(){
   // Copia de renderMRegTrab adaptada a pesaje (con ficha)
@@ -4824,69 +4856,77 @@ function onPRegTurnoChange(){
 function onPRegEspecieChange(){/* placeholder */}
 function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
-  const val=sel.value;
   const badge=document.getElementById('pRegWorkerBadge');
   const fichaInp=document.getElementById('pRegFicha');
   if(!badge)return;
-  if(!val){
-    badge.style.display='none';
-    if(fichaInp){
-      fichaInp.value='';
-      fichaInp.classList.add('ficha-fixed');
-    }
-    return;
-  }
-  if(val==='__manual__'){
-    const nom=prompt('Nombre completo del trabajador:');
-    if(!nom||!nom.trim()){
-      sel.value='';badge.style.display='none';
+  try{
+    const val=sel.value;
+    if(!val){
+      badge.style.display='none';
       if(fichaInp){
         fichaInp.value='';
         fichaInp.classList.add('ficha-fixed');
       }
       return;
     }
-    const ficha=prompt('Número de ficha (opcional):','')||'';
-    const opt=document.createElement('option');opt.value='__m_'+Date.now();opt.textContent=nom.trim()+(ficha?' · F'+ficha:'');opt.dataset.nombre=nom.trim();opt.dataset.ficha=ficha.trim();opt.dataset.manual='1';
-    sel.appendChild(opt);sel.value=opt.value;
+    if(val==='__manual__'){
+      const nom=prompt('Nombre completo del trabajador:');
+      if(!nom||!nom.trim()){
+        sel.value='';badge.style.display='none';
+        if(fichaInp){
+          fichaInp.value='';
+          fichaInp.classList.add('ficha-fixed');
+        }
+        return;
+      }
+      const ficha=prompt('Número de ficha (opcional):','')||'';
+      const opt=document.createElement('option');opt.value='__m_'+Date.now();opt.textContent=nom.trim()+(ficha?' · F'+ficha:'');opt.dataset.nombre=nom.trim();opt.dataset.ficha=ficha.trim();opt.dataset.manual='1';
+      sel.appendChild(opt);sel.value=opt.value;
+      badge.style.display='';
+      const ini=nom.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+      document.getElementById('pRegWorkerInit').textContent=ini;
+      document.getElementById('pRegWorkerName').textContent=nom.trim();
+      document.getElementById('pRegWorkerMeta').innerHTML=`<em style="color:var(--safety-amber-dark);">Manual</em>${ficha?' · Ficha <span>'+esc(ficha)+'</span>':''}`;
+      if(fichaInp){
+        const fichaVal=ficha.trim();
+        fichaInp.value=fichaVal;
+        fichaInp.classList.add('ficha-fixed');
+      }
+      return;
+    }
+    const id=parseInt(val)||0;
+    const t=id?DB.data.trabajadores.find(x=>x.id===id):null;
+    const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
+    const armadoLinea=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
+    const entryArmado=armadoLinea?(armadoLinea.trabajadores||[]).find(e=>String(e.trabId)===String(id)):null;
+    const opt=sel.options[sel.selectedIndex];
+    const nombreDisp=t?t.nombre:(opt&&opt.dataset.nombre)||val;
+    const fichaDisp=(opt&&opt.dataset&&opt.dataset.ficha)
+      || (entryArmado&&entryArmado.ficha)
+      || (t&&t.ficha)
+      || '';
     badge.style.display='';
-    const ini=nom.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+    const ini=(nombreDisp||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     document.getElementById('pRegWorkerInit').textContent=ini;
-    document.getElementById('pRegWorkerName').textContent=nom.trim();
-    document.getElementById('pRegWorkerMeta').innerHTML=`<em style="color:var(--safety-amber-dark);">Manual</em>${ficha?' · Ficha <span>'+esc(ficha)+'</span>':''}`;
+    document.getElementById('pRegWorkerName').textContent=nombreDisp;
+    const hoy=RT.pesajes.filter(r=>r.trabId===id||r.nombre===nombreDisp);
+    const totKg=hoy.reduce((s,r)=>s+(r.kg||0),0);
+    document.getElementById('pRegWorkerMeta').innerHTML=`Ficha <span>${esc(fichaDisp||'—')}</span> · ${hoy.length} pesajes hoy · <span>${totKg.toFixed(1).replace('.',',')} kg</span> acumulado`;
     if(fichaInp){
-      const fichaVal=ficha.trim();
+      const fichaVal=(fichaDisp||'').toString().trim();
       fichaInp.value=fichaVal;
       fichaInp.classList.add('ficha-fixed');
     }
-    return;
-  }
-  const id=parseInt(val)||0;
-  const t=id?DB.data.trabajadores.find(x=>x.id===id):null;
-  const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
-  const armadoLinea=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
-  const entryArmado=armadoLinea?(armadoLinea.trabajadores||[]).find(e=>String(e.trabId)===String(id)):null;
-  const opt=sel.options[sel.selectedIndex];
-  const nombreDisp=t?t.nombre:(opt&&opt.dataset.nombre)||val;
-  const fichaDisp=(opt&&opt.dataset&&opt.dataset.ficha)
-    || (entryArmado&&entryArmado.ficha)
-    || (t&&t.ficha)
-    || '';
-  badge.style.display='';
-  const ini=(nombreDisp||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-  document.getElementById('pRegWorkerInit').textContent=ini;
-  document.getElementById('pRegWorkerName').textContent=nombreDisp;
-  // Calcular pesajes hoy
-  const hoy=RT.pesajes.filter(r=>r.trabId===id||r.nombre===nombreDisp);
-  const totKg=hoy.reduce((s,r)=>s+(r.kg||0),0);
-  document.getElementById('pRegWorkerMeta').innerHTML=`Ficha <span>${esc(fichaDisp||'—')}</span> · ${hoy.length} pesajes hoy · <span>${totKg.toFixed(1).replace('.',',')} kg</span> acumulado`;
-  if(fichaInp){
-    const fichaVal=(fichaDisp||'').toString().trim();
-    fichaInp.value=fichaVal;
-    fichaInp.classList.add('ficha-fixed');
+  }finally{
+    if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
   }
 }
 const PREG_KG_NUMPAD_KEY='friosur_pRegKg_numPad';
+function pRegHasWorkerSelected(){
+  const sel=document.getElementById('pRegTrab');
+  if(!sel)return false;
+  return !!String(sel.value||'').trim();
+}
 function pRegKgPadIsCustom(){
   try{return localStorage.getItem(PREG_KG_NUMPAD_KEY)!=='0';}catch(e){return true;}
 }
@@ -4902,6 +4942,7 @@ function pRegKgPadApplyMode(){
   const btn=document.getElementById('pRegKgPadToggleBtn');
   if(!inp)return;
   const custom=pRegKgPadIsCustom();
+  const ok=pRegHasWorkerSelected();
   if(inp._pRegKgFocusTrap){
     inp.removeEventListener('focus',inp._pRegKgFocusTrap,true);
     inp._pRegKgFocusTrap=null;
@@ -4910,24 +4951,49 @@ function pRegKgPadApplyMode(){
     inp.setAttribute('readonly','readonly');
     inp.setAttribute('inputmode','none');
     inp.setAttribute('autocomplete','off');
-    if(pad)pad.style.display='grid';
-    if(hint)hint.textContent='Usa las teclas para ingresar kg. El campo queda sin teclado del sistema para no solaparse con este panel.';
+    if(pad){
+      pad.style.display='grid';
+      pad.querySelectorAll('button.pk').forEach(b=>{
+        b.disabled=!ok;
+        b.style.opacity=ok?'1':'0.38';
+        b.style.cursor=ok?'pointer':'not-allowed';
+      });
+    }
+    if(!ok)inp.value='';
+    if(hint)hint.textContent=ok
+      ?'Teclado numérico: sin teclado del sistema en el campo de kilos.'
+      :'Selecciona un trabajador arriba antes de ingresar kilos.';
     if(btn)btn.textContent='Usar teclado del sistema';
     inp._pRegKgFocusTrap=function(){if(pRegKgPadIsCustom())try{inp.blur();}catch(e){}};
     inp.addEventListener('focus',inp._pRegKgFocusTrap,true);
     try{inp.blur();}catch(e){}
   }else{
-    inp.removeAttribute('readonly');
-    inp.setAttribute('inputmode','decimal');
+    if(pad){
+      pad.style.display='none';
+      pad.querySelectorAll('button.pk').forEach(b=>{b.disabled=false;b.style.opacity='1';b.style.cursor='pointer';});
+    }
+    if(ok){
+      inp.removeAttribute('readonly');
+      inp.setAttribute('inputmode','decimal');
+    }else{
+      inp.setAttribute('readonly','readonly');
+      inp.setAttribute('inputmode','none');
+      inp.value='';
+    }
     inp.setAttribute('autocomplete','off');
-    if(pad)pad.style.display='none';
-    if(hint)hint.textContent='Toca «Kilos procesados» a la izquierda para escribir con el teclado del dispositivo.';
+    if(hint)hint.textContent=ok
+      ?'Toca «Kilos procesados» para escribir con el teclado del dispositivo.'
+      :'Primero elige trabajador; después podrás ingresar kilos con el teclado del sistema.';
     if(btn)btn.textContent='Mostrar teclado numérico';
     try{inp.blur();}catch(e){}
   }
 }
 function pRegKgPadKey(key){
   if(!pRegKgPadIsCustom())return;
+  if(!pRegHasWorkerSelected()){
+    if(typeof showToast==='function')showToast('Selecciona un trabajador antes de ingresar kilos','warn');
+    return;
+  }
   const inp=document.getElementById('pRegKg');
   if(!inp)return;
   let v=String(inp.value||'');
@@ -5006,7 +5072,7 @@ function regPesaje(){
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
 window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
 window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window.renderPRegPlanilleros=renderPRegPlanilleros;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
-window.pRegKgPadToggleMode=pRegKgPadToggleMode;window.pRegKgPadApplyMode=pRegKgPadApplyMode;window.pRegKgPadKey=pRegKgPadKey;window.pRegKgPadIsCustom=pRegKgPadIsCustom;
+window.pRegKgPadToggleMode=pRegKgPadToggleMode;window.pRegKgPadApplyMode=pRegKgPadApplyMode;window.pRegKgPadKey=pRegKgPadKey;window.pRegKgPadIsCustom=pRegKgPadIsCustom;window.pRegHasWorkerSelected=pRegHasWorkerSelected;
 window._ensureArmadoPesaje=_ensureArmadoPesaje;window._pArmGetEntry=_pArmGetEntry;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
