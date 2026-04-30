@@ -246,6 +246,14 @@ input,select,textarea{font-family:inherit;}
 .top-btn:active{background:rgba(255,255,255,.14);}
 .top-btn svg{width:20px;height:20px;}
 .top-btn .dot{position:absolute;top:8px;right:8px;width:8px;height:8px;background:var(--safety-red);border:2px solid var(--navy-950);border-radius:50%;}
+/* Pantalla completa (solo index): visible en viewports táctiles ≤1024px */
+#idxFsBtn{display:none;place-items:center;}
+#idxFsBtn > svg{grid-area:1/1;width:20px;height:20px;}
+@media (max-width:1024px){
+  @media (hover:none),(pointer:coarse){
+    #idxFsBtn{display:grid;grid-template-columns:1fr;grid-template-rows:1fr;}
+  }
+}
 
 .user-chip{
   display:flex;align-items:center;gap:10px;
@@ -295,6 +303,7 @@ input,select,textarea{font-family:inherit;}
   gap:14px;
   margin-bottom:20px;
 }
+#panelMoldes .moldes-dash-kpis > .stats-grid{grid-template-columns:repeat(4,1fr);}
 .stat-card{
   background:var(--surface);
   border:1px solid var(--border);
@@ -1334,6 +1343,10 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
   </div>
 
   <div class="topbar-right">
+    <button type="button" class="top-btn" id="idxFsBtn" onclick="idxToggleFullscreen()" title="Pantalla completa" aria-label="Pantalla completa" aria-pressed="false">
+      <svg data-fs-enter viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      <svg data-fs-exit hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
     <button class="top-btn" title="Notificaciones" style="color: rgb(251, 247, 247);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
       <span class="dot"></span>
@@ -1359,49 +1372,39 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
   <!-- ═══ PANEL: MOLDES ═══════════════════════════════════════ -->
   <div class="panel active" id="panelMoldes" data-screen-label="01 Moldes">
 
-    <div class="section-hdr">
-      <div>
-        <div class="section-title">Moldes</div>
-        <div class="section-sub">Conteo de producción por línea y trabajador</div>
-      </div>
-      <div class="section-spacer"></div>
-      <button class="btn ghost sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Exportar
-      </button>
-    </div>
-
-    <div class="stats-grid">
-      <div class="stat-card blue">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div>
-        <div class="stat-body">
-          <div class="stat-label">Moldes totales</div>
-          <div class="stat-value">1.284</div>
-          <div class="stat-trend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>+12% vs ayer</div>
+    <div class="moldes-dash-kpis">
+      <div class="stats-grid" id="idxMoldesKpiWrap" aria-label="Resumen moldes y pesaje">
+        <div class="stat-card blue">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div>
+          <div class="stat-body">
+            <div class="stat-label">Moldes</div>
+            <div class="stat-value" id="idxKpiMolVal">0</div>
+            <div class="stat-trend" id="idxKpiMolSub">0 registros</div>
+          </div>
         </div>
-      </div>
-      <div class="stat-card green">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></div>
-        <div class="stat-body">
-          <div class="stat-label">Kilos totales</div>
-          <div class="stat-value">30.816<small>kg</small></div>
-          <div class="stat-trend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>+8,2% vs ayer</div>
+        <div class="stat-card green">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></div>
+          <div class="stat-body">
+            <div class="stat-label">Kg totales</div>
+            <div class="stat-value" id="idxKpiKgVal">0<small>kg</small></div>
+            <div class="stat-trend" id="idxKpiKgSub">Mol 0 + Pes 0</div>
+          </div>
         </div>
-      </div>
-      <div class="stat-card amber">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-        <div class="stat-body">
-          <div class="stat-label">Personas activas</div>
-          <div class="stat-value">42<small>/ 48</small></div>
-          <div class="stat-trend down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>6 ausentes</div>
+        <div class="stat-card navy">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg></div>
+          <div class="stat-body">
+            <div class="stat-label">Pesajes</div>
+            <div class="stat-value" id="idxKpiPesVal">0</div>
+            <div class="stat-trend" id="idxKpiPesSub">0 kg prom.</div>
+          </div>
         </div>
-      </div>
-      <div class="stat-card navy">
-        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
-        <div class="stat-body">
-          <div class="stat-label">Última hora</div>
-          <div class="stat-value">186</div>
-          <div class="stat-trend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>Ritmo estable</div>
+        <div class="stat-card amber">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <div class="stat-body">
+            <div class="stat-label">Operarios activos</div>
+            <div class="stat-value" id="idxKpiOpVal">0</div>
+            <div class="stat-trend" id="idxKpiOpSub">Con registros</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1479,9 +1482,6 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
         </button>
       </div>
 
-      <div class="alert info" style="margin-bottom:12px;padding:10px 14px;font-size:12px;">
-        <strong>Secuencia al registrar:</strong> trabajador de la línea → preset → cantidad de moldes → <strong>Registrar conteo</strong>. Los presets siguen visibles siempre; al guardar el registro se limpian trabajador, preset y cantidad para el siguiente ingreso. El <strong>N° Guía</strong> no se borra (solo lo cambias a mano o con Limpiar).
-      </div>
       <div id="mRegArmadoGate" class="alert warn" style="display:none;margin-bottom:12px;padding:10px 14px;font-size:12px;">
         <strong>Falta configurar armado</strong> para este turno/fecha. Ve a <strong>Armado de Línea</strong> y crea al menos una línea con planillero o trabajadores.
       </div>
@@ -1569,20 +1569,6 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Agregar línea
         </button>
-        <button class="btn ghost" type="button" onclick="copiarMArmadoDia()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copiar armado día anterior
-        </button>
-        <div class="spacer"></div>
-        <button class="btn ghost sm" type="button" onclick="guardarMArmadoSnapshot()" title="Guardar estado actual como 'día anterior'">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Guardar día
-        </button>
-      </div>
-      <div id="mArmadoCopiaHint" class="m-armado-copia-hint" style="display:none;margin-bottom:12px;"></div>
-      <div class="alert info" style="margin-bottom:14px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><strong>Armado de Línea (Moldes)</strong> — cada línea tiene un <strong>planillero</strong> y trabajadores. Edita para agregar o eliminar.</div>
       </div>
       <div id="mArmadoList"></div>
     </div>
@@ -2032,20 +2018,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Agregar línea
         </button>
-        <button class="btn ghost" type="button" onclick="copiarPArmadoDia()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copiar armado día anterior
-        </button>
         <div class="spacer"></div>
         <button class="btn ghost sm" type="button" onclick="guardarPArmadoSnapshot()" title="Guardar estado actual como 'día anterior'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Guardar día
         </button>
-      </div>
-      <div id="pArmadoCopiaHint" class="m-armado-copia-hint" style="display:none;margin-bottom:12px;"></div>
-      <div class="alert info" style="margin-bottom:14px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><strong>Armado de pesaje</strong> — cada línea tiene un <strong>planillero línea</strong> y trabajadores con su <strong>ficha</strong>. Edita para agregar, cambiar ficha o eliminar.</div>
       </div>
       <div id="pArmadoList"></div>
     </div>
@@ -3302,6 +3279,114 @@ function todayLocalYmd(){
 }
 const nowDate=()=>todayLocalYmd();
 const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
+/** Supabase → filas RT.moldes (camelCase). */
+function _tbParseSbMolde(rec){
+  if(!rec||rec.id==null)return null;
+  const pid=rec.presetId!=null?rec.presetId:rec.preset_id;
+  return{
+    id:rec.id,hora:rec.hora||null,turno:rec.turno||null,linea:rec.linea||null,
+    codigo:rec.codigo||null,nombre:rec.nombre||null,ficha:rec.ficha||null,
+    producto:rec.producto||null,presetId:pid!=null?pid:null,
+    destino:rec.destino||null,calibre:rec.calibre||null,especie:rec.especie||null,
+    cant:rec.cant!=null?rec.cant:null,pendiente:rec.pendiente!=null?rec.pendiente:rec.cant,kg:rec.kg!=null?rec.kg:null,guia:rec.guia||null,
+    fecha:rec.fecha||nowDate()
+  };
+}
+function _tbParseSbPesaje(rec){
+  if(!rec||rec.id==null)return null;
+  const tid=rec.trabId!=null?rec.trabId:rec.trab_id;
+  return{
+    id:rec.id,hora:rec.hora||null,turno:rec.turno||null,linea:rec.linea||null,
+    trabId:tid!=null?tid:null,codigo:rec.codigo||null,nombre:rec.nombre||null,ficha:rec.ficha||null,
+    especie:rec.especie||null,tipo:rec.tipo||null,kg:rec.kg!=null?rec.kg:null,guia:rec.guia||null,
+    fecha:rec.fecha||nowDate()
+  };
+}
+function _tbMergeRtById(localArr,remoteRows,mapFn){
+  const remote=(remoteRows||[]).map(mapFn).filter(Boolean);
+  const local=Array.isArray(localArr)?localArr:[];
+  const remoteIds=new Set(remote.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
+  const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id)));
+  return remote.concat(extra);
+}
+/** KPIs del panel Moldes (tablet). */
+function idxRefreshMoldesKpis(){
+  const m=Array.isArray(RT.moldes)?RT.moldes:[];
+  const p=Array.isArray(RT.pesajes)?RT.pesajes:[];
+  const totCant=m.reduce((s,r)=>s+(+r.cant||0),0);
+  const kgM=m.reduce((s,r)=>s+(+r.kg||0),0);
+  const kgP=p.reduce((s,r)=>s+(+r.kg||0),0);
+  const kgTot=kgM+kgP;
+  const pesN=p.length;
+  const avgPes=pesN?kgP/pesN:0;
+  const op=new Set([...m,...p].map(r=>r&&r.nombre).filter(Boolean)).size;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('idxKpiMolVal',String(Math.round(totCant)));
+  set('idxKpiMolSub',m.length+' registro'+(m.length!==1?'s':''));
+  set('idxKpiKgVal',Math.round(kgTot).toLocaleString('es-CL')+' kg');
+  set('idxKpiKgSub','Mol '+Math.round(kgM).toLocaleString('es-CL')+' + Pes '+Math.round(kgP).toLocaleString('es-CL'));
+  set('idxKpiPesVal',String(pesN));
+  set('idxKpiPesSub',avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.');
+  set('idxKpiOpVal',String(op));
+  set('idxKpiOpSub','Con registros');
+}
+async function tbManualPullMoldesPesajes(){
+  if(!_tbSb){if(typeof showToast==='function')showToast('Sin conexión a Supabase','warn');return;}
+  if(!_tbUser){if(typeof showToast==='function')showToast('Inicia sesión para leer moldes y pesajes','warn');return;}
+  try{
+    for(const t of['moldes','pesajes']){
+      const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
+      const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).limit(500);
+      if(error){console.warn('[tb pull]',t,error);if(typeof showToast==='function')showToast(t+': '+error.message,'error');continue;}
+      const map=t==='moldes'?_tbParseSbMolde:_tbParseSbPesaje;
+      RT[t]=_tbMergeRtById(localBefore,data||[],map);
+    }
+    rtSave();
+    if(typeof initRuntime==='function')initRuntime();
+    idxRefreshMoldesKpis();
+    if(typeof showToast==='function')showToast('Moldes y pesajes actualizados desde Supabase','success');
+  }catch(e){if(typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
+}
+window.idxRefreshMoldesKpis=idxRefreshMoldesKpis;
+window.tbManualPullMoldesPesajes=tbManualPullMoldesPesajes;
+function idxFsActive(){
+  return !!(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement);
+}
+function idxUpdateFsBtn(){
+  const btn=document.getElementById('idxFsBtn');
+  if(!btn)return;
+  const on=idxFsActive();
+  btn.title=on?'Salir de pantalla completa':'Pantalla completa';
+  btn.setAttribute('aria-label',btn.title);
+  btn.setAttribute('aria-pressed',on?'true':'false');
+  const enter=btn.querySelector('[data-fs-enter]');
+  const exit=btn.querySelector('[data-fs-exit]');
+  if(enter)enter.hidden=on;
+  if(exit)exit.hidden=!on;
+}
+function idxToggleFullscreen(){
+  try{
+    if(idxFsActive()){
+      if(document.exitFullscreen)document.exitFullscreen();
+      else if(document.webkitExitFullscreen)document.webkitExitFullscreen();
+      else if(document.msExitFullscreen)document.msExitFullscreen();
+      return;
+    }
+    const el=document.documentElement;
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+    if(req){
+      Promise.resolve(req.call(el)).catch(function(){
+        if(typeof showToast==='function')showToast('Pantalla completa no disponible','warn');
+      });
+    }else if(typeof showToast==='function')showToast('Tu navegador no permite pantalla completa aquí','warn');
+  }catch(_){
+    if(typeof showToast==='function')showToast('Pantalla completa no disponible','warn');
+  }
+}
+window.idxToggleFullscreen=idxToggleFullscreen;
+window.idxUpdateFsBtn=idxUpdateFsBtn;
+['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,idxUpdateFsBtn);});
+idxUpdateFsBtn();
 const ARM_SCOPE_SEP='@@';
 function _armScopeKey(linea,turno,fecha){
   return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+String(turno||'dia').trim()+ARM_SCOPE_SEP+String(fecha||nowDate()).trim();
@@ -3493,10 +3578,7 @@ function renderMRegTurnos(){
   _mRegEnsureFechaDefault();
   const inferred=_inferTurnoCodigoPorHorario();
   const hint=document.getElementById('mRegTurnoHint');
-  if(hint){
-    hint.style.display='';
-    hint.textContent='Por defecto según hora actual ('+nowHM()+') y turnos en Admin. Noche 00:00–06:59: fecha de armado = día anterior (turno desde 19:00).';
-  }
+  if(hint){hint.style.display='none';hint.textContent='';}
   let appliedDefault=false;
   if(prev&&activos.some(t=>String(t.codigo)===String(prev)))sel.value=prev;
   else if(activos.find(t=>String(t.codigo)===String(inferred))){sel.value=inferred;appliedDefault=true;}
@@ -4515,10 +4597,7 @@ function renderPRegTurnos(){
   _pRegEnsureFechaDefault();
   const inferred=_inferTurnoCodigoPorHorario();
   const hint=document.getElementById('pRegTurnoHint');
-  if(hint){
-    hint.style.display='';
-    hint.textContent='Por defecto según hora actual ('+nowHM()+') y turnos en Admin. Noche 00:00–06:59: fecha de armado = día anterior (turno desde 19:00).';
-  }
+  if(hint){hint.style.display='none';hint.textContent='';}
   let appliedDefault=false;
   if(prev&&activos.some(t=>String(t.codigo)===String(prev)))sel.value=prev;
   else if(activos.find(t=>String(t.codigo)===String(inferred))){sel.value=inferred;appliedDefault=true;}
@@ -5501,11 +5580,8 @@ function _applyMarcaCopiaArmadoPesaje(fechaSnap,guardadoSnap){
 function _renderPArmadoCopiaBanner(){
   const el=document.getElementById('pArmadoCopiaHint');
   if(!el)return;
-  const m=RT.armadoPesajeUltimaCopia;
-  if(!m||!m.copiadoEn){el.style.display='none';el.innerHTML='';return;}
-  const partGuard=m.guardadoEn?` · Referencia guardada: <strong>${esc(m.guardadoEn)}</strong>`:'';
-  el.style.display='flex';
-  el.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div class="m-armado-copia-hint-body"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
+  el.style.display='none';
+  el.innerHTML='';
 }
 function renderPArmado(){
   const box=document.getElementById('pArmadoList');if(!box)return;
@@ -5613,35 +5689,6 @@ function removePLinea(ln){
   _pArmDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();renderPArmado();showToast('Línea '+ln+' eliminada','success');
 }
-function copiarPArmadoDia(){
-  const snap=RT.armadoPesajeSnapshot;
-  if(!snap||!snap.data){showToast('No hay snapshot de día anterior. Pulsa "Guardar día" para crearlo.','error');return;}
-  const nRef=Object.keys(snap.data||{}).length;
-  let msg='Se reemplazará el armado del turno/fecha actual por la referencia guardada con «Guardar día».\n\n';
-  msg+='• Fecha del snapshot: '+(snap.fecha||'—')+'\n';
-  if(snap.guardadoEn)msg+='• Referencia guardada el: '+(snap.guardadoEn)+'\n';
-  msg+='• Entradas en la referencia: '+nRef+'\n\n¿Continuar?';
-  if(!confirm(msg))return;
-  const turnoScope=_getPArmScopeTurno();
-  const fechaScope=_getPArmScopeFecha();
-  _pArmEntriesForScope(turnoScope,fechaScope).forEach(row=>_pArmDeleteEntry(row.linea,turnoScope,fechaScope));
-  Object.entries(snap.data||{}).forEach(([k,d])=>{
-    const meta=_armParseKey(k);
-    const ln=(meta.linea||k||'').trim().toUpperCase();
-    const rec=JSON.parse(JSON.stringify(d||{}));
-    rec.turno=turnoScope;
-    rec.fecha=fechaScope;
-    _pArmSetEntry(ln,rec,turnoScope,fechaScope);
-  });
-  _ensureArmadoPesaje();
-  _applyMarcaCopiaArmadoPesaje(snap.fecha,snap.guardadoEn);
-  RT.armadoPesajeUltimaCopia={
-    snapshotFecha:snap.fecha||'',
-    guardadoEn:snap.guardadoEn||'',
-    copiadoEn:new Date().toLocaleString('es-CL')
-  };
-  rtSave();renderPArmado();showToast('Armado copiado desde '+(snap.fecha||'día anterior')+'. Revisa el cartel y los nombres en violeta.','success');
-}
 function guardarPArmadoSnapshot(){
   _ensureArmadoPesaje();
   _setPArmScopeDefaults();
@@ -5669,22 +5716,25 @@ function editPArmadoLinea(ln){
       <div class="form-grid cols-2" style="margin-bottom:14px;">
         <div class="form-field">
           <label class="form-label">Turno de la línea <span class="required">*</span></label>
-          <select class="select" id="pArmTurno" required onchange="_editPArmado.turno=this.value;">
+          <select class="select" id="pArmTurno" required onchange="_editPArmado.turno=this.value;_armModalUpdateCopySourceHint('p');">
             <option value="dia" ${_editPArmado.turno==='dia'?'selected':''}>Día (07:00–18 h, mismo día)</option>
             <option value="noche" ${_editPArmado.turno==='noche'?'selected':''}>Noche (19:00 → 06:00 día siguiente)</option>
           </select>
         </div>
         <div class="form-field">
           <label class="form-label">📅 Fecha inicio <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(referencia)</span></label>
-          <input type="date" class="input" id="pArmFecha" required value="${_editPArmado.fecha||''}" onchange="_editPArmado.fecha=this.value;">
+          <input type="date" class="input" id="pArmFecha" required value="${_editPArmado.fecha||''}" onchange="_editPArmado.fecha=this.value;_armModalUpdateCopySourceHint('p');">
         </div>
       </div>
-      <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
+      <div style="margin-bottom:14px;padding:12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;">
+          Origen de la copia (misma línea <strong>${esc(ln)}</strong> y mismo turno): armado del <strong id="pArmModalCopySourceDate" style="color:#0369a1;font-size:15px;">—</strong>
+        </div>
         <button class="btn ghost" type="button" onclick="copiarPArmadoModalDiaAnterior()" title="Misma línea y mismo turno (día/noche): trae planillero y trabajadores del día calendario anterior a la fecha de inicio">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           Copiar armado día anterior
         </button>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">Usa la línea <strong>${esc(ln)}</strong> y el turno elegido arriba; los datos vienen del <strong>mismo turno</strong> en la fecha de inicio <strong>menos un día</strong> (calendario). No cambia la fecha de inicio del armado actual.</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong> al copiar; solo se rellenan planillero y trabajadores desde el día indicado arriba.</div>
       </div>
 
       <!-- PLANILLERO LÍNEA -->
@@ -5735,6 +5785,7 @@ function editPArmadoLinea(ln){
     </div>
   </div>`;
   document.body.appendChild(modal);
+  _armModalUpdateCopySourceHint('p');
   renderPArmModal();
 }
 let _editPArmado=null;
@@ -5890,6 +5941,18 @@ function addPArmTrabManual(){
   renderPArmModal();
   showToast(nombre.toUpperCase()+' agregado','success');
 }
+/** Actualiza en el modal la fecha (DD-MM-AAAA) desde la que se copiaría: un día calendario antes de la fecha de inicio. mod: 'p' pesaje | 'm' moldes */
+function _armModalUpdateCopySourceHint(mod){
+  const dateEl=document.getElementById(mod==='m'?'mArmModalCopySourceDate':'pArmModalCopySourceDate');
+  const fe=document.getElementById(mod==='m'?'mArmFecha':'pArmFecha');
+  if(!dateEl)return;
+  if(!fe||!/^\d{4}-\d{2}-\d{2}$/.test(String(fe.value||'').trim())){
+    dateEl.textContent='— (indica fecha de inicio)';
+    return;
+  }
+  const prev=_addDaysLocalYmd(fe.value.trim(),-1);
+  dateEl.textContent=prev.split('-').reverse().join('/');
+}
 /** Desde el modal de edición: copia planillero + trabajadores de la misma línea y turno (día/noche) en la fecha calendario anterior a la fecha de inicio mostrada. No altera la fecha ni el turno del armado que estás editando. */
 function copiarPArmadoModalDiaAnterior(){
   if(!_editPLn||!_editPArmado){showToast('Cierra y vuelve a abrir el editor','error');return;}
@@ -5953,7 +6016,7 @@ function savePArmado(){
   if(window.renderPRegPlanilleros)renderPRegPlanilleros();
   showToast('Línea '+ln+' actualizada','success');
 }
-window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.copiarPArmadoDia=copiarPArmadoDia;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
+window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
 window.onPArmScopeChange=onPArmScopeChange;window.onPArmScopeTurnoPick=onPArmScopeTurnoPick;
 window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
 window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
@@ -6071,11 +6134,8 @@ function _applyMarcaCopiaArmadoMolde(fechaSnap,guardadoSnap){
 function _renderMArmadoCopiaBanner(){
   const el=document.getElementById('mArmadoCopiaHint');
   if(!el)return;
-  const m=RT.armadoMoldeUltimaCopia;
-  if(!m||!m.copiadoEn){el.style.display='none';el.innerHTML='';return;}
-  const partGuard=m.guardadoEn?` · Referencia guardada: <strong>${esc(m.guardadoEn)}</strong>`:'';
-  el.style.display='flex';
-  el.innerHTML=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><div class="m-armado-copia-hint-body"><strong>Última copia desde día anterior</strong> (${esc(m.copiadoEn)}) · Fecha del snapshot: <strong>${esc(m.snapshotFecha||'—')}</strong>${partGuard}. Los nombres en <strong style="color:#5b21b6;">violeta</strong> vienen de esa referencia; al pulsar <strong>Editar</strong> y <strong>Guardar</strong> en la línea se dejan como armado del día actual.</div>`;
+  el.style.display='none';
+  el.innerHTML='';
 }
 function renderMArmado(){
   const box=document.getElementById('mArmadoList');if(!box)return;
@@ -6184,43 +6244,6 @@ function removeMLinea(ln){
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _armDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();renderMArmado();showToast('Línea '+ln+' eliminada','success');
-}
-function copiarMArmadoDia(){
-  const snap=RT.armadoMoldeSnapshot;
-  if(!snap||!snap.data){showToast('No hay snapshot de día anterior. Pulsa "Guardar día" para crearlo.','error');return;}
-  const nRef=Object.keys(snap.data||{}).length;
-  let msg='Se reemplazará el armado actual por la referencia guardada con «Guardar día».\n\n';
-  msg+='• Fecha del snapshot: '+(snap.fecha||'—')+'\n';
-  if(snap.guardadoEn)msg+='• Referencia guardada el: '+snap.guardadoEn+'\n';
-  msg+='• Líneas en la referencia: '+nRef+'\n\n¿Continuar?';
-  if(!confirm(msg))return;
-  const turnoScope=_getMArmScopeTurno();
-  const fechaScope=_getMArmScopeFecha();
-  _armEntriesForScope(turnoScope,fechaScope).forEach(row=>_armDeleteEntry(row.linea,turnoScope,fechaScope));
-  Object.entries(snap.data||{}).forEach(([ln,d])=>{
-    const rec=JSON.parse(JSON.stringify(d||{}));
-    rec.turno=turnoScope;
-    rec.fecha=fechaScope;
-    _stripMarcaCopiaLinea(rec);
-    _armSetEntry(ln,rec,turnoScope,fechaScope);
-  });
-  _ensureArmadoMolde();
-  _applyMarcaCopiaArmadoMolde(snap.fecha,snap.guardadoEn);
-  RT.armadoMoldeUltimaCopia={
-    snapshotFecha:snap.fecha||'',
-    guardadoEn:snap.guardadoEn||'',
-    copiadoEn:new Date().toLocaleString('es-CL')
-  };
-  rtSave();renderMArmado();showToast('Armado copiado desde '+(snap.fecha||'día anterior')+'. Revisa el cartel y los nombres en violeta.','success');
-}
-function guardarMArmadoSnapshot(){
-  _ensureArmadoMolde();
-  RT.armadoMoldeSnapshot={
-    fecha:new Date().toLocaleDateString('es-CL'),
-    guardadoEn:new Date().toLocaleString('es-CL'),
-    data:_cloneArmadoMoldeSinMarcasCopia()
-  };
-  rtSave();showToast('Armado guardado como referencia de día anterior','success');
 }
 
 /* ── Editor de línea moldes: especie + planillero + trabajadores ── */
@@ -6685,7 +6708,7 @@ function saveMArmado(){
   showToast('Línea '+ln+' actualizada','success');
 }
 window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;window.closeMArmado=closeMArmado;window.saveMArmado=saveMArmado;
-window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;window.copiarMArmadoDia=copiarMArmadoDia;window.guardarMArmadoSnapshot=guardarMArmadoSnapshot;
+window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;
@@ -7020,6 +7043,7 @@ function initRuntime(){
   _safeRun(renderPResumen,'renderPResumen');
   _safeRun(renderPConsol,'renderPConsol');
   _safeRun(renderAnalisis,'renderAnalisis');
+  _safeRun(idxRefreshMoldesKpis,'idxRefreshMoldesKpis');
   if(window.renderUserChip)renderUserChip();
 }
 /* Recarga catálogo desde localStorage (misma clave que admin.html) y actualiza pantallas operativas */
@@ -7221,6 +7245,7 @@ const TBSync={
             },row.turno||'dia',row.fecha||'');
           });
           _rtSaveOrig&&_rtSaveOrig();
+          if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
           if(typeof renderMArmado==='function')renderMArmado();
           if(typeof renderMRegLinea==='function')renderMRegLinea();
           if(typeof renderMRegTrab==='function')renderMRegTrab();
@@ -7368,6 +7393,7 @@ const TBSync={
         if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);}
         else{if(i>=0)RT.moldes[i]=local;else RT.moldes.unshift(local);}
         _rtSaveOrig&&_rtSaveOrig();
+        if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
         if(typeof renderMoldesTable==='function')renderMoldesTable();
         if(typeof renderPorCargar==='function')renderPorCargar();
       }).subscribe();
@@ -7378,7 +7404,8 @@ const TBSync={
         if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);}
         else{if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);}
         _rtSaveOrig&&_rtSaveOrig();
-        if(typeof renderPesajesTable==='function')renderPesajesTable();
+        if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
+        if(typeof renderPesajeTable==='function')renderPesajeTable();
       }).subscribe();
     }
     // ── Realtime armado de línea ──────────────────────────────
@@ -7398,6 +7425,7 @@ const TBSync={
       }
       // Guardar local sin disparar re-push (evita loop infinito)
       _rtSaveOrig&&_rtSaveOrig();
+      if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
       // Refrescar UI
       if(typeof renderMArmado==='function')renderMArmado();
       if(typeof renderMRegLinea==='function')renderMRegLinea();
@@ -7409,7 +7437,7 @@ const TBSync={
 
 // Monkey-patch rtSave para auto-push
 const _rtSaveOrig=rtSave;
-rtSave=function(){_rtSaveOrig();TBSync.schedulePush();};
+rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();TBSync.schedulePush();};
 
 /* ── AUTH TABLET ── */
 let _tbUser=null;
