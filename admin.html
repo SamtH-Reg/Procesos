@@ -100,10 +100,12 @@ tbody tr:hover{background:var(--surface-alt);}
 .num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);}
 
 .stat{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);}
+.stat--kpi{border-left:4px solid var(--stat-accent,#3b6fb8);}
 .stat-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);font-weight:700;}
 .stat-val{font-size:24px;font-weight:800;font-family:var(--mono);}
 .stat-trend{font-size:11px;color:var(--ok);font-weight:600;}
 .stat-trend.down{color:var(--err);}
+.stat-trend.muted{color:var(--text-3);font-weight:500;}
 
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--surface-alt);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;}
 .badge.ok{background:#dcfce7;color:#15803d;}
@@ -247,8 +249,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div class="chip" id="dateChip">—</div>
   </div>
   <div class="topbar-right">
-    <button class="top-btn" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes (incl. kg) desde Supabase y actualiza el dashboard">↻ Actualizar kg / moldes</button>
-    <button class="top-btn" onclick="openSupabaseModal()">Conectar Supabase</button>
+    <button class="top-btn" type="button" onclick="openSupabaseModal()" title="URL, clave API y estado de conexión">Supabase</button>
     <button class="top-btn primary" onclick="tabletLink()">Abrir Tablet</button>
   </div>
 </header>
@@ -278,10 +279,9 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 <!-- ═══ DASHBOARD ═══ -->
 <div class="page active" id="page-dashboard">
   <div class="page-hdr">
-    <div><h1 class="page-title">Dashboard</h1><div class="page-sub">KPIs en tiempo real · arrastra para reordenar · 🎨 acento + fondo de tarjeta · ⇔ ancho en columnas (3–12)</div></div>
+    <div><h1 class="page-title">Dashboard</h1></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn ghost sm" onclick="reloadDashboard()">↻ Actualizar</button>
-      <button class="btn sm" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes y pesajes desde Supabase (kg incluidos) y fusiona con datos locales">↻ Actualizar desde Supabase (kg)</button>
+      <button class="btn ghost sm" type="button" onclick="sbManualPullTabletRegs()" title="Trae moldes, pesajes y layout del dashboard desde Supabase">↻ Sincronizar</button>
       <button class="btn sm" onclick="addWidget()">+ Widget</button>
     </div>
   </div>
@@ -328,9 +328,8 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       <div class="slicer-multi" id="slLineas"></div>
     </div>
     <button class="btn ghost sm" onclick="clearFilters()">Limpiar</button>
-    <div style="flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding-top:10px;margin-top:4px;border-top:1px solid var(--border);">
-      <button type="button" class="btn sm" onclick="sbManualPullTabletRegs()" title="Lee moldes y pesajes en Supabase (kilos) y actualiza KPIs y widgets">↻ Actualizar moldes y kg (Supabase)</button>
-      <span id="dashLastKgSync" style="font-size:12px;color:var(--text-2);line-height:1.4;max-width:min(920px,100%);"></span>
+    <div style="flex-basis:100%;padding-top:10px;margin-top:4px;border-top:1px solid var(--border);">
+      <span id="dashLastKgSync" style="font-size:12px;color:var(--text-2);line-height:1.45;display:block;max-width:100%;"></span>
     </div>
   </div>
 
@@ -842,7 +841,26 @@ const DB={data:null,
 DB.load();
 
 /* RT también compartido (solo lectura para análisis) */
-const RT={data:null,load(){try{this.data=JSON.parse(localStorage.getItem(RT_KEY))||{moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};}catch(e){this.data={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};}},save(){localStorage.setItem(RT_KEY,JSON.stringify(this.data));}};
+const RT={data:null,
+  load(){
+    const empty={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};
+    try{this.data=JSON.parse(localStorage.getItem(RT_KEY))||empty;}catch(e){this.data={...empty};}
+    this._ensureShape();
+  },
+  save(){localStorage.setItem(RT_KEY,JSON.stringify(this.data));},
+  _ensureShape(){
+    const d=this.data;
+    if(!d||typeof d!=='object'||Array.isArray(d)){this.data={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};return;}
+    if(!Array.isArray(d.moldes))d.moldes=[];
+    if(!Array.isArray(d.pesajes))d.pesajes=[];
+    if(!Array.isArray(d.generales))d.generales=[];
+    if(!d.eqState||typeof d.eqState!=='object')d.eqState={};
+    if(!d.eqHist||typeof d.eqHist!=='object')d.eqHist={};
+    if(!Array.isArray(d.empacados))d.empacados=[];
+    if(!d.armadoMolde||typeof d.armadoMolde!=='object')d.armadoMolde={};
+    if(!d.armadoPesaje||typeof d.armadoPesaje!=='object')d.armadoPesaje={};
+  },
+};
 RT.load();
 
 /** Horarios de Admin → Turnos (misma lógica que tablet/index). */
@@ -967,9 +985,17 @@ let dashWidgets=JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
 
 /* Layouts guardados con nombre */
 const LAYOUTS_KEY='friosur_dash_layouts';
+const DASH_CLOUD_KEY='friosur_dashboard';
 let dashLayouts={};
+let _dashApplyingFromCloud=false;
+let _dashCloudPushTimer=null;
 try{const s=localStorage.getItem(LAYOUTS_KEY);if(s)dashLayouts=JSON.parse(s);}catch(e){}
-function saveDashLayouts(){localStorage.setItem(LAYOUTS_KEY,JSON.stringify(dashLayouts));}
+function scheduleDashCloudPush(){
+  if(_dashApplyingFromCloud||!_sb||!_currentUser)return;
+  if(_dashCloudPushTimer)clearTimeout(_dashCloudPushTimer);
+  _dashCloudPushTimer=setTimeout(()=>{_dashCloudPushTimer=null;sbPushDashboardCloud();},1600);
+}
+function saveDashLayouts(){try{localStorage.setItem(LAYOUTS_KEY,JSON.stringify(dashLayouts));}catch(e){}scheduleDashCloudPush();}
 
 const PALETTE=['#3b6fb8','#1e3a66','#16a34a','#dc2626','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#64748b'];
 /** Fondos suaves tipo tile de Looker / Power BI (solo tarjeta; no sustituye el acento del gráfico). */
@@ -1024,7 +1050,52 @@ function _widgetSizeClassForSpan(span){
 }
 /* cargar layout guardado */
 try{const saved=localStorage.getItem('friosur_dash_layout');if(saved)dashWidgets=JSON.parse(saved);}catch(e){}
-function saveDashLayout(){localStorage.setItem('friosur_dash_layout',JSON.stringify(dashWidgets));}
+function saveDashLayout(){try{localStorage.setItem('friosur_dash_layout',JSON.stringify(dashWidgets));}catch(e){}scheduleDashCloudPush();}
+/** Aplica payload de app_kv (widgets + layouts nombrados). */
+function applyDashboardFromPayload(val){
+  if(!val||typeof val!=='object')return false;
+  let changed=false;
+  _dashApplyingFromCloud=true;
+  try{
+    if(Array.isArray(val.widgets)&&val.widgets.length){
+      dashWidgets=JSON.parse(JSON.stringify(val.widgets));
+      try{localStorage.setItem('friosur_dash_layout',JSON.stringify(dashWidgets));}catch(e){}
+      changed=true;
+    }
+    if(val.layouts&&typeof val.layouts==='object'&&!Array.isArray(val.layouts)){
+      dashLayouts=JSON.parse(JSON.stringify(val.layouts));
+      try{localStorage.setItem(LAYOUTS_KEY,JSON.stringify(dashLayouts));}catch(e){}
+      changed=true;
+    }
+  }finally{_dashApplyingFromCloud=false;}
+  return changed;
+}
+async function sbPushDashboardCloud(){
+  if(!_sb||!_currentUser)return;
+  try{
+    const payload={widgets:dashWidgets,layouts:dashLayouts,v:1};
+    const{error}=await _sb.from('app_kv').upsert({key:DASH_CLOUD_KEY,value:payload},{onConflict:'key'});
+    if(error)throw error;
+    sbLog('Dashboard widgets/layouts → Supabase',true);
+  }catch(e){sbLog('push dashboard: '+e.message,false);}
+}
+async function sbPullDashboardCloud(opts){
+  opts=opts||{};
+  if(!_sb)return false;
+  try{
+    const{data,error}=await _sb.from('app_kv').select('key,value,updated_at').eq('key',DASH_CLOUD_KEY).maybeSingle();
+    if(error){if(!opts.silent)sbLog('pull dashboard: '+error.message,false);return false;}
+    const val=data&&data.value;
+    if(!val||typeof val!=='object')return false;
+    const ch=applyDashboardFromPayload(val);
+    if(ch){
+      if(typeof refreshLayoutPicker==='function')refreshLayoutPicker();
+      if(typeof renderDashGrid==='function')renderDashGrid();
+      if(!opts.silent)sbLog('Dashboard cargado desde Supabase',true);
+    }
+    return ch;
+  }catch(e){if(!opts.silent)sbLog('pull dashboard: '+e.message,false);return false;}
+}
 
 let _filters={desde:null,hasta:null,turno:'',horaDesdeMin:null,horaHastaMin:null,especies:new Set(),lineas:new Set()};
 let _charts={};
@@ -1106,6 +1177,15 @@ function _recDate(r){
   }
   return null;
 }
+/** Marca de tiempo (ms) para ventana «última hora»; usa ts, o fecha+hora del registro. */
+function _recMs(r){
+  if(r&&typeof r.ts==='number'&&!isNaN(r.ts))return r.ts;
+  const d=_recDate(r);
+  if(!d)return null;
+  const hm=_dashHoraRecToMin(r&&r.hora);
+  if(hm!=null)d.setHours(Math.floor(hm/60),hm%60,0,0);
+  return d.getTime();
+}
 /** Minutos desde medianoche a partir de r.hora (HH:MM o HH:MM:SS). */
 function _dashHoraRecToMin(hora){
   const m=String(hora==null?'':hora).trim().match(/^(\d{1,2})[:\.](\d{2})/);
@@ -1154,7 +1234,8 @@ function onDashTurnoChange(){
   }
 }
 function _filterRecs(recs){
-  return recs.filter(r=>{
+  const arr=Array.isArray(recs)?recs:[];
+  return arr.filter(r=>{
     if(_filters.turno){
       const a=String(_filters.turno||'').toLowerCase();
       const b=String(r.turno||'').toLowerCase();
@@ -1227,8 +1308,6 @@ function renderDashboard(){
   renderWidgetPalette();
   refreshLayoutPicker();
   applyFilters();
-  renderKPIs();
-  renderDashGrid();
 }
 function _shade(hex,delta){
   // variar luminosidad preservando hue
@@ -1480,8 +1559,24 @@ function openColorPicker(id,ev){
 function populateSlicers(){
   const ems=document.getElementById('slEspecies');
   const lns=document.getElementById('slLineas');
-  const especies=[...new Set([...RT.data.moldes,...RT.data.pesajes].map(r=>r.especie).filter(Boolean))];
-  const lineas=[...new Set([...RT.data.moldes,...RT.data.pesajes].map(r=>r.linea).filter(Boolean))];
+  const m0=(RT.data&&Array.isArray(RT.data.moldes))?RT.data.moldes:[];
+  const p0=(RT.data&&Array.isArray(RT.data.pesajes))?RT.data.pesajes:[];
+  const espRaw=[...m0,...p0].map(r=>r.especie).filter(Boolean);
+  const espCanon=new Map();
+  for(const s of espRaw){
+    const k=String(s).trim().toLowerCase();
+    if(!k)continue;
+    if(!espCanon.has(k))espCanon.set(k,String(s).trim());
+  }
+  const especies=[...espCanon.values()].sort((a,b)=>String(a).localeCompare(String(b),'es',{sensitivity:'base'}));
+  const canonEspLower=new Map(especies.map(x=>[String(x).toLowerCase(),x]));
+  const nextEsp=new Set();
+  for(const x of _filters.especies){
+    const c=canonEspLower.get(String(x).trim().toLowerCase());
+    if(c)nextEsp.add(c);
+  }
+  _filters.especies=nextEsp;
+  const lineas=[...new Set([...m0,...p0].map(r=>r.linea).filter(Boolean))];
   ems.innerHTML=especies.map(e=>`<div class="slicer-chip ${_filters.especies.has(e)?'on':''}" onclick="toggleSlicer('especies','${esc(e)}',this)">${esc(e)}</div>`).join('')||'<span style="font-size:11px;color:var(--text-3);padding:6px;">Sin datos</span>';
   lns.innerHTML=lineas.map(l=>`<div class="slicer-chip ${_filters.lineas.has(l)?'on':''}" onclick="toggleSlicer('lineas','${esc(l)}',this)">${esc(l)}</div>`).join('')||'<span style="font-size:11px;color:var(--text-3);padding:6px;">Sin datos</span>';
 }
@@ -1517,19 +1612,30 @@ function clearFilters(){
   if(hh)hh.value='';
   document.getElementById('slFechaPreset').value='todo';
   document.getElementById('slTurno').value='';
-  populateSlicers();applyFilters();renderKPIs();renderDashGrid();
+  populateSlicers();applyFilters();
 }
 function renderKPIs(){
+  const row=document.getElementById('kpiRow');
+  if(!row)return;
+  RT._ensureShape&&RT._ensureShape();
+  if(!RT.data){row.innerHTML='';return;}
   const moldes=_filterRecs(RT.data.moldes);
   const pesajes=_filterRecs(RT.data.pesajes);
-  const kgMol=moldes.reduce((s,r)=>s+(r.kg||0),0);
-  const kgPes=pesajes.reduce((s,r)=>s+(r.kg||0),0);
-  const operarios=new Set([...moldes,...pesajes].map(r=>r.nombre)).size;
-  document.getElementById('kpiRow').innerHTML=`
-    <div class="stat"><div class="stat-lbl">Moldes</div><div class="stat-val">${moldes.reduce((s,r)=>s+(r.cant||0),0)}</div><div class="stat-trend">${moldes.length} registros</div></div>
-    <div class="stat"><div class="stat-lbl">Kg totales</div><div class="stat-val">${(kgMol+kgPes).toLocaleString('es-CL',{maximumFractionDigits:0})}</div><div class="stat-trend">Mol ${kgMol.toLocaleString('es-CL',{maximumFractionDigits:0})} + Pes ${kgPes.toLocaleString('es-CL',{maximumFractionDigits:0})}</div></div>
-    <div class="stat"><div class="stat-lbl">Pesajes</div><div class="stat-val">${pesajes.length}</div><div class="stat-trend">${(pesajes.length?kgPes/pesajes.length:0).toFixed(1)} kg prom.</div></div>
-    <div class="stat"><div class="stat-lbl">Operarios activos</div><div class="stat-val">${operarios}</div><div class="stat-trend">Con registros</div></div>`;
+  const totCant=Math.round(moldes.reduce((s,r)=>s+(+r.cant||0),0));
+  const kgMol=moldes.reduce((s,r)=>s+(+r.kg||0),0);
+  const kgPes=pesajes.reduce((s,r)=>s+(+r.kg||0),0);
+  const kgTot=Math.round(kgMol+kgPes);
+  const pesN=pesajes.length;
+  const avgPes=pesN?kgPes/pesN:0;
+  const avgPesStr=avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.';
+  const operSet=new Set([...moldes,...pesajes].map(r=>r&&r.nombre).filter(Boolean));
+  const operConReg=operSet.size;
+  const nReg=moldes.length;
+  row.innerHTML=`
+    <div class="stat stat--kpi" style="--stat-accent:#3b6fb8;"><div class="stat-lbl">Moldes</div><div class="stat-val">${totCant.toLocaleString('es-CL',{maximumFractionDigits:0})}</div><div class="stat-trend">${nReg} registro${nReg!==1?'s':''}</div></div>
+    <div class="stat stat--kpi" style="--stat-accent:#16a34a;"><div class="stat-lbl">Kg totales</div><div class="stat-val">${kgTot.toLocaleString('es-CL',{maximumFractionDigits:0})}</div><div class="stat-trend">Mol ${Math.round(kgMol).toLocaleString('es-CL')} + Pes ${Math.round(kgPes).toLocaleString('es-CL')}</div></div>
+    <div class="stat stat--kpi" style="--stat-accent:#1e3a5f;"><div class="stat-lbl">Pesajes</div><div class="stat-val">${pesN.toLocaleString('es-CL',{maximumFractionDigits:0})}</div><div class="stat-trend">${esc(avgPesStr)}</div></div>
+    <div class="stat stat--kpi" style="--stat-accent:#f59e0b;"><div class="stat-lbl">Operarios activos</div><div class="stat-val">${operConReg.toLocaleString('es-CL',{maximumFractionDigits:0})}</div><div class="stat-trend">Con registros</div></div>`;
 }
 
 /* Clave de estructura: cambia solo si se agrega/quita/reordena/resiza un widget */
@@ -1672,7 +1778,6 @@ function addWidget(){
   m.innerHTML=`<div class="modal"><div class="modal-hdr"><div class="modal-title">Agregar widget</div><button class="modal-x" onclick="closeModal()">×</button></div><div class="modal-body">${body}</div><div class="modal-ftr"><button class="btn ghost" onclick="closeModal()">Cerrar</button></div></div>`;
   document.body.appendChild(m);
 }
-function reloadDashboard(){RT.load();populateSlTurnoFromDb();populateSlicers();applyFilters();renderKPIs();renderDashGrid();toast('Datos actualizados','success');}
 
 function _buildChartData(w,all,moldes,pesajes){
   const colRaw=w&&w.color?_sanitizeCssColor(w.color):'';
@@ -1726,6 +1831,7 @@ function _buildChartData(w,all,moldes,pesajes){
 }
 function drawWidget(w){
   const cv=document.getElementById('c_'+w.id);if(!cv)return;
+  RT._ensureShape();
   const moldes=_filterRecs(RT.data.moldes);
   const pesajes=_filterRecs(RT.data.pesajes);
   const all=[...moldes,...pesajes];
@@ -2579,10 +2685,13 @@ function dashRefreshKgSummary(opts){
     const kgFM=fm.reduce((s,r)=>s+(+r.kg||0),0),kgFP=fp.reduce((s,r)=>s+(+r.kg||0),0);
     const ts=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
     const fmt=n=>Number(n).toLocaleString('es-CL',{maximumFractionDigits:1});
-    const linea='Sync '+ts+' · Total: '+m.length+' moldes '+fmt(kgM)+' kg · '+p.length+' pesajes '+fmt(kgP)+' kg. Con filtros actuales: '+fm.length+' mol '+fmt(kgFM)+' kg · '+fp.length+' pes '+fmt(kgFP)+' kg.';
+    const sameScope=fm.length===m.length&&fp.length===p.length;
+    const linea=sameScope
+      ?'Sinc. '+ts+' · '+m.length+' moldes · '+fmt(kgM)+' kg · '+p.length+' pesajes · '+fmt(kgP)+' kg'
+      :'Sinc. '+ts+' · Con filtros: '+fm.length+' moldes · '+fmt(kgFM)+' kg · '+fp.length+' pesajes · '+fmt(kgFP)+' kg';
     const el=document.getElementById('dashLastKgSync');
     if(el)el.textContent=linea;
-    if(!opts.silent)toast('Moldes y kg actualizados desde Supabase (ver detalle abajo)','success');
+    if(!opts.silent)toast('Sincronizado','success');
   }catch(e){if(!opts.silent)toast('No se pudo calcular resumen de kg','warn');}
 }
 
@@ -2592,6 +2701,7 @@ async function sbManualPullTabletRegs(){
   if(!_currentUser){toast('Inicia sesión para leer moldes y pesajes','warn');return;}
   try{
     await sbPullRuntimeFromCloud();
+    await sbPullDashboardCloud({silent:true});
     dashRefreshKgSummary({silent:false});
     rtPulse('manual');
   }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)),'err');}
@@ -2611,6 +2721,7 @@ async function sbPullRuntimeFromCloud(){
       const added=merged.length-remote.length;
       if(added>0)sbLog(t+': nube '+remote.length+' + solo-local '+added+' (conservados)',true);
     }
+    RT._ensureShape();
     if(RT.save)RT.save();
     try{
       const{count:cm}=await _sb.from('moldes').select('*',{count:'exact',head:true});
@@ -2636,6 +2747,7 @@ async function applySession(session){
   // Una descarga HTTP inicial; Realtime/poll en moldes·pesajes solo si modo vivo
   setTimeout(async()=>{
     await sbPullRuntimeFromCloud();
+    await sbPullDashboardCloud({silent:true});
     dashRefreshKgSummary({silent:true});
     sbSubscribeRealtime();
     if(sbMsgEconomyEnabled()){sbStopPoll();sbLog('Modo ahorro: usa «Traer moldes y pesajes» o el topbar (pocos mensajes Realtime).');}
@@ -2735,13 +2847,27 @@ function sbSubscribeRealtime(){
         if(i>=0)arr.splice(i,1);
       }
       tgt.data[s.key]=arr;
+      if(s.target==='RT')RT._ensureShape();
       if(s.target==='RT'&&RT.save)RT.save(); else if(s.target==='DB'&&DB.save)DB.save();
       sbRerenderCurrent(s.tbl);
       sbLog('↻ '+s.tbl+' '+p.eventType+' (id='+((p.new||p.old)[pkCol])+')');
     }).subscribe((status)=>{sbLog('canal '+s.tbl+': '+status);});
     _sbChannels.push(ch);
   });
-  sbLog('Realtime: '+subs.length+' canal(es)'+(liveRt?'':' (ahorro: sin moldes/pesajes)'));
+  try{
+    const chKv=_sb.channel('rt-app-kv').on('postgres_changes',{event:'*',schema:'public',table:'app_kv'},(p)=>{
+      const row=p.new||p.old;
+      if(!row||row.key!==DASH_CLOUD_KEY||p.eventType==='DELETE')return;
+      if(row.value&&applyDashboardFromPayload(row.value)){
+        if(typeof refreshLayoutPicker==='function')refreshLayoutPicker();
+        if(typeof renderKPIs==='function')renderKPIs();
+        if(typeof renderDashGrid==='function')renderDashGrid();
+        rtPulse('dashboard');
+      }
+    }).subscribe((status)=>{sbLog('canal app_kv: '+status);});
+    _sbChannels.push(chKv);
+  }catch(e){sbLog('Realtime app_kv: '+(e&&e.message?e.message:String(e)),false);}
+  sbLog('Realtime: '+(subs.length+1)+' canal(es)'+(liveRt?'':' (ahorro: sin moldes/pesajes)'));
 }
 /* ── Re-render reactivo con debounce corto + indicador RT ── */
 let _rerenderTimer=null;
@@ -2827,6 +2953,7 @@ async function _pollFresh(){
         if(!e2&&rows){
           if(!RT.data)RT.data={};
           RT.data[t]=_sbParse(t,rows);
+          RT._ensureShape();
           changed=true;
           sbLog('↺ poll '+t+': '+n+' filas (cambio detectado)');
         }
@@ -2922,6 +3049,7 @@ async function pushAll(){
       if(error)throw error;sbLog(t+': '+rows.length+' filas ↑');ok++;
     }catch(e){sbLog(t+' error: '+e.message,false);err++;}
   }
+  try{await sbPushDashboardCloud();sbLog('Dashboard incluido en push',true);}catch(e2){sbLog('push dashboard: '+e2.message,false);}
   document.getElementById('sbDot').className='status-dot online';
   toast('Push: '+ok+' OK, '+err+' err',err?'warn':'success');
 }
@@ -2942,7 +3070,9 @@ async function pullAll(){
       RT.data[t]=_rtMergeRemoteWithLocal(localBefore,remote);
       sbLog(t+': '+RT.data[t].length+' filas ↓ (nube '+remote.length+')');
     }
+    RT._ensureShape();
     DB.save();if(RT.save)RT.save();
+    await sbPullDashboardCloud({silent:true});
     renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
     toast('Datos traídos desde Supabase','success');
   }catch(e){toast('Error al traer datos: '+e.message,'err');sbLog('Pull error: '+e.message,false);}
@@ -3048,8 +3178,8 @@ function _ieSrc(mod){
 }
 function _ieWrite(mod,arr,reemplazar){
   const tgt=_ieSrc(mod);
-  if(mod==='moldes'){RT.data.moldes=reemplazar?arr:tgt.concat(arr);RT.save();}
-  else if(mod==='pesajes'){RT.data.pesajes=reemplazar?arr:tgt.concat(arr);RT.save();}
+  if(mod==='moldes'){RT.data.moldes=reemplazar?arr:tgt.concat(arr);RT._ensureShape();RT.save();}
+  else if(mod==='pesajes'){RT.data.pesajes=reemplazar?arr:tgt.concat(arr);RT._ensureShape();RT.save();}
   else if(mod==='presets'){DB.data.presets=reemplazar?arr:tgt.concat(arr);DB.save();}
   else if(mod==='trabajadores'){DB.data.trabajadores=reemplazar?arr:tgt.concat(arr);DB.save();renderTrabs&&renderTrabs();}
   else if(mod==='turnos'){DB.data.turnos=reemplazar?arr:tgt.concat(arr);DB.save();renderTurnos&&renderTurnos();}
