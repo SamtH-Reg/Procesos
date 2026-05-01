@@ -1934,7 +1934,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <button class="tab" onclick="setPesTab(this,'pVer')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
         Ver registros
-        <span class="tab-badge">124</span>
+        <span class="tab-badge" id="pesVerTabBadge">0</span>
       </button>
       <button class="tab" onclick="setPesTab(this,'pResumen')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -2122,6 +2122,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <div id="pArmadoList"></div>
     </div>
     <div id="pVer" class="pes-tab hidden">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-body" style="padding:0;">
+          <div id="pVerFiltrosMount"></div>
+        </div>
+      </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>Hora</th><th>L.</th><th>Trabajador</th><th>Especie</th><th>Corte</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
@@ -2695,12 +2700,21 @@ function setMoldTab(el,id){
 function setPesTab(el,id){
   el.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  document.querySelectorAll('.pes-tab').forEach(t=>t.classList.add('hidden'));
+  let prevPesTabId=null;
+  document.querySelectorAll('.pes-tab').forEach(t=>{
+    if(!t.classList.contains('hidden'))prevPesTabId=t.id;
+    t.classList.add('hidden');
+  });
   document.getElementById(id).classList.remove('hidden');
+  if(prevPesTabId==='pResumen'&&id!=='pResumen'){
+    const w=document.getElementById('pResumenWrap');
+    if(w)w.innerHTML='';
+  }
   try{if(typeof closeIosPicker==='function')closeIosPicker();}catch(_){}
   if(id==='pResumen'&&typeof renderPResumen==='function')renderPResumen();
   if(id==='pConsol'&&typeof renderPConsol==='function')renderPConsol();
   if(id==='pArmado'&&typeof renderPArmado==='function')renderPArmado();
+  if(id==='pVer'&&typeof renderPesajeTable==='function')renderPesajeTable();
   if(id==='pRegistrar'){
     if(typeof renderPRegLinea==='function')renderPRegLinea();
     if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
@@ -3337,6 +3351,12 @@ function rtLoad(){
       {id:805,hora:'14:10',linea:'L1',nombre:'ROXANA MUÑOZ',especie:'Merluza Austral',tipo:'Porción',kg:3.4,guia:'G-2026-044'},
       {id:806,hora:'14:05',linea:'L1',nombre:'LUISA TORRES',especie:'Merluza Austral',tipo:'Porción',kg:2.9,guia:'G-2026-044'},
     ];
+  }
+  if(Array.isArray(RT.pesajes)){
+    let mx=RT.pesajes.reduce((m,x)=>Math.max(m,(x&&x.id)||0),0);
+    let touched=false;
+    RT.pesajes.forEach(r=>{if(r&&r.id==null){r.id=++mx;touched=true;}});
+    if(touched)try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}
   }
   if(!Array.isArray(RT.generales))RT.generales=[];
   RT.generales.forEach(r=>{if(r.pendiente==null)r.pendiente=r.cant;});
@@ -5150,10 +5170,80 @@ window.pRegKgPadToggleMode=pRegKgPadToggleMode;window.pRegKgPadApplyMode=pRegKgP
 window._ensureArmadoPesaje=_ensureArmadoPesaje;window._pArmGetEntry=_pArmGetEntry;
 
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
+/** Misma lógica de filtros que «Resumen x hora» (fecha registro, turno de línea, línea). */
+function _readPesajeListaFiltrosFromDom(){
+  const today=nowDate();
+  const pVer=document.getElementById('pVer');
+  const pRs=document.getElementById('pResumen');
+  const verVisible=!!(pVer&&!pVer.classList.contains('hidden'));
+  const resVisible=!!(pRs&&!pRs.classList.contains('hidden'));
+  const fr=resVisible?(document.getElementById('pResumenFechaInicio')||document.getElementById('pResumenFechaTurno')):null;
+  const fv=document.getElementById('pVerFechaTurno');
+  const fechaRaw=(resVisible&&fr&&String(fr.value||'').trim())
+    ||(verVisible&&fv&&String(fv.value||'').trim())
+    ||(fv&&String(fv.value||'').trim())
+    ||(fr&&String(fr.value||'').trim())
+    ||'';
+  const fechaTurno=fechaRaw||today;
+  const tr=resVisible?document.getElementById('pResumenTurnoLinea'):null;
+  const tv=document.getElementById('pVerTurnoLinea');
+  const turnoEl=(verVisible&&tv&&tv.options&&tv.options.length)?tv
+    :(resVisible&&tr&&tr.options&&tr.options.length)?tr
+    :(tv&&tv.options&&tv.options.length)?tv
+    :tr;
+  const lr=resVisible?document.getElementById('pResumenFiltroLinea'):null;
+  const lv=document.getElementById('pVerFiltroLinea');
+  const lineaVal=String(
+    (verVisible&&lv&&lv.value)
+    ||(resVisible&&lr&&lr.value)
+    ||(lv&&lv.value)
+    ||(lr&&lr.value)
+    ||''
+  ).trim();
+  const legacy=document.getElementById('pResumenFiltroTurno');
+  const filtro=_defaultResumenTurnoSelect(turnoEl,legacy);
+  return{fechaTurno,filtro,lineaVal};
+}
+function _filterPesajesPorListaFiltros(rows,state){
+  const today=nowDate();
+  const{fechaTurno,filtro,lineaVal}=state;
+  let pes=Array.isArray(rows)?rows.slice():[];
+  pes=pes.filter(r=>!r.fecha||r.fecha===fechaTurno||(!r.fecha&&fechaTurno===today));
+  if(lineaVal)pes=pes.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
+  if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
+  return pes;
+}
 function renderPesajeTable(){
   const tb=document.getElementById('tbPesaje');if(!tb)return;
-  if(!RT.pesajes.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes registrados.</td></tr>';return;}
-  tb.innerHTML=RT.pesajes.map((r,i)=>`<tr>
+  if(Array.isArray(RT.pesajes)){
+    let mx=RT.pesajes.reduce((m,x)=>Math.max(m,(x&&x.id)||0),0);
+    let touched=false;
+    RT.pesajes.forEach(r=>{if(r&&r.id==null){r.id=++mx;touched=true;}});
+    if(touched)try{rtSave();}catch(e){}
+  }
+  const badge=document.getElementById('pesVerTabBadge');
+  const tot=(RT.pesajes||[]).length;
+  if(badge)badge.textContent=String(tot);
+  const mount=document.getElementById('pVerFiltrosMount');
+  const state=_readPesajeListaFiltrosFromDom();
+  if(mount){
+    mount.innerHTML=_pesajeListaToolbarHtml({
+      fechaId:'pVerFechaTurno',turnoId:'pVerTurnoLinea',lineaId:'pVerFiltroLinea',
+      onChange:'renderPesajeTable',state
+    });
+  }
+  if(!RT.pesajes.length){
+    tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes registrados.</td></tr>';
+    return;
+  }
+  const rows=_filterPesajesPorListaFiltros(RT.pesajes,state);
+  if(!rows.length){
+    const hoyStr=state.fechaTurno.split('-').reverse().join('/');
+    const filtroSub=_resumenFiltroTurnoSub(state.filtro);
+    tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.</td></tr>';
+    return;
+  }
+  tb.innerHTML=rows.map(r=>`<tr>
     <td class="mono">${esc(r.hora)}</td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
@@ -5162,21 +5252,23 @@ function renderPesajeTable(){
     <td class="num">${r.kg.toString().replace('.',',')}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
     <td style="white-space:nowrap;">
-      <button class="btn ghost sm icon" type="button" title="Editar" onclick="editPesaje(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-      <button class="btn ghost sm icon" type="button" title="Eliminar" onclick="delPesaje(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+      <button class="btn ghost sm icon" type="button" title="Editar" onclick="editPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+      <button class="btn ghost sm icon" type="button" title="Eliminar" onclick="delPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
     </td>
   </tr>`).join('');
 }
-function delPesaje(i){
-  const r=RT.pesajes[i];if(!r)return;
+function delPesaje(id){
+  const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
+  const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   if(!confirm('¿Eliminar pesaje de '+r.nombre+' ('+r.kg+' kg)?'))return;
   RT.pesajes.splice(i,1);rtSave();
   renderPesajeTable();renderAnalisis();
   if(window.renderPResumen)renderPResumen();if(window.renderPConsol)renderPConsol();
   showToast('Pesaje eliminado','success');
 }
-function editPesaje(i){
-  const r=RT.pesajes[i];if(!r)return;
+function editPesaje(id){
+  const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
+  const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='pEditModal';
   modal.innerHTML=`<div class="modal" style="max-width:520px;">
     <div class="modal-hdr"><div class="modal-title">Editar pesaje</div><button class="modal-x" onclick="closePEdit()">×</button></div>
@@ -5194,14 +5286,15 @@ function editPesaje(i){
     </div>
     <div class="modal-ftr">
       <button class="btn ghost" onclick="closePEdit()">Cancelar</button>
-      <button class="btn success" onclick="savePEdit(${i})">Guardar cambios</button>
+      <button class="btn success" onclick="savePEdit(${r.id})">Guardar cambios</button>
     </div>
   </div>`;
   document.body.appendChild(modal);
 }
 function closePEdit(){const m=document.getElementById('pEditModal');if(m)m.remove();}
-function savePEdit(i){
-  const r=RT.pesajes[i];if(!r)return;
+function savePEdit(id){
+  const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
+  const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   r.hora=document.getElementById('pEdHora').value.trim();
   r.linea=document.getElementById('pEdLinea').value.trim();
   r.nombre=document.getElementById('pEdNombre').value.trim();
@@ -5239,30 +5332,14 @@ window.renderPesajeTable=renderPesajeTable;window.renderPesajesRecientes=renderP
 function renderPResumen(){
   const wrap=document.getElementById('pResumenWrap');if(!wrap)return;
   const sub=document.getElementById('pResumenSub');
-  const today=nowDate();
-  const prevFe=document.getElementById('pResumenFechaInicio')||document.getElementById('pResumenFechaTurno');
-  // Fecha por defecto = hoy operativo (donde se registran datos ahora), no la más antigua del histórico.
-  const fechaTurno=(prevFe&&String(prevFe.value||'').trim())||today;
-  const prevLin=document.getElementById('pResumenFiltroLinea');
-  const lineaVal=prevLin?String(prevLin.value||'').trim():'';
+  const state=_readPesajeListaFiltrosFromDom();
+  const{fechaTurno,filtro,lineaVal}=state;
   const hoyStr=fechaTurno.split('-').reverse().join('/');
-  const prevTurnoEl=document.getElementById('pResumenTurnoLinea');
-  const legacyTurno=document.getElementById('pResumenFiltroTurno');
-  const filtro=_defaultResumenTurnoSelect(prevTurnoEl,legacyTurno);
-  let pes=RT.pesajes||[];
-  pes=pes.filter(r=>!r.fecha||r.fecha===fechaTurno||(!r.fecha&&fechaTurno===today));
-  if(lineaVal)pes=pes.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
-  if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
-  const hintP='Filtra por <strong>fecha del registro</strong>, turno del <strong>Armado de pesaje</strong> por línea (y catálogo Admin), y <strong>línea</strong>.';
-  const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
-    <label class="form-label" style="margin:0;">Fecha (turno)</label>
-    <input type="date" class="input" id="pResumenFechaInicio" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderPResumen()">
-    <label class="form-label" style="margin:0;">Turno de línea</label>
-    ${_resumenTurnoLineaSelectHtml('pResumenTurnoLinea','renderPResumen',filtro)}
-    <label class="form-label" style="margin:0;">Línea</label>
-    <select class="select" id="pResumenFiltroLinea" style="max-width:120px;" onchange="renderPResumen()">${_resumenLineaOptionsHtml(lineaVal)}</select>
-    <span style="font-size:11px;color:var(--text-3);max-width:520px;">${hintP}</span>
-  </div>`;
+  let pes=_filterPesajesPorListaFiltros(RT.pesajes||[],state);
+  const toolbar=_pesajeListaToolbarHtml({
+    fechaId:'pResumenFechaInicio',turnoId:'pResumenTurnoLinea',lineaId:'pResumenFiltroLinea',
+    onChange:'renderPResumen',state
+  });
   if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+(filtro!=='todos'?' · filtro turno':'')+'.</div>';if(sub)sub.textContent='0 pesajes · '+hoyStr+(lineaVal?' · '+lineaVal:'');return;}
   const hours=_mResumenHourColsFromFiltro(pes,filtro);
   if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin columnas de hora para este filtro.</div>';if(sub)sub.textContent='0 h · '+hoyStr;return;}
@@ -5566,6 +5643,20 @@ function _resumenLineaOptionsHtml(selected){
   const lines=[...set].filter(Boolean).sort();
   const sel=String(selected||'').trim().toUpperCase();
   return['<option value="">Todas</option>'].concat(lines.map(l=>`<option value="${esc(l)}" ${l===sel?'selected':''}>${esc(l)}</option>`)).join('');
+}
+/** Barra de filtros compartida entre «Ver registros» y «Resumen x hora» (Pesaje). */
+function _pesajeListaToolbarHtml(cfg){
+  const{fechaId,turnoId,lineaId,onChange,state}=cfg;
+  const hintP='Filtra por <strong>fecha del registro</strong>, turno del <strong>Armado de pesaje</strong> por línea (y catálogo Admin), y <strong>línea</strong>.';
+  return`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
+    <label class="form-label" style="margin:0;">Fecha (turno)</label>
+    <input type="date" class="input" id="${esc(fechaId)}" value="${esc(state.fechaTurno)}" style="max-width:168px;" onchange="${esc(onChange)}()">
+    <label class="form-label" style="margin:0;">Turno de línea</label>
+    ${_resumenTurnoLineaSelectHtml(turnoId,onChange,state.filtro)}
+    <label class="form-label" style="margin:0;">Línea</label>
+    <select class="select" id="${esc(lineaId)}" style="max-width:120px;" onchange="${esc(onChange)}()">${_resumenLineaOptionsHtml(state.lineaVal)}</select>
+    <span style="font-size:11px;color:var(--text-3);max-width:520px;">${hintP}</span>
+  </div>`;
 }
 /** Horas 0–23 del turno según Admin → Turnos (cruce medianoche). */
 function _turnoHourIntsFromDb(turnoCod){
