@@ -5239,10 +5239,10 @@ window.renderPesajeTable=renderPesajeTable;window.renderPesajesRecientes=renderP
 function renderPResumen(){
   const wrap=document.getElementById('pResumenWrap');if(!wrap)return;
   const sub=document.getElementById('pResumenSub');
-  const fechasP=_collectCycleDates(RT.pesajes||[],_recordCycleForPesaje);
   const today=nowDate();
   const prevFe=document.getElementById('pResumenFechaInicio')||document.getElementById('pResumenFechaTurno');
-  const fechaTurno=(prevFe&&prevFe.value)||fechasP[0]||today;
+  // Fecha por defecto = hoy operativo (donde se registran datos ahora), no la más antigua del histórico.
+  const fechaTurno=(prevFe&&String(prevFe.value||'').trim())||today;
   const prevLin=document.getElementById('pResumenFiltroLinea');
   const lineaVal=prevLin?String(prevLin.value||'').trim():'';
   const hoyStr=fechaTurno.split('-').reverse().join('/');
@@ -5613,10 +5613,9 @@ function _mResumenHourColsFromFiltro(mol,filtro){
 function renderMResumen(){
   const wrap=document.getElementById('mResumenWrap');if(!wrap)return;
   const sub=document.getElementById('mResumenSub');
-  const fechas=_mResumenActiveFechas();
   const today=nowDate();
   const prevFecha=document.getElementById('mResumenFechaInicio')||document.getElementById('mResumenFechaTurno');
-  const fechaTurno=(prevFecha&&prevFecha.value)||fechas[0]||today;
+  const fechaTurno=(prevFecha&&String(prevFecha.value||'').trim())||today;
   const prevLineaEl=document.getElementById('mResumenFiltroLinea');
   const lineaVal=prevLineaEl?String(prevLineaEl.value||'').trim():'';
   const hoyStr=fechaTurno.split('-').reverse().join('/');
