@@ -1985,11 +1985,12 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                 </div>
                 <div class="form-field">
                   <label class="form-label">N° Guía <span class="required">*</span></label>
-                  <input class="input filled" id="pRegGuia" placeholder="G-2026-000" value="G-2026-045">
+                  <input class="input filled" id="pRegGuia" placeholder="G-2026-000" value="">
                 </div>
                 <div class="form-field">
                   <label class="form-label">Especie</label>
                   <select class="select filled" id="pRegEspecie" onchange="onPRegEspecieChange()">
+                    <option value="">— Sin armado / línea —</option>
                     <option value="Reineta">Reineta</option>
                     <option value="Merluza Austral">Merluza Austral</option>
                     <option value="Merluza de Cola">Merluza de Cola</option>
@@ -1998,6 +1999,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                 <div class="form-field">
                   <label class="form-label">Tipo <span class="hint">solo merluza austral</span></label>
                   <select class="select" id="pRegTipo">
+                    <option value="">—</option>
                     <option value="Filete">Filete</option>
                     <option value="Porción">Porción</option>
                   </select>
@@ -4673,8 +4675,6 @@ function _pRegEnsureFechaDefault(){
 function onPRegFechaArmadoChange(){
   _pRegEnsureFechaDefault();
   renderPRegLinea();
-  if(window.renderPRegTrab)renderPRegTrab();
-  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
 }
 function renderPRegTurnos(){
   const sel=document.getElementById('pRegTurno');if(!sel)return;
@@ -4699,6 +4699,55 @@ function renderPRegTurnos(){
   if(fe&&sel.value&&(!String(fe.value||'').trim()||appliedDefault))fe.value=_fechaArmadoOperativa(sel.value);
 }
 /* ─ Misma lógica que Moldes Registrar: líneas por turno + fecha de armado ─ */
+function _pRegHasLineaSeleccionada(){
+  const sel=document.getElementById('pRegLinea');
+  return !!(sel&&String(sel.value||'').trim());
+}
+/** Sin línea armada para turno/fecha: no debe quedar guía/especie/etc. de otra sesión. */
+function _pRegClearCamposSinLineaArmado(){
+  const g=document.getElementById('pRegGuia');if(g)g.value='';
+  const e=document.getElementById('pRegEspecie');if(e)e.value='';
+  const t=document.getElementById('pRegTipo');if(t)t.value='';
+  const k=document.getElementById('pRegKg');if(k)k.value='';
+  if(typeof clearRegPicker==='function'){
+    clearRegPicker('pRegPlanillero',null);
+    clearRegPicker('pRegTrab','onPRegTrabChange');
+  }
+  if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
+}
+function _pRegSetUiBloqueadaSinLinea(on){
+  const lock=!!on;
+  ['pRegGuia','pRegEspecie','pRegTipo','pRegKg'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.disabled=lock;
+  });
+  const fi=document.getElementById('pRegFicha');if(fi)fi.disabled=lock;
+  ['pRegPlanilleroPicker','pRegTrabPicker'].forEach(id=>{
+    const b=document.getElementById(id);
+    if(b){
+      b.disabled=lock;
+      b.style.opacity=lock?'0.55':'';
+      b.style.pointerEvents=lock?'none':'';
+    }
+  });
+  const pad=document.getElementById('pRegKgPad');
+  if(pad)pad.querySelectorAll('button').forEach(bt=>{bt.disabled=lock;});
+  const tgl=document.getElementById('pRegKgPadToggleBtn');
+  if(tgl)tgl.disabled=lock;
+}
+/** Con línea válida: valores por defecto de especie/tipo solo si aún están vacíos (p. ej. tras armar). */
+function _pRegFillDefaultsSiVacios(){
+  if(!_pRegHasLineaSeleccionada())return;
+  const esp=document.getElementById('pRegEspecie');
+  const tip=document.getElementById('pRegTipo');
+  if(esp&&!String(esp.value||'').trim()){
+    const o=[...esp.options].find(x=>String(x.value||'').trim());
+    if(o)esp.value=o.value;
+  }
+  if(tip&&!String(tip.value||'').trim()){
+    const o=[...tip.options].find(x=>String(x.value||'').trim());
+    if(o)tip.value=o.value;
+  }
+}
 function renderPRegLinea(){
   const sel=document.getElementById('pRegLinea');if(!sel)return;
   _ensureArmadoPesaje&&_ensureArmadoPesaje();
@@ -4716,10 +4765,18 @@ function renderPRegLinea(){
     :'<option value="">— Sin líneas armadas —</option>';
   if(lineasActivas.includes(prevVal))sel.value=prevVal;
   else if(lineasActivas.length)sel.value=lineasActivas[0];
+  const tieneLinea=_pRegHasLineaSeleccionada();
+  _pRegSetUiBloqueadaSinLinea(!tieneLinea);
+  if(!tieneLinea)_pRegClearCamposSinLineaArmado();
+  else _pRegFillDefaultsSiVacios();
   if(window.renderPRegPlanilleros)renderPRegPlanilleros();
   renderPRegTrab();
 }
 function onPRegLineaChange(){
+  const tieneLinea=_pRegHasLineaSeleccionada();
+  _pRegSetUiBloqueadaSinLinea(!tieneLinea);
+  if(!tieneLinea)_pRegClearCamposSinLineaArmado();
+  else _pRegFillDefaultsSiVacios();
   if(window.renderPRegPlanilleros)renderPRegPlanilleros();
   if(window.renderPRegTrab)renderPRegTrab();
 }
@@ -4850,8 +4907,7 @@ function onPRegTurnoChange(){
   const tEl=document.getElementById('pRegTurno');
   if(fe&&tEl&&tEl.value)fe.value=_fechaArmadoOperativa(tEl.value);
   else _pRegEnsureFechaDefault();
-  renderPRegLinea();renderPRegPlanilleros();
-  if(window.renderPRegTrab)renderPRegTrab();
+  renderPRegLinea();
 }
 function onPRegEspecieChange(){/* placeholder */}
 function onPRegTrabChange(){
@@ -4942,7 +4998,8 @@ function pRegKgPadApplyMode(){
   const btn=document.getElementById('pRegKgPadToggleBtn');
   if(!inp)return;
   const custom=pRegKgPadIsCustom();
-  const ok=pRegHasWorkerSelected();
+  const lineaOk=typeof _pRegHasLineaSeleccionada==='function'?_pRegHasLineaSeleccionada():true;
+  const ok=lineaOk&&pRegHasWorkerSelected();
   if(inp._pRegKgFocusTrap){
     inp.removeEventListener('focus',inp._pRegKgFocusTrap,true);
     inp._pRegKgFocusTrap=null;
@@ -4960,9 +5017,11 @@ function pRegKgPadApplyMode(){
       });
     }
     if(!ok)inp.value='';
-    if(hint)hint.textContent=ok
+    if(hint)hint.textContent=!lineaOk
+      ?'Primero configura armado (línea) para este turno/fecha; sin línea no hay registro.'
+      :(ok
       ?'Teclado numérico: sin teclado del sistema en el campo de kilos.'
-      :'Selecciona un trabajador arriba antes de ingresar kilos.';
+      :'Selecciona un trabajador arriba antes de ingresar kilos.');
     if(btn)btn.textContent='Usar teclado del sistema';
     inp._pRegKgFocusTrap=function(){if(pRegKgPadIsCustom())try{inp.blur();}catch(e){}};
     inp.addEventListener('focus',inp._pRegKgFocusTrap,true);
@@ -4981,15 +5040,21 @@ function pRegKgPadApplyMode(){
       inp.value='';
     }
     inp.setAttribute('autocomplete','off');
-    if(hint)hint.textContent=ok
+    if(hint)hint.textContent=!lineaOk
+      ?'Sin línea armada no se ingresan kilos. Ve a la pestaña Armado y agrega línea con planillero o trabajadores.'
+      :(ok
       ?'Toca «Kilos procesados» para escribir con el teclado del dispositivo.'
-      :'Primero elige trabajador; después podrás ingresar kilos con el teclado del sistema.';
+      :'Primero elige trabajador; después podrás ingresar kilos con el teclado del sistema.');
     if(btn)btn.textContent='Mostrar teclado numérico';
     try{inp.blur();}catch(e){}
   }
 }
 function pRegKgPadKey(key){
   if(!pRegKgPadIsCustom())return;
+  if(typeof _pRegHasLineaSeleccionada==='function'&&!_pRegHasLineaSeleccionada()){
+    if(typeof showToast==='function')showToast('Sin línea armada no hay pesaje. Configura armado primero.','warn');
+    return;
+  }
   if(!pRegHasWorkerSelected()){
     if(typeof showToast==='function')showToast('Selecciona un trabajador antes de ingresar kilos','warn');
     return;
@@ -5012,6 +5077,11 @@ function pRegKgPadKey(key){
   inp.value=v+key;
 }
 function regPesaje(){
+  if(!_pRegHasLineaSeleccionada()){
+    showToast('No hay línea armada para este turno/fecha. Configura armado primero.','error');
+    const ln=document.getElementById('pRegLinea');if(ln)ln.focus();
+    return;
+  }
   const selT=document.getElementById('pRegTrab');const valT=selT.value;
   if(!valT||valT==='__manual__'){showToast('Selecciona un trabajador','error');selT.focus();return;}
   let nombreTrab='',codigoTrab='',fichaTrab='',trabIdResolved=null;
@@ -5050,13 +5120,17 @@ function regPesaje(){
   if(kg<0.2||kg>20){showToast('Rango permitido: 0,2 – 20 kg','error');if(!pRegKgPadIsCustom())document.getElementById('pRegKg').focus();return;}
   const guia=document.getElementById('pRegGuia').value.trim();
   if(!guia){showToast('N° Guía es obligatorio','error');document.getElementById('pRegGuia').focus();return;}
+  const especieVal=String(document.getElementById('pRegEspecie').value||'').trim();
+  const tipoVal=String(document.getElementById('pRegTipo').value||'').trim();
+  if(!especieVal){showToast('Selecciona especie','error');document.getElementById('pRegEspecie').focus();return;}
+  if(!tipoVal){showToast('Selecciona tipo','error');document.getElementById('pRegTipo').focus();return;}
   const rec={
     id:nextId(RT.pesajes),hora:nowHM(),fecha:nowDate(),
     turno:document.getElementById('pRegTurno').value,
     linea:document.getElementById('pRegLinea').value,
     trabId:t.id,codigo:t.codigo,nombre:t.nombre,ficha,
-    especie:document.getElementById('pRegEspecie').value,
-    tipo:document.getElementById('pRegTipo').value,
+    especie:especieVal,
+    tipo:tipoVal,
     kg:Math.round(kg*100)/100,guia,
   };
   RT.pesajes.unshift(rec);rtSave();
