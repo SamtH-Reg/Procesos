@@ -7364,10 +7364,19 @@ function navAnal(key){
 }
 function _hourOf(hhmm){const m=(hhmm||'').match(/^(\d{1,2}):/);return m?parseInt(m[1]):null;}
 function _especieDe(r){
-  // intenta deducir especie: registro pesaje trae r.especie; molde sólo trae presetId/producto
-  if(r.especie)return r.especie.toUpperCase();
-  const p=DB.data.presets.find(x=>x.id===r.presetId);
-  return p?(p.especie||'').toUpperCase():'—';
+  // intenta deducir especie: registro pesaje trae r.especie; molde presetId o nombre de producto (Supabase antiguo)
+  if(r&&r.especie&&String(r.especie).trim())return String(r.especie).toUpperCase();
+  const pres=DB.data.presets||[];
+  if(r&&r.presetId!=null){
+    const p=pres.find(x=>x.id===r.presetId);
+    if(p&&(p.especie||'').trim())return String(p.especie).toUpperCase();
+  }
+  const prod=String(r&&r.producto||'').trim();
+  if(prod){
+    const p=pres.find(x=>String(x.nombre||'').trim()===prod);
+    if(p&&(p.especie||'').trim())return String(p.especie).toUpperCase();
+  }
+  return'—';
 }
 function renderAnalisis(){
   // General stats

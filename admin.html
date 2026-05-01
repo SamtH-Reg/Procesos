@@ -840,6 +840,24 @@ const DB={data:null,
 };
 DB.load();
 
+/** Especie efectiva para filtros/KPI (alineado con index _especieDe + nombre de producto si falta presetId). */
+function _adminEspecieForRec(r){
+  if(!r||typeof r!=='object')return'';
+  const direct=String(r.especie||'').trim();
+  if(direct)return direct;
+  const pres=(typeof DB!=='undefined'&&DB.data&&Array.isArray(DB.data.presets))?DB.data.presets:[];
+  if(r.presetId!=null){
+    const p=pres.find(x=>x.id===r.presetId);
+    if(p&&String(p.especie||'').trim())return String(p.especie).trim();
+  }
+  const prod=String(r.producto||'').trim();
+  if(prod){
+    const p=pres.find(x=>String(x.nombre||'').trim()===prod);
+    if(p&&String(p.especie||'').trim())return String(p.especie).trim();
+  }
+  return'';
+}
+
 /* RT también compartido (solo lectura para análisis) */
 const RT={data:null,
   load(){
@@ -859,6 +877,13 @@ const RT={data:null,
     if(!Array.isArray(d.empacados))d.empacados=[];
     if(!d.armadoMolde||typeof d.armadoMolde!=='object')d.armadoMolde={};
     if(!d.armadoPesaje||typeof d.armadoPesaje!=='object')d.armadoPesaje={};
+    const pres=(typeof DB!=='undefined'&&DB.data&&Array.isArray(DB.data.presets))?DB.data.presets:[];
+    (d.moldes||[]).forEach(r=>{
+      if(!r||typeof r!=='object')return;
+      if(String(r.especie||'').trim())return;
+      const fill=_adminEspecieForRec(r);
+      if(fill)r.especie=fill;
+    });
   },
 };
 RT.load();
@@ -1255,8 +1280,23 @@ function _filterRecs(recs){
       const b=String(r.turno||'').toLowerCase();
       if(b!==a)return false;
     }
-    if(_filters.especies.size&&!_filters.especies.has(r.especie))return false;
-    if(_filters.lineas.size&&!_filters.lineas.has(r.linea))return false;
+    if(_filters.especies.size){
+      const eff=String(_adminEspecieForRec(r)||'').trim().toLowerCase();
+      if(!eff)return false;
+      let okEsp=false;
+      for(const f of _filters.especies){
+        if(String(f||'').trim().toLowerCase()===eff){okEsp=true;break;}
+      }
+      if(!okEsp)return false;
+    }
+    if(_filters.lineas.size){
+      const ln=String(r.linea||'').trim().toUpperCase();
+      let okLn=false;
+      for(const f of _filters.lineas){
+        if(String(f||'').trim().toUpperCase()===ln){okLn=true;break;}
+      }
+      if(!okLn)return false;
+    }
     if(_filters.desde||_filters.hasta){
       const d=_recDate(r);if(!d)return true;
       if(_filters.desde&&d.getTime()<_filters.desde.getTime())return false;
@@ -1575,7 +1615,7 @@ function populateSlicers(){
   const lns=document.getElementById('slLineas');
   const m0=(RT.data&&Array.isArray(RT.data.moldes))?RT.data.moldes:[];
   const p0=(RT.data&&Array.isArray(RT.data.pesajes))?RT.data.pesajes:[];
-  const espRaw=[...m0,...p0].map(r=>r.especie).filter(Boolean);
+  const espRaw=[...m0,...p0].map(r=>_adminEspecieForRec(r)).filter(Boolean);
   const espCanon=new Map();
   for(const s of espRaw){
     const k=String(s).trim().toLowerCase();
