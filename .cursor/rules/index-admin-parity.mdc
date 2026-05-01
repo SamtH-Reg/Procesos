@@ -1,0 +1,36 @@
+---
+description: Coherencia tablet (index) ↔ consola admin — mismos datos, especies y modales
+globs: "**/*.html"
+alwaysApply: false
+---
+
+# Tablet (`index.html`) y consola (`admin.html`)
+
+Solo existen estos dos HTML en el repo; comparten **la misma base local** y deben seguir alineados.
+
+## localStorage (no romper sin migración explícita)
+
+- Catálogo: `STORE_KEY` = `friosur_app_v1` (presets, trabajadores, turnos, equipos, roles).
+- Producción en vivo: `RT_KEY` = `friosur_rt_v1` (moldes, pesajes, generales, armadoMolde, armadoPesaje, eqState, etc.).
+- Cualquier renombre de clave debe actualizarse **en los dos archivos** y documentar migración de datos si aplica.
+
+## Especie en moldes (filtros, KPI y análisis)
+
+- En **index**, la especie efectiva para agregaciones va en `_especieDe(r)`: `r.especie` → preset por `presetId` → preset por `r.producto === nombre`.
+- En **admin**, usar la misma prioridad en `_adminEspecieForRec(r)`; `_filterRecs` y chips del dashboard deben basarse en esa función (no solo `r.especie` crudo). Comparación de especies/líneas: **insensible a mayúsculas** donde ya esté implementado.
+- `RT._ensureShape` en admin puede rellenar `especie` en moldes vacíos desde preset; al cambiar la lógica de deducción, actualizar **index y admin** a la vez.
+
+## Armado de línea (Pesaje / Moldes)
+
+- Lista de especies: `_getEspecies()` (presets activos con `especie`) — mismo criterio en ambos modales de armado.
+- Guardar: especie obligatoria; formulario con `<form>` + `type="submit"` para validación nativa `required` donde aplique.
+- Modal alto: layout flex con `min-height: 0` en la cadena `.modal` → (`form` si existe) → `.modal-body` y `overflow-y: auto` en el body para que el pie (Guardar/Cancelar) quede siempre alcanzable.
+
+## Supabase / sync
+
+- Mapeo de filas remotas ↔ objetos RT debe mantener los mismos nombres de campo que consume la tablet (`especie`, `presetId`, `producto`, `linea`, `turno`, `fecha`, etc.).
+- Si se añade un campo en una tabla, revisar **pull/push** en index y en admin (no solo uno).
+
+## CSS compartido (modales)
+
+- Reglas bajo `.modal`, `.modal-body`, `.modal-ftr` y `.modal > form` afectan a **todos** los modales dinámicos; al cambiar scroll o flex, comprobar armado Pesaje/Moldes y modales sin `form` (hdr + body + ftr).
