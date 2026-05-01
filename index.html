@@ -3616,7 +3616,7 @@ function _armEntriesForScope(turno,fecha){
     if(String(mf||'')!==String(fecha||''))return;
     out.push({key:k,linea:meta.linea,data:d});
   });
-  out.sort((a,b)=>String(a.linea).localeCompare(String(b.linea)));
+  _sortArmadoLineRows(out);
   return out;
 }
 function _pArmGetEntry(linea,turno,fecha){
@@ -3649,8 +3649,45 @@ function _pArmEntriesForScope(turno,fecha){
     if(String(mf||'')!==String(fecha||''))return;
     out.push({key:k,linea:meta.linea,data:d});
   });
-  out.sort((a,b)=>String(a.linea).localeCompare(String(b.linea)));
+  _sortArmadoLineRows(out);
   return out;
+}
+
+/** L1, L2, … L9, L10 (no orden léxico L1, L10, L2). */
+function _lineCodigoSortKey(ln){
+  const s=String(ln||'').trim().toUpperCase();
+  const m=s.match(/^L\s*(\d+)$/);
+  if(m)return parseInt(m[1],10);
+  return 9999;
+}
+function _sortArmadoLineRows(rows){
+  if(!Array.isArray(rows))return;
+  rows.sort((a,b)=>{
+    const ka=_lineCodigoSortKey(a.linea),kb=_lineCodigoSortKey(b.linea);
+    if(ka!==kb)return ka-kb;
+    return String(a.linea||'').localeCompare(String(b.linea||''));
+  });
+}
+/** Ficha numérica (tablet): chips por línea ordenados F1, F2, … F10. */
+function _fichaTrabArmadoSortKey(t,trabDbList){
+  let f='';
+  if(t&&t.ficha!=null&&String(t.ficha).trim()!=='')f=String(t.ficha).trim();
+  else if(t&&t.trabId){
+    const db=(trabDbList||[]).find(x=>x.id===t.trabId);
+    if(db&&db.ficha!=null&&String(db.ficha).trim()!=='')f=String(db.ficha).trim();
+  }
+  const digits=String(f).replace(/\D/g,'');
+  const n=digits?parseInt(digits,10):NaN;
+  return isNaN(n)?1e9:n;
+}
+function _sortTrabajadoresArmadoChips(trabs,trabDbList){
+  const arr=Array.isArray(trabs)?trabs.slice():[];
+  arr.sort((a,b)=>{
+    const fa=_fichaTrabArmadoSortKey(a,trabDbList),fb=_fichaTrabArmadoSortKey(b,trabDbList);
+    if(fa!==fb)return fa-fb;
+    return String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'});
+  });
+  return arr;
 }
 
 /* ═══ MOLDES — REGISTRAR ═══════════════════════════════════════ */
@@ -3664,7 +3701,7 @@ function renderMRegLinea(){
   const lineasActivas=arm.filter(row=>{
     const d=row.data;
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
-  }).map(row=>row.linea).sort();
+  }).map(row=>row.linea).sort((a,b)=>_lineCodigoSortKey(a)-_lineCodigoSortKey(b)||String(a).localeCompare(String(b)));
   const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3'};
   const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
@@ -3729,7 +3766,13 @@ function _mRegArmadoWorkersListForLinea(linea){
       }
     }
   });
-  workers.sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre)));
+  const tlist=DB&&DB.data&&DB.data.trabajadores?DB.data.trabajadores:[];
+  workers.sort((a,b)=>{
+    const fa=_fichaTrabArmadoSortKey({trabId:a.id,ficha:a.ficha},tlist);
+    const fb=_fichaTrabArmadoSortKey({trabId:b.id,ficha:b.ficha},tlist);
+    if(fa!==fb)return fa-fb;
+    return String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'});
+  });
   return workers;
 }
 function renderMRegTrab(){
@@ -4777,7 +4820,7 @@ function renderPRegLinea(){
   const lineasActivas=arm.filter(row=>{
     const d=row.data;
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
-  }).map(row=>row.linea).sort();
+  }).map(row=>row.linea).sort((a,b)=>_lineCodigoSortKey(a)-_lineCodigoSortKey(b)||String(a).localeCompare(String(b)));
   const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3',L4:'L4 — Línea 4',L5:'L5 — Línea 5',L6:'L6 — Línea 6'};
   const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
@@ -4897,6 +4940,13 @@ function renderPRegTrab(){
         if(nom&&!fromArmado.find(w=>w.id===id))
           fromArmado.push({id,nombre:nom,ficha:entry.ficha||'',__fromArmado:true});
       }
+    });
+    const tlist=DB&&DB.data&&DB.data.trabajadores?DB.data.trabajadores:[];
+    fromArmado.sort((a,b)=>{
+      const fa=_fichaTrabArmadoSortKey({trabId:a.id,ficha:a.ficha},tlist);
+      const fb=_fichaTrabArmadoSortKey({trabId:b.id,ficha:b.ficha},tlist);
+      if(fa!==fb)return fa-fb;
+      return String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'});
     });
   }
   const tieneArmado=linea&&armLinea&&
@@ -5984,7 +6034,7 @@ function renderPArmado(){
   box.innerHTML=scopedRows.map(row=>{
     const ln=row.linea;
     const data=row.data||{planillero:null,trabajadores:[],fecha:''};
-    const trabs=data.trabajadores||[];
+    const trabs=_sortTrabajadoresArmadoChips(data.trabajadores||[],trabDbList);
     const p=data.planillero;
     const fechaStr=data.fecha?String(data.fecha).split('-').reverse().join('/'):'';
     return `<div class="line-card" style="margin-bottom:12px;">
@@ -6578,7 +6628,7 @@ function renderMArmado(){
   box.innerHTML=scopedRows.map(row=>{
     const ln=row.linea;
     const data=row.data||{planillero:null,trabajadores:[],especie:''};
-    const trabs=data.trabajadores||[];
+    const trabs=_sortTrabajadoresArmadoChips(data.trabajadores||[],trabDbList);
     const p=data.planillero;
     const especie=data.especie||data.producto||'';
     const fechaStr=data.fecha?data.fecha.split('-').reverse().join('/'):'';
