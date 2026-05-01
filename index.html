@@ -5917,6 +5917,7 @@ function _ensureArmadoPesaje(){
       let d=RT.armadoPesaje[k];
       if(!d||typeof d!=='object'||Array.isArray(d))d={};
       if(!Array.isArray(d.trabajadores))d.trabajadores=[];
+      if(!('especie' in d))d.especie=d.producto||'';
       if(!d.turno)d.turno='dia';
       if(!d.fecha)d.fecha=nowDate();
       const meta=_armParseKey(k);
@@ -5934,7 +5935,7 @@ function _ensureArmadoPesaje(){
   if(!Object.keys(RT.armadoPesaje).length){
     const fd=nowDate();
     ['L1','L2','L3'].forEach(ln=>{
-      RT.armadoPesaje[_armScopeKey(ln,'dia',fd)]={planillero:null,trabajadores:[],turno:'dia',fecha:fd};
+      RT.armadoPesaje[_armScopeKey(ln,'dia',fd)]={planillero:null,trabajadores:[],especie:'',turno:'dia',fecha:fd};
     });
   }
 }
@@ -6036,12 +6037,13 @@ function renderPArmado(){
     const data=row.data||{planillero:null,trabajadores:[],fecha:''};
     const trabs=_sortTrabajadoresArmadoChips(data.trabajadores||[],trabDbList);
     const p=data.planillero;
+    const especieArm=data.especie||data.producto||'';
     const fechaStr=data.fecha?String(data.fecha).split('-').reverse().join('/'):'';
     return `<div class="line-card" style="margin-bottom:12px;">
       <div class="line-hdr">
         <div class="line-id">${esc(ln)}</div>
         <div style="flex:1;min-width:0;">
-          <div class="line-title">Línea ${esc(ln)}</div>
+          <div class="line-title">Línea ${esc(ln)}${especieArm?` <span style="font-size:12px;font-weight:500;color:var(--text-3);">·</span> <span style="font-size:13px;font-weight:600;color:#0369a1;">${esc(especieArm)}</span>`:''}</div>
           <div class="line-sub">${p?'<span style="color:var(--safety-green-dark,#15803d);font-weight:700;">⚑ Planillero:</span> <strong'+(p.fromPrevArmado?' class="wc-plan-from-prev"':'')+'>'+esc(p.nombre)+'</strong> · ':'<span style="color:var(--safety-amber-dark);font-weight:700;">Sin planillero · </span>'}${trabs.length} trabajador(es)${fechaStr?' · <span style="color:var(--text-3);">📅 desde '+esc(fechaStr)+'</span>':''}${data.origenCopiaDesdeFecha?' · <span style="color:#6d28d9;font-weight:600;" title="'+(data.origenCopiaGuardadoEn?esc('Ref. '+data.origenCopiaGuardadoEn):'')+'">Copiado del armado del '+esc(data.origenCopiaDesdeFecha)+'</span>':''}</div>
         </div>
         <div class="section-spacer"></div>
@@ -6110,7 +6112,7 @@ function confirmPAddLinea(){
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
   if(_pArmGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');inp.focus();return;}
-  _pArmSetEntry(key,{planillero:null,trabajadores:[],turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
+  _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
 function removePLinea(ln){
@@ -6137,14 +6139,27 @@ function editPArmadoLinea(ln){
   _ensureArmadoPesaje();
   _setPArmScopeDefaults();
   _editPLn=ln;
-  const data=_pArmGetEntry(ln,_getPArmScopeTurno(),_getPArmScopeFecha())||{planillero:null,trabajadores:[],turno:_getPArmScopeTurno(),fecha:_getPArmScopeFecha()};
+  const data=_pArmGetEntry(ln,_getPArmScopeTurno(),_getPArmScopeFecha())||{planillero:null,trabajadores:[],especie:'',turno:_getPArmScopeTurno(),fecha:_getPArmScopeFecha()};
+  const especies=_getEspecies();
+  const currentEspecie=data.especie||data.producto||'';
+  const especieIni=(currentEspecie&&especies.includes(currentEspecie))?currentEspecie:'';
   // Trabajar en una copia en memoria; al guardar se vuelca a RT
-  _editPArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),turno:data.turno||_getPArmScopeTurno()||'dia',fecha:data.fecha||_getPArmScopeFecha()};
+  _editPArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:especieIni,turno:data.turno||_getPArmScopeTurno()||'dia',fecha:data.fecha||_getPArmScopeFecha()};
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='pArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
-    <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Pesaje</div><button class="modal-x" onclick="closePArmado()">×</button></div>
+    <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Pesaje</div><button class="modal-x" type="button" onclick="closePArmado()">×</button></div>
+    <form id="pArmForm" onsubmit="event.preventDefault();savePArmado();">
     <div class="modal-body">
-      <div class="form-grid cols-2" style="margin-bottom:14px;">
+      <div class="form-grid cols-3" style="margin-bottom:14px;">
+        <div class="form-field">
+          <label class="form-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-.1em;margin-right:4px;"><path d="M12 3v18M5 6l7-3 7 3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/></svg>
+            Especie <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(misma lista que moldes)</span>
+          </label>
+          <select class="select" id="pArmEspecie" required onchange="_editPArmado.especie=this.value;">
+            ${especies.length?`<option value="" disabled ${!especieIni?'selected':''}>— Elige especie —</option>`+especies.map(e=>`<option value="${esc(e)}" ${e===especieIni?'selected':''}>${esc(e)}</option>`).join(''):'<option value="" disabled selected>Sin especies — agrega presets en Config</option>'}
+          </select>
+        </div>
         <div class="form-field">
           <label class="form-label">Turno de la línea <span class="required">*</span></label>
           <select class="select" id="pArmTurno" required onchange="_editPArmado.turno=this.value;_armModalUpdateCopySourceHint('p');">
@@ -6165,7 +6180,7 @@ function editPArmadoLinea(ln){
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           Copiar armado día anterior
         </button>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong> al copiar; solo se rellenan planillero y trabajadores desde el día indicado arriba.</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong> al copiar; solo se rellenan planillero y trabajadores desde el día indicado arriba. La <strong>especie</strong> elegida arriba se conserva (igual que en moldes).</div>
       </div>
 
       <!-- PLANILLERO LÍNEA -->
@@ -6211,9 +6226,10 @@ function editPArmadoLinea(ln){
       </div>
     </div>
     <div class="modal-ftr">
-      <button class="btn ghost" onclick="closePArmado()">Cancelar</button>
-      <button class="btn success" onclick="savePArmado()">Guardar línea</button>
+      <button class="btn ghost" type="button" onclick="closePArmado()">Cancelar</button>
+      <button class="btn success" type="submit">Guardar línea</button>
     </div>
+    </form>
   </div>`;
   document.body.appendChild(modal);
   _armModalUpdateCopySourceHint('p');
@@ -6221,6 +6237,11 @@ function editPArmadoLinea(ln){
 }
 let _editPArmado=null;
 function renderPArmModal(){
+  const selEsp=document.getElementById('pArmEspecie');
+  if(selEsp&&_editPArmado){
+    const v=String(_editPArmado.especie||'').trim();
+    if(v&&[...selEsp.options].some(o=>String(o.value)===v))selEsp.value=v;
+  }
   // planillero box
   const pBox=document.getElementById('pArmPlanilleroBox');
   if(pBox){
@@ -6412,10 +6433,13 @@ function copiarPArmadoModalDiaAnterior(){
     trabajadores:(src.trabajadores||[]).map(t=>JSON.parse(JSON.stringify(t)))
   };
   _stripMarcaCopiaLinea(wrap);
+  const selEsp=document.getElementById('pArmEspecie');
+  const keepEsp=(selEsp&&String(selEsp.value||'').trim())||String(_editPArmado.especie||'').trim()||'';
   _editPArmado.planillero=wrap.planillero;
   _editPArmado.trabajadores=wrap.trabajadores;
   _editPArmado.turno=turnoRaw;
   if(fe&&fe.value)_editPArmado.fecha=fe.value.trim();
+  if(keepEsp)_editPArmado.especie=keepEsp;
   clearPArmSelection();
   renderPArmModal();
   showToast('Copiado desde '+fAnt+' · Revisa fichas y pulsa Guardar línea','success');
@@ -6466,6 +6490,16 @@ function closePArmado(){
 }
 function savePArmado(){
   if(!_editPLn||!_editPArmado)return;
+  const form=document.getElementById('pArmForm');
+  if(form&&!form.checkValidity()){form.reportValidity();return;}
+  const selEsp=document.getElementById('pArmEspecie');
+  const especie=(selEsp&&String(selEsp.value||'').trim())||'';
+  const allowed=_getEspecies();
+  if(!especie||!allowed.includes(especie)){
+    showToast(allowed.length?'Debes elegir una especie de la lista':'No hay especies activas en presets (Config)','error');
+    if(selEsp)selEsp.focus();
+    return;
+  }
   const selTurno=document.getElementById('pArmTurno');
   const turnoRaw=(selTurno&&selTurno.value)||'';
   if(turnoRaw!=='dia'&&turnoRaw!=='noche'){showToast('El turno de la línea es obligatorio','error');if(selTurno)selTurno.focus();return;}
@@ -6474,8 +6508,10 @@ function savePArmado(){
   const fecha=(fe&&fe.value||'').trim();
   if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
   _editPArmado.fecha=fecha;
+  _editPArmado.especie=especie;
   _pArmDeleteEntry(_editPLn,_getPArmScopeTurno(),_getPArmScopeFecha());
   const target=JSON.parse(JSON.stringify(_editPArmado));
+  target.especie=especie;
   _pArmSetEntry(_editPLn,target,turnoRaw,fecha);
   _stripMarcaCopiaLinea(target);
   rtSave();
@@ -6978,13 +7014,15 @@ function editMArmadoLinea(ln){
   _setMArmScopeDefaults();
   _editMLn=ln;
   const data=_armGetEntry(ln,_getMArmScopeTurno(),_getMArmScopeFecha())||{planillero:null,trabajadores:[],especie:'',turno:_getMArmScopeTurno(),fecha:_getMArmScopeFecha()};
-  const currentEspecie=data.especie||data.producto||'';
-  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:currentEspecie,turno:data.turno||'dia',fecha:data.fecha||_getMArmScopeFecha()||''};
-  _mArmPrefillPlanilleroDesdePesaje(ln);
   const especies=_getEspecies();
+  const currentEspecie=data.especie||data.producto||'';
+  const especieIni=(currentEspecie&&especies.includes(currentEspecie))?currentEspecie:'';
+  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:especieIni,turno:data.turno||'dia',fecha:data.fecha||_getMArmScopeFecha()||''};
+  _mArmPrefillPlanilleroDesdePesaje(ln);
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
-    <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Moldes</div><button class="modal-x" onclick="closeMArmado()">×</button></div>
+    <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Moldes</div><button class="modal-x" type="button" onclick="closeMArmado()">×</button></div>
+    <form id="mArmForm" onsubmit="event.preventDefault();saveMArmado();">
     <div class="modal-body">
       <!-- ESPECIE + TURNO + FECHA -->
       <div class="form-grid cols-3" style="margin-bottom:14px;">
@@ -6994,7 +7032,7 @@ function editMArmadoLinea(ln){
             Especie <span class="required">*</span> <span style="font-size:10px;color:var(--text-3);font-weight:400;">(filtra presets)</span>
           </label>
           <select class="select" id="mArmEspecie" required onchange="_editMArmado.especie=this.value;_mArmUpdatePresetHint();">
-            ${especies.length?`<option value="" disabled ${!currentEspecie?'selected':''}>— Elige especie —</option>`+especies.map(e=>`<option value="${esc(e)}" ${e===currentEspecie?'selected':''}>${esc(e)}</option>`).join(''):'<option value="" disabled selected>Sin especies — agrega presets en Config</option>'}
+            ${especies.length?`<option value="" disabled ${!especieIni?'selected':''}>— Elige especie —</option>`+especies.map(e=>`<option value="${esc(e)}" ${e===especieIni?'selected':''}>${esc(e)}</option>`).join(''):'<option value="" disabled selected>Sin especies — agrega presets en Config</option>'}
           </select>
           <div id="mArmPresetHint" style="margin-top:5px;font-size:11px;color:#0369a1;"></div>
         </div>
@@ -7053,9 +7091,10 @@ function editMArmadoLinea(ln){
       </div>
     </div>
     <div class="modal-ftr">
-      <button class="btn ghost" onclick="closeMArmado()">Cancelar</button>
-      <button class="btn success" onclick="saveMArmado()">Guardar línea</button>
+      <button class="btn ghost" type="button" onclick="closeMArmado()">Cancelar</button>
+      <button class="btn success" type="submit">Guardar línea</button>
     </div>
+    </form>
   </div>`;
   document.body.appendChild(modal);
   _armModalUpdateCopySourceHint('m');
@@ -7174,9 +7213,16 @@ function closeMArmado(){
 }
 function saveMArmado(){
   if(!_editMLn||!_editMArmado)return;
+  const form=document.getElementById('mArmForm');
+  if(form&&!form.checkValidity()){form.reportValidity();return;}
   const selEsp=document.getElementById('mArmEspecie');
-  const especie=(selEsp&&selEsp.value||'').trim();
-  if(!especie){showToast('Debes elegir una especie','error');if(selEsp)selEsp.focus();return;}
+  const especie=(selEsp&&String(selEsp.value||'').trim())||'';
+  const allowed=_getEspecies();
+  if(!especie||!allowed.includes(especie)){
+    showToast(allowed.length?'Debes elegir una especie de la lista':'No hay especies activas en presets (Config)','error');
+    if(selEsp)selEsp.focus();
+    return;
+  }
   const selTurno=document.getElementById('mArmTurno');
   const turnoRaw=(selTurno&&selTurno.value)||'';
   if(turnoRaw!=='dia'&&turnoRaw!=='noche'){showToast('El turno de la línea es obligatorio','error');if(selTurno)selTurno.focus();return;}
