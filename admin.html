@@ -628,9 +628,10 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
     <div class="grid-2">
       <div>
         <div class="form-field"><label class="form-label">Módulo</label>
-          <select class="select" id="ieModulo" onchange="previewFiltered()">
-            <option value="moldes">Moldes</option>
+          <select class="select" id="ieModulo" onchange="ieOnModuloChange();previewFiltered()">
+            <option value="moldes">Moldes (conteo)</option>
             <option value="pesajes">Pesajes</option>
+            <option value="tuneles">Túneles y placas (histórico + estado)</option>
             <option value="presets">Presets (catálogo)</option>
             <option value="trabajadores">Trabajadores (catálogo)</option>
             <option value="turnos">Turnos (catálogo)</option>
@@ -649,7 +650,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
           <div class="form-field"><label class="form-label">Hora inicio</label><input class="input" type="time" id="ieHoraIni" onchange="previewFiltered()"></div>
           <div class="form-field"><label class="form-label">Hora fin</label><input class="input" type="time" id="ieHoraFin" onchange="previewFiltered()"></div>
         </div>
-        <div class="form-field"><label class="form-label">Línea</label><input class="input" id="ieLinea" placeholder="L1, L2, L3 (vacío = todas)" oninput="previewFiltered()"></div>
+        <div class="form-field" id="ieLineaWrap"><label class="form-label">Línea</label><input class="input" id="ieLinea" placeholder="L1, L2, L3 (vacío = todas)" oninput="previewFiltered()"></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;">
         <div id="iePreview" style="padding:14px;background:var(--surface-alt);border-radius:10px;font-size:13px;color:var(--text-2);text-align:center;font-weight:600;">— Ajusta filtros para ver la previsualización —</div>
@@ -666,9 +667,10 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
   <div class="card" style="margin-top:14px;background:var(--surface-alt);">
     <div style="padding:14px 16px;font-size:12px;color:var(--text-2);line-height:1.6;">
       <strong>📋 Formato del Excel:</strong><br>
-      · Una hoja con el nombre del módulo (<span class="kbd">moldes</span>, <span class="kbd">pesajes</span>, <span class="kbd">trabajadores</span>, etc.)<br>
-      · Primera fila = encabezados exactos del export (úsalo como plantilla).<br>
-      · <strong>Recomendado:</strong> exporta primero los datos actuales para ver la estructura esperada.
+      · <strong>Moldes / Pesajes:</strong> una hoja con el nombre del módulo (<span class="kbd">moldes</span>, <span class="kbd">pesajes</span>). Filtros por <em>fecha + turno</em> usan la misma ventana horaria que en planta (turno que cruza medianoche).<br>
+      · <strong>Túneles:</strong> hoja principal <span class="kbd">tuneles</span> (filas ordenadas por fecha de cierre e id); opcional segunda hoja <span class="kbd">estado_actual</span> al importar (mismo layout que el export).<br>
+      · <strong>Catálogos:</strong> <span class="kbd">trabajadores</span>, <span class="kbd">turnos</span>, etc. — sin filtro de fecha.<br>
+      · Primera fila = encabezados del export (mejor exportar antes como plantilla).
     </div>
   </div>
 </div>
@@ -3167,22 +3169,178 @@ function confirmModal(){
 
 function tabletLink(){window.open('index.html','_blank');}
 
-/* ════════════ IMPORT/EXPORT FILTRADO (moldes/pesajes) ════════════ */
+/* ════════════ IMPORT/EXPORT (moldes · pesajes · túneles · catálogos) ════════════ */
+function ieOnModuloChange(){
+  const mod=(document.getElementById('ieModulo')||{}).value;
+  const lw=document.getElementById('ieLineaWrap');
+  if(lw)lw.style.display=(mod==='moldes'||mod==='pesajes')?'':'none';
+}
+function ieApplyFechaDefaultForTurno(tur){
+  const dEl=document.getElementById('ieDesde'),hEl=document.getElementById('ieHasta');
+  if(!dEl||!hEl)return;
+  const code=String(tur||'').trim();
+  if(!code){const iso=_adminTodayLocalYmd();dEl.value=hEl.value=iso;return;}
+  const yDesde=_dashTurnoOperativeYmd(code);
+  let yHasta=yDesde;
+  if(_dashTurnoCrossesMidnight(code)){
+    const dd=_ymdToLocalStart(yDesde)||new Date();
+    dd.setDate(dd.getDate()+1);
+    yHasta=_dateObjToLocalYmd(dd);
+  }
+  dEl.value=yDesde;hEl.value=yHasta;
+}
 function populateIEFilters(){
   const sel=document.getElementById('ieTurno');if(!sel)return;
   sel.innerHTML='<option value="">Todos</option>'+(DB.data.turnos||[]).filter(t=>t.activo).map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre)} (${esc(t.inicio)}–${esc(t.fin)})</option>`).join('');
   const rh=document.getElementById('ieRangoHora');
-  if(rh){const oldHandler=rh.onchange;rh.onchange=()=>{document.getElementById('ieHoraCustom').style.display=rh.value==='custom'?'':'none';previewFiltered();};}
+  if(rh){rh.onchange=()=>{const hc=document.getElementById('ieHoraCustom');if(hc)hc.style.display=rh.value==='custom'?'':'none';previewFiltered();};}
   const d=document.getElementById('ieDesde'),h=document.getElementById('ieHasta');
   if(d&&h&&!d.value&&!h.value){
-    const iso=_adminTodayLocalYmd();
-    d.value=h.value=iso;
-  }
-  if(sel&&!sel.value){
+    const inf=_adminInferTurnoCodigoPorHorario();
+    if([...sel.options].some(o=>o.value===inf))sel.value=inf;
+    ieApplyFechaDefaultForTurno(sel.value||inf||'');
+  }else if(sel&&!sel.value){
     const inf=_adminInferTurnoCodigoPorHorario();
     if([...sel.options].some(o=>o.value===inf))sel.value=inf;
   }
+  ieOnModuloChange();
   previewFiltered();
+}
+function _adminAddDaysLocalYmd(ymd,deltaDays){
+  const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return ymd;
+  const dt=new Date(+m[1],+m[2]-1,+m[3]+(deltaDays|0),12,0,0,0);
+  const p=n=>String(n).padStart(2,'0');
+  return dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate());
+}
+function _ieCycleDateNorm(v){
+  const s=String(v||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  return _adminTodayLocalYmd();
+}
+function _ieTurnoDefFromCodigo(cod){
+  const c=String(cod||'').toLowerCase();
+  const list=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  return list.find(x=>String(x.codigo||'').toLowerCase()===c)||null;
+}
+function _ieYmdToLocalMs(ymd,h,mi){
+  const m=String(_ieCycleDateNorm(ymd)||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  const d=new Date(+m[1],+m[2]-1,+m[3],h|0,mi|0,0,0);
+  return isNaN(d.getTime())?null:d.getTime();
+}
+/** Ventana [start,end) local del turno que inicia en fechaRef (cruce medianoche si fin<=inicio). */
+function _ieVentanaTurnoFechaRefMs(fechaRef,cod){
+  const def=_ieTurnoDefFromCodigo(cod);
+  if(!def)return null;
+  const a=_adminParseHMToMinutes(def.inicio),b=_adminParseHMToMinutes(def.fin);
+  if(a==null||b==null)return null;
+  const F=_ieCycleDateNorm(fechaRef);
+  if(b>a){
+    const s=_ieYmdToLocalMs(F,Math.floor(a/60),a%60);
+    const e=_ieYmdToLocalMs(F,Math.floor(b/60),b%60);
+    if(s==null||e==null)return null;
+    return{start:s,end:e};
+  }
+  const s=_ieYmdToLocalMs(F,Math.floor(a/60),a%60);
+  const F2=_adminAddDaysLocalYmd(F,1);
+  const e=_ieYmdToLocalMs(F2,Math.floor(b/60),b%60);
+  if(s==null||e==null)return null;
+  return{start:s,end:e};
+}
+function _ieMoldeTurnoNorm(r){
+  const d=String((r&&r.turno)||'').trim().toLowerCase();
+  return d==='noche'?'noche':'dia';
+}
+function _ieRegistroTsMolde(r){
+  if(!r)return null;
+  const fe=_ieCycleDateNorm(r.fecha||_adminTodayLocalYmd());
+  const hm=_adminParseHMToMinutes(r.hora);
+  if(hm==null)return _ieYmdToLocalMs(fe,12,0);
+  if(_ieMoldeTurnoNorm(r)!=='noche')return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
+  const codTurno=String(r.turno||'').trim()||'noche';
+  const tu=_ieTurnoDefFromCodigo(codTurno)||_ieTurnoDefFromCodigo('noche');
+  if(!tu)return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
+  const a=_adminParseHMToMinutes(tu.inicio),b=_adminParseHMToMinutes(tu.fin);
+  if(a==null||b==null||b>a)return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
+  if(hm<b)return _ieYmdToLocalMs(_adminAddDaysLocalYmd(fe,1),Math.floor(hm/60),hm%60);
+  return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
+}
+function _ieRegistroTsPesaje(r){
+  if(!r)return null;
+  const fe=_ieCycleDateNorm(r.fecha||_adminTodayLocalYmd());
+  const hm=_adminParseHMToMinutes(r.hora);
+  if(hm==null)return _ieYmdToLocalMs(fe,12,0);
+  return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
+}
+function _ieYmdFromMs(ms){
+  const d=new Date(ms);
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
+function _ieCollectTurnoWindows(desde,hasta,codTurno){
+  const c=String(codTurno||'').trim();
+  if(!c)return null;
+  const out=[];
+  let cur=_ieCycleDateNorm(desde);
+  const end=_ieCycleDateNorm(hasta);
+  if(!cur||!end)return null;
+  for(let guard=0;guard<800;guard++){
+    const w=_ieVentanaTurnoFechaRefMs(cur,c);
+    if(w)out.push(w);
+    if(cur>=end)break;
+    cur=_adminAddDaysLocalYmd(cur,1);
+  }
+  return out.length?out:null;
+}
+function _ieGetRecordTs(r,mod){
+  if(mod==='moldes')return _ieRegistroTsMolde(r);
+  if(mod==='pesajes')return _ieRegistroTsPesaje(r);
+  const m=_recMs(r);
+  return m==null?null:m;
+}
+function _ieFlatTuneles(){
+  const equipos=(DB.data.equipos||[]).filter(e=>e.activo);
+  const byCod=new Map(equipos.map(e=>[String(e.codigo),e]));
+  const eqHist=(RT.data&&RT.data.eqHist)||{};
+  const hist=[];
+  Object.keys(eqHist).forEach(cod=>{
+    const eq=byCod.get(String(cod));
+    if(!eq)return;
+    (eqHist[cod]||[]).forEach(h=>{
+      const id=+(h&&h.id)||0;
+      const fecha_cierre=id?_ieYmdFromMs(id):'';
+      hist.push({
+        id:id||Date.now(),
+        equipo_codigo:String(cod),
+        equipo_nombre:eq.nombre||'',
+        tipo:eq.tipo==='placa'?'placa':'tunel',
+        fecha_cierre,
+        hora_inicio:String((h&&h.horaInicio)||''),
+        hora_termino:String((h&&h.horaDescarga)||''),
+        duracion_h:+(h&&h.horasTotal)||0,
+        turno:String(_tunInferTurno((h&&h.horaInicio)||'')||''),
+        cantidad:+(h&&h.cant)||0,
+        productos:Array.isArray(h&&h.productos)?h.productos.join(' | '):String((h&&h.productos)||''),
+      });
+    });
+  });
+  hist.sort((a,b)=>String(b.fecha_cierre).localeCompare(String(a.fecha_cierre))||(b.id-a.id));
+  const eqState=(RT.data&&RT.data.eqState)||{};
+  const estado=[];
+  equipos.forEach(eq=>{
+    const rt=eqState[eq.codigo]||{estado:'libre',items:[],horaInicio:'',horaFinEst:''};
+    const items=rt.items||[];
+    const cicloCant=items.reduce((s,it)=>s+(+it.cant||0),0);
+    estado.push({
+      equipo_codigo:eq.codigo,equipo_nombre:eq.nombre||'',tipo:eq.tipo==='placa'?'placa':'tunel',
+      estado:String(rt.estado||'libre'),hora_inicio:String(rt.horaInicio||''),hora_fin_est:String(rt.horaFinEst||''),
+      turno:String(_tunInferTurno(String(rt.horaInicio||''))||''),
+      items_cantidad:cicloCant,capacidad:eq.capacidad==null?'':eq.capacidad,
+      productos:items.map(it=>it.producto).filter(Boolean).join(' | '),
+    });
+  });
+  return{hist,estado};
 }
 function _ieResolveRango(){
   const rh=document.getElementById('ieRangoHora').value;
@@ -3194,36 +3352,94 @@ function _ieResolveRango(){
   }
   return {ini:'',fin:''};
 }
-function _hmToMin(hm){if(!hm)return null;const [h,m]=hm.split(':').map(Number);return h*60+(m||0);}
-function _ieFilter(recs){
+function _hmToMin(hm){
+  if(hm==null||String(hm).trim()==='')return null;
+  const parts=String(hm).trim().split(':');
+  const h=parseInt(parts[0],10),m=parseInt(parts[1]||'0',10);
+  if(isNaN(h))return null;
+  return Math.min(23*60+59,Math.max(0,h*60+(isNaN(m)?0:m)));
+}
+function _ieHourFilterOk(hmStr,iniM,finM){
+  if(iniM==null||finM==null)return true;
+  const rm=_adminParseHMToMinutes(String(hmStr||'').slice(0,8));
+  if(rm==null)return true;
+  if(iniM<finM){if(rm<iniM||rm>=finM)return false;}
+  else{if(rm<iniM&&rm>=finM)return false;}
+  return true;
+}
+function _ieFilterMolPes(mod,recs){
   const desde=document.getElementById('ieDesde').value;
   const hasta=document.getElementById('ieHasta').value;
   const turno=document.getElementById('ieTurno').value;
   const linea=(document.getElementById('ieLinea').value||'').trim().toUpperCase();
   const {ini,fin}=_ieResolveRango();
   const iniM=_hmToMin(ini),finM=_hmToMin(fin);
+  const d0=_ieCycleDateNorm(desde||_adminTodayLocalYmd());
+  const h0=_ieCycleDateNorm(hasta||d0);
   return recs.filter(r=>{
-    if(turno&&String(r.turno||'').toLowerCase()!==String(turno).toLowerCase())return false;
-    if(linea&&(r.linea||'').toUpperCase()!==linea)return false;
-    if(desde||hasta){
-      const d=_recDate(r);
-      if(d){
-        if(desde&&d.getTime()<_ymdToLocalStart(desde).getTime())return false;
-        if(hasta&&d.getTime()>_ymdToLocalEnd(hasta).getTime())return false;
+    if(linea&&String(r.linea||'').trim().toUpperCase()!==linea)return false;
+    const ts=_ieGetRecordTs(r,mod);
+    if(turno){
+      const cod=String(turno).toLowerCase();
+      if(mod==='moldes'&&_ieMoldeTurnoNorm(r)!==cod)return false;
+      if(mod==='pesajes'&&r.turno&&String(r.turno).toLowerCase()!==cod)return false;
+      const wins=_ieCollectTurnoWindows(d0,h0,cod);
+      if(!wins||!wins.length){
+        const d=_recDate(r);
+        if(d&&desde&&d.getTime()<_ymdToLocalStart(desde).getTime())return false;
+        if(d&&hasta&&d.getTime()>_ymdToLocalEnd(hasta).getTime())return false;
+        if(String(r.turno||'').toLowerCase()!==cod)return false;
+      }else if(ts==null||!wins.some(w=>ts>=w.start&&ts<w.end))return false;
+    }else{
+      if(ts!=null){
+        const ymd=_ieYmdFromMs(ts);
+        if(desde&&ymd<d0)return false;
+        if(hasta&&ymd>h0)return false;
+      }else{
+        const d=_recDate(r);
+        if(d&&desde&&d.getTime()<_ymdToLocalStart(desde).getTime())return false;
+        if(d&&hasta&&d.getTime()>_ymdToLocalEnd(hasta).getTime())return false;
       }
     }
-    if(iniM!=null&&finM!=null&&r.hora){
-      const rm=_hmToMin((r.hora||'').slice(0,5));
-      if(rm==null)return true;
-      if(iniM<finM){if(rm<iniM||rm>=finM)return false;}
-      else{if(rm<iniM&&rm>=finM)return false;} // cruza medianoche
-    }
+    if(iniM!=null&&finM!=null&&!_ieHourFilterOk(String(r.hora||''),iniM,finM))return false;
     return true;
   });
+}
+function _ieFilterTunelesRows(rows){
+  const desde=document.getElementById('ieDesde').value;
+  const hasta=document.getElementById('ieHasta').value;
+  const turno=document.getElementById('ieTurno').value;
+  const {ini,fin}=_ieResolveRango();
+  const iniM=_hmToMin(ini),finM=_hmToMin(fin);
+  const d0=_ieCycleDateNorm(desde||_adminTodayLocalYmd());
+  const h0=_ieCycleDateNorm(hasta||d0);
+  return rows.filter(row=>{
+    const fy=String(row.fecha_cierre||'').trim();
+    if(fy){
+      if(fy<d0||fy>h0)return false;
+    }else if(desde||hasta)return false;
+    if(turno&&String(row.turno||'').toLowerCase()!==String(turno).toLowerCase())return false;
+    if(iniM!=null&&finM!=null&&!_ieHourFilterOk(String(row.hora_termino||row.hora_inicio||''),iniM,finM))return false;
+    return true;
+  });
+}
+function _ieFilter(recs){
+  const mod=document.getElementById('ieModulo').value;
+  if(mod==='tuneles')return _ieFilterTunelesRows(recs);
+  if(mod==='moldes'||mod==='pesajes')return _ieFilterMolPes(mod,recs);
+  return recs;
+}
+function _ieSortMolPes(mod,a,b){
+  const fa=_ieCycleDateNorm(a.fecha),fb=_ieCycleDateNorm(b.fecha);
+  if(fa!==fb)return fb.localeCompare(fa);
+  const ha=String(a.hora||''),hb=String(b.hora||'');
+  if(ha!==hb)return hb.localeCompare(ha);
+  return String(b.id||0).localeCompare(String(a.id||0));
 }
 function _ieSrc(mod){
   if(mod==='moldes')return RT.data.moldes||[];
   if(mod==='pesajes')return RT.data.pesajes||[];
+  if(mod==='tuneles')return _ieFlatTuneles().hist;
   if(mod==='presets')return DB.data.presets||[];
   if(mod==='trabajadores')return DB.data.trabajadores||[];
   if(mod==='turnos')return DB.data.turnos||[];
@@ -3239,24 +3455,104 @@ function _ieWrite(mod,arr,reemplazar){
   else if(mod==='turnos'){DB.data.turnos=reemplazar?arr:tgt.concat(arr);DB.save();renderTurnos&&renderTurnos();}
   else if(mod==='equipos'){DB.data.equipos=reemplazar?arr:tgt.concat(arr);DB.save();renderEquipos&&renderEquipos();}
 }
+function _ieApplyEstadoFromImport(rows){
+  if(!RT.data.eqState)RT.data.eqState={};
+  const valid=new Set((DB.data.equipos||[]).filter(e=>e.activo!==false).map(e=>String(e.codigo)));
+  rows.forEach(row=>{
+    const cod=String(row.equipo_codigo||row.codigo||'').trim();
+    if(!cod||!valid.has(cod))return;
+    const cur=RT.data.eqState[cod]||{};
+    RT.data.eqState[cod]={
+      ...cur,
+      estado:String(row.estado||cur.estado||'libre'),
+      horaInicio:(row.hora_inicio!=null&&row.hora_inicio!=='')?String(row.hora_inicio):cur.horaInicio,
+      horaFinEst:(row.hora_fin_est!=null&&row.hora_fin_est!=='')?String(row.hora_fin_est):cur.horaFinEst,
+      items:Array.isArray(cur.items)?cur.items:[],
+    };
+  });
+}
+function _ieImportTunelesRows(arr,reemplazar){
+  if(!RT.data.eqHist)RT.data.eqHist={};
+  const valid=new Set((DB.data.equipos||[]).filter(e=>e.activo!==false).map(e=>String(e.codigo)));
+  const byCod=new Map();
+  let skipped=0;
+  arr.forEach(raw=>{
+    const cod=String(raw.equipo_codigo||raw.codigo||'').trim();
+    if(!cod||!valid.has(cod)){skipped++;return;}
+    if(!byCod.has(cod))byCod.set(cod,[]);
+    const idRaw=raw.id!=null&&raw.id!==''?+raw.id:NaN;
+    const id=!isNaN(idRaw)?idRaw:Date.now()+Math.floor(Math.random()*1e6);
+    const hi=String(raw.hora_inicio||raw.horaInicio||'').trim();
+    const ht=String(raw.hora_termino||raw.horaDescarga||raw.hora_descarga||'').trim();
+    byCod.get(cod).push({
+      id,
+      horaInicio:hi,
+      horaDescarga:ht,
+      horasTotal:parseFloat(raw.duracion_h||raw.horasTotal)||0,
+      cant:parseInt(raw.cantidad||raw.cant||0,10)||0,
+      productos:String(raw.productos||'').split(/\s*\|\s*/).filter(Boolean),
+      items:Array.isArray(raw.items)?raw.items:[],
+    });
+  });
+  byCod.forEach((list,cod)=>{
+    list.sort((a,b)=>b.id-a.id);
+    if(reemplazar)RT.data.eqHist[cod]=list;
+    else RT.data.eqHist[cod]=(RT.data.eqHist[cod]||[]).concat(list);
+  });
+  if(skipped)toast(skipped+' filas sin código de equipo válido (omitidas)','warn');
+}
+function importTunelesWorkbook(wb){
+  const sh=wb.Sheets.tuneles||wb.Sheets.historico||wb.Sheets[wb.SheetNames[0]];
+  const arr=XLSX.utils.sheet_to_json(sh,{defval:''});
+  if(!arr.length){toast('Historial vacío en Excel','err');return;}
+  const reemplazar=confirm('¿Reemplazar el histórico de los equipos que vienen en el archivo?\n\nOK = Borrar ciclos previos solo de esos códigos y cargar filas del Excel\nCancelar = Añadir ciclos al histórico existente');
+  _ieImportTunelesRows(arr,reemplazar);
+  const shEst=wb.Sheets.estado_actual;
+  if(shEst){
+    const estRows=XLSX.utils.sheet_to_json(shEst,{defval:''});
+    if(estRows&&estRows.length&&confirm('¿Actualizar estado actual de equipos desde la hoja estado_actual?'))_ieApplyEstadoFromImport(estRows);
+  }
+  RT._ensureShape();
+  RT.save();
+  toast(arr.length+' filas procesadas (túneles/placas)','success');
+}
 function previewFiltered(){
   const mod=document.getElementById('ieModulo').value;
   const src=_ieSrc(mod);
   const catalog=['presets','trabajadores','turnos','equipos'].includes(mod);
-  const f=catalog?src:_ieFilter(src);
   const el=document.getElementById('iePreview');
+  if(mod==='tuneles'){
+    const o=_ieFlatTuneles();
+    const hf=_ieFilterTunelesRows(o.hist);
+    el.innerHTML=`📊 <strong>${hf.length}</strong> ciclos históricos filtrados de <strong>${o.hist.length}</strong><br>`+
+      `<span style="font-size:11px;color:var(--text-3);font-weight:400;">Incluye export con hoja <span class="kbd">estado_actual</span> (${o.estado.length} equipos). Filtro fecha = día local del id de cierre.</span>`;
+    return;
+  }
+  const f=catalog?src:_ieFilter(src);
   if(catalog){
     el.innerHTML=`📦 <strong>${f.length}</strong> registros del catálogo <em>${mod}</em><br><span style="font-size:11px;color:var(--text-3);font-weight:400;">(los filtros de fecha/turno no aplican)</span>`;
-  } else {
+  }else{
     const kg=f.reduce((s,r)=>s+(+r.kg||0),0);
     el.innerHTML=`📊 <strong>${f.length}</strong> de ${src.length} registros filtrados<br>Total: <strong>${kg.toFixed(1)} kg</strong>`;
   }
 }
 function exportFiltered(){
   const mod=document.getElementById('ieModulo').value;
+  if(mod==='tuneles'){
+    const o=_ieFlatTuneles();
+    const hf=_ieFilterTunelesRows(o.hist.slice());
+    if(!hf.length&&!o.estado.length){toast('Sin datos de túneles/placas','warn');return;}
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(hf.length?hf:[{equipo_codigo:'—'}]),'tuneles');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(o.estado.length?o.estado:[{equipo_codigo:'—'}]),'estado_actual');
+    XLSX.writeFile(wb,'tuneles_filtrado_'+new Date().toISOString().slice(0,10)+'.xlsx');
+    toast(hf.length+' ciclos + estado de '+o.estado.length+' equipos','success');
+    return;
+  }
   const src=_ieSrc(mod);
   const catalog=['presets','trabajadores','turnos','equipos'].includes(mod);
-  const f=catalog?src:_ieFilter(src);
+  let f=catalog?src.slice():_ieFilter(src.slice());
+  if(mod==='moldes'||mod==='pesajes')f.sort((a,b)=>_ieSortMolPes(mod,a,b));
   if(!f.length){toast('Sin registros para exportar','warn');return;}
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
@@ -3271,6 +3567,12 @@ function importFiltered(ev){
   r.onload=e=>{
     try{
       const wb=XLSX.read(e.target.result,{type:'binary'});
+      if(mod==='tuneles'){
+        importTunelesWorkbook(wb);
+        previewFiltered();
+        ev.target.value='';
+        return;
+      }
       const sh=wb.Sheets[mod]||wb.Sheets[wb.SheetNames[0]];
       const arr=XLSX.utils.sheet_to_json(sh,{defval:''});
       if(!arr.length){toast('Archivo vacío','err');return;}

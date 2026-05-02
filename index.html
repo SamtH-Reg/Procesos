@@ -3526,7 +3526,10 @@ function _armParseKey(key){
 function _armRegFecha(){
   const el=document.getElementById('mRegFechaArmado');
   const v=(el&&el.value||'').trim();
-  return v||nowDate();
+  if(v)return v;
+  const tEl=document.getElementById('mRegTurno');
+  const tc=(tEl&&tEl.value)||(typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia');
+  return _fechaArmadoOperativa(tc);
 }
 function _armRegTurno(){
   const el=document.getElementById('mRegTurno');
@@ -3581,6 +3584,99 @@ function _inferTurnoCodigoPorHorario(){
   const fb=(h>=7&&h<19)?'dia':'noche';
   if(activos.find(t=>String(t.codigo)===fb))return fb;
   return String(activos[0].codigo||activos[0].nombre||'dia');
+}
+/** Fecha por defecto en listas/resumen alineada con armado (madrugada noche → día de inicio del turno). */
+function _fechaFiltroResumenDefault(filtro){
+  const inf=typeof _inferTurnoCodigoPorHorario==='function'?String(_inferTurnoCodigoPorHorario()):'dia';
+  const cod=!filtro||filtro==='todos'?inf:(filtro==='actual'?inf:String(filtro));
+  return _fechaArmadoOperativa(String(cod).toLowerCase()==='noche'?'noche':'dia');
+}
+function _turnoDefFromCodigo(cod){
+  const c=String(cod||'').toLowerCase();
+  const list=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  return list.find(x=>String(x.codigo||'').toLowerCase()===c)||null;
+}
+function _ymdToLocalMs(ymd,h,mi){
+  const m=String(_cycleDateNorm(ymd)||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  const d=new Date(+m[1],+m[2]-1,+m[3],h|0,mi|0,0,0);
+  return isNaN(d.getTime())?null:d.getTime();
+}
+/** Ventana [start,end) local del turno que comienza en fechaRef (cruce medianoche: fin al día siguiente). */
+function _ventanaTurnoFechaRefMs(fechaRef,cod){
+  const def=_turnoDefFromCodigo(cod);
+  if(!def)return null;
+  const a=_parseHMToMinutes(def.inicio),b=_parseHMToMinutes(def.fin);
+  if(a==null||b==null)return null;
+  const F=_cycleDateNorm(fechaRef);
+  if(b>a){
+    const s=_ymdToLocalMs(F,Math.floor(a/60),a%60);
+    const e=_ymdToLocalMs(F,Math.floor(b/60),b%60);
+    if(s==null||e==null)return null;
+    return{start:s,end:e};
+  }
+  const s=_ymdToLocalMs(F,Math.floor(a/60),a%60);
+  const F2=_addDaysLocalYmd(F,1);
+  const e=_ymdToLocalMs(F2,Math.floor(b/60),b%60);
+  if(s==null||e==null)return null;
+  return{start:s,end:e};
+}
+function _moldeTurnoNorm(r){
+  const d=String((r&&r.turno)||'').trim().toLowerCase();
+  if(d==='noche'||d==='dia')return d;
+  const arm=_turnoArmadoMoldesForLinea((r&&r.linea)||'',(r&&r.fecha)||'');
+  return arm==='noche'?'noche':'dia';
+}
+/** Timestamp local del molde: fecha = inicio turno noche; madrugada (antes del fin mañana) → día calendario +1. */
+function _registroTsMolde(r){
+  if(!r)return null;
+  const fe=_cycleDateNorm((r.fecha)||nowDate());
+  const hm=_parseHMToMinutes(r.hora);
+  if(hm==null)return _ymdToLocalMs(fe,12,0);
+  if(_moldeTurnoNorm(r)!=='noche')return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
+  const codTurno=String((r&&r.turno)||'').trim()||'noche';
+  const tu=_turnoDefFromCodigo(codTurno)||_turnoDefFromCodigo('noche');
+  if(!tu)return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
+  const a=_parseHMToMinutes(tu.inicio),b=_parseHMToMinutes(tu.fin);
+  if(a==null||b==null||b>a)return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
+  if(hm<b)return _ymdToLocalMs(_addDaysLocalYmd(fe,1),Math.floor(hm/60),hm%60);
+  return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
+}
+function _registroTsPesaje(r){
+  if(!r)return null;
+  const fe=_cycleDateNorm((r.fecha)||nowDate());
+  const hm=_parseHMToMinutes(r.hora);
+  if(hm==null)return _ymdToLocalMs(fe,12,0);
+  return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
+}
+function _moldeCoincideFechaTurnoFiltro(r,fFecha,fTurno){
+  if(!fFecha)return true;
+  if(!fTurno){
+    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+  }
+  const win=_ventanaTurnoFechaRefMs(fFecha,fTurno);
+  if(!win){
+    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+  }
+  const t=_registroTsMolde(r);
+  if(t==null)return false;
+  if(String(_moldeTurnoNorm(r))!==String(fTurno).toLowerCase())return false;
+  return t>=win.start&&t<win.end;
+}
+function _pesajeCoincideFechaTurnoFiltro(r,fFecha,filtro){
+  if(!fFecha)return true;
+  const match=filtro==='todos'||!filtro?null:(filtro==='actual'?(_inferTurnoCodigoPorHorario()||'dia'):String(filtro));
+  if(!match||match==='todos'){
+    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+  }
+  const win=_ventanaTurnoFechaRefMs(fFecha,match);
+  if(!win){
+    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+  }
+  if(typeof _pesajeMatchesTurnoLineaFiltro==='function'&&!_pesajeMatchesTurnoLineaFiltro(r,filtro))return false;
+  const t=_registroTsPesaje(r);
+  if(t==null)return false;
+  return t>=win.start&&t<win.end;
 }
 function _mRegEnsureFechaDefault(){
   const fe=document.getElementById('mRegFechaArmado');
@@ -4132,7 +4228,8 @@ function _mVerFillSelects(){
   }
   if(fd){
     if(!fd.value){
-      fd.value=scopes[0]?scopes[0].fecha:nowDate();
+      const selCod=(selT&&String(selT.value||'').trim())||'todos';
+      fd.value=_fechaFiltroResumenDefault(selCod);
     }
   }
   const fTurno=(selT&&selT.value)||'';
@@ -4182,9 +4279,9 @@ function renderMoldesTable(){
   const fFecha=(document.getElementById('mVerFecha')||{}).value||'';
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
   let rows=_mVerRowsInActiveArmado(RT.moldes.slice());
-  if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')=== fTurno);
   if(fLinea)rows=rows.filter(r=>(r.linea||'')===fLinea);
-  if(fFecha)rows=rows.filter(r=>r.fecha===fFecha||(!r.fecha&&fFecha===nowDate()));
+  if(fFecha)rows=rows.filter(r=>_moldeCoincideFechaTurnoFiltro(r,fFecha,fTurno));
+  else if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')===fTurno);
   if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
   // Info badge
   const info=document.getElementById('mVerInfo');
@@ -4281,9 +4378,9 @@ function exportarMoldesExcel(){
   const fFecha=(document.getElementById('mVerFecha')||{}).value||'';
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
   let rows=_mVerRowsInActiveArmado(RT.moldes.slice());
-  if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')===fTurno);
   if(fLinea)rows=rows.filter(r=>(r.linea||'')===fLinea);
-  if(fFecha)rows=rows.filter(r=>r.fecha===fFecha||(!r.fecha&&fFecha===nowDate()));
+  if(fFecha)rows=rows.filter(r=>_moldeCoincideFechaTurnoFiltro(r,fFecha,fTurno));
+  else if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')===fTurno);
   if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
   const hdr=['Fecha','Hora','Turno','Línea','Trabajador','Ficha','Producto','Especie','Cantidad','Kg','Guía'];
   const body=rows.map(r=>[r.fecha||'',r.hora||'',r.turno||'',r.linea||'',r.nombre||'',r.ficha||'',r.producto||'',r.especie||'',r.cant||0,(r.kg||0).toFixed(1),r.guia||'']);
@@ -4732,7 +4829,10 @@ window.renderEquipos=renderEquipos;
 function _pArmRegFecha(){
   const el=document.getElementById('pRegFechaArmado');
   const v=(el&&el.value||'').trim();
-  return v||nowDate();
+  if(v)return v;
+  const tEl=document.getElementById('pRegTurno');
+  const tc=(tEl&&tEl.value)||(typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia');
+  return _fechaArmadoOperativa(tc);
 }
 function _pArmRegTurno(){
   const el=document.getElementById('pRegTurno');
@@ -5204,8 +5304,8 @@ function regPesaje(){
   if(!especieVal){showToast('Selecciona especie','error');document.getElementById('pRegEspecie').focus();return;}
   if(!tipoVal){showToast('Selecciona tipo','error');document.getElementById('pRegTipo').focus();return;}
   const rec={
-    id:nextId(RT.pesajes),hora:nowHM(),fecha:nowDate(),
-    turno:document.getElementById('pRegTurno').value,
+    id:nextId(RT.pesajes),hora:nowHM(),fecha:_pArmRegFecha(),
+    turno:_pArmRegTurno()||document.getElementById('pRegTurno').value,
     linea:document.getElementById('pRegLinea').value,
     trabId:t.id,codigo:t.codigo,nombre:t.nombre,ficha,
     especie:especieVal,
@@ -5231,19 +5331,10 @@ window._ensureArmadoPesaje=_ensureArmadoPesaje;window._pArmGetEntry=_pArmGetEntr
 /* ═══ PESAJE — Ver tabla + Recientes ═══════════════════════════ */
 /** Misma lógica de filtros que «Resumen x hora» (fecha registro, turno de línea, línea). */
 function _readPesajeListaFiltrosFromDom(){
-  const today=nowDate();
   const pVer=document.getElementById('pVer');
   const pRs=document.getElementById('pResumen');
   const verVisible=!!(pVer&&!pVer.classList.contains('hidden'));
   const resVisible=!!(pRs&&!pRs.classList.contains('hidden'));
-  const fr=resVisible?(document.getElementById('pResumenFechaInicio')||document.getElementById('pResumenFechaTurno')):null;
-  const fv=document.getElementById('pVerFechaTurno');
-  const fechaRaw=(resVisible&&fr&&String(fr.value||'').trim())
-    ||(verVisible&&fv&&String(fv.value||'').trim())
-    ||(fv&&String(fv.value||'').trim())
-    ||(fr&&String(fr.value||'').trim())
-    ||'';
-  const fechaTurno=fechaRaw||today;
   const tr=resVisible?document.getElementById('pResumenTurnoLinea'):null;
   const tv=document.getElementById('pVerTurnoLinea');
   const turnoEl=(verVisible&&tv&&tv.options&&tv.options.length)?tv
@@ -5261,13 +5352,20 @@ function _readPesajeListaFiltrosFromDom(){
   ).trim();
   const legacy=document.getElementById('pResumenFiltroTurno');
   const filtro=_defaultResumenTurnoSelect(turnoEl,legacy);
+  const fr=resVisible?(document.getElementById('pResumenFechaInicio')||document.getElementById('pResumenFechaTurno')):null;
+  const fv=document.getElementById('pVerFechaTurno');
+  const fechaRaw=(resVisible&&fr&&String(fr.value||'').trim())
+    ||(verVisible&&fv&&String(fv.value||'').trim())
+    ||(fv&&String(fv.value||'').trim())
+    ||(fr&&String(fr.value||'').trim())
+    ||'';
+  const fechaTurno=fechaRaw||_fechaFiltroResumenDefault(filtro);
   return{fechaTurno,filtro,lineaVal};
 }
 function _filterPesajesPorListaFiltros(rows,state){
-  const today=nowDate();
   const{fechaTurno,filtro,lineaVal}=state;
   let pes=Array.isArray(rows)?rows.slice():[];
-  pes=pes.filter(r=>!r.fecha||r.fecha===fechaTurno||(!r.fecha&&fechaTurno===today));
+  pes=pes.filter(r=>_pesajeCoincideFechaTurnoFiltro(r,fechaTurno,filtro));
   if(lineaVal)pes=pes.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
   if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
   return pes;
@@ -5614,17 +5712,23 @@ function _mResumenActiveFechas(){
   return fechas.sort((a,b)=>String(b).localeCompare(String(a)));
 }
 function _mResumenRowsForScope(fecha,turno,lineaCod){
-  let mol=(RT.moldes||[]).filter(r=>!r.esGeneral&&(r.fecha===fecha||(!r.fecha&&fecha===nowDate())));
+  const codActual=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
+  const matchTurno=turno==='actual'?String(codActual):(turno==='todos'?null:String(turno));
+  let mol=(RT.moldes||[]).filter(r=>{
+    if(r.esGeneral)return false;
+    if(matchTurno==null||matchTurno==='todos'){
+      return r.fecha===fecha||(!r.fecha&&fecha===nowDate());
+    }
+    return _moldeCoincideFechaTurnoFiltro(r,fecha,matchTurno);
+  });
   if(lineaCod){
     const L=String(lineaCod).toUpperCase();
     mol=mol.filter(r=>String((r&&r.linea)||'').trim().toUpperCase()===L);
   }
   const exigirArmado=_mResumenHasArmadoConPersonasParaFecha(fecha);
-  const codActual=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
-  const matchTurno=turno==='actual'?String(codActual):(turno==='todos'?null:String(turno));
   mol=mol.filter(r=>{
-    const rt=String((r&&r.turno)||'dia');
-    if(matchTurno!=null&&rt!==matchTurno)return false;
+    const rt=String((r&&r.turno)||_moldeTurnoNorm(r)||'dia');
+    if(matchTurno!=null&&matchTurno!=='todos'&&rt!==matchTurno)return false;
     if(!exigirArmado)return true;
     const arm=_armGetEntry(r.linea,rt,fecha);
     return _armadoMoldeHasPeople(arm);
@@ -5763,15 +5867,15 @@ function _mResumenHourColsFromFiltro(mol,filtro){
 function renderMResumen(){
   const wrap=document.getElementById('mResumenWrap');if(!wrap)return;
   const sub=document.getElementById('mResumenSub');
-  const today=nowDate();
-  const prevFecha=document.getElementById('mResumenFechaInicio')||document.getElementById('mResumenFechaTurno');
-  const fechaTurno=(prevFecha&&String(prevFecha.value||'').trim())||today;
-  const prevLineaEl=document.getElementById('mResumenFiltroLinea');
-  const lineaVal=prevLineaEl?String(prevLineaEl.value||'').trim():'';
-  const hoyStr=fechaTurno.split('-').reverse().join('/');
   const prevTurnoEl=document.getElementById('mResumenTurnoLinea');
   const legacyTurno=document.getElementById('mResumenFiltroTurno');
   const filtro=_defaultResumenTurnoSelect(prevTurnoEl,legacyTurno);
+  const prevFecha=document.getElementById('mResumenFechaInicio')||document.getElementById('mResumenFechaTurno');
+  const fechaRaw=prevFecha&&String(prevFecha.value||'').trim();
+  const fechaTurno=fechaRaw||_fechaFiltroResumenDefault(filtro);
+  const prevLineaEl=document.getElementById('mResumenFiltroLinea');
+  const lineaVal=prevLineaEl?String(prevLineaEl.value||'').trim():'';
+  const hoyStr=fechaTurno.split('-').reverse().join('/');
   let mol=_mResumenRowsForScope(fechaTurno,filtro,lineaVal||null);
   const hintArmado=_mResumenHasArmadoConPersonasParaFecha(fechaTurno)
     ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno.'
