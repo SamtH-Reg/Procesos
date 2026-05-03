@@ -12,7 +12,7 @@
 <!-- Chart.js para dashboards -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <!-- Supabase JS -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 
 <style>
 :root{
@@ -2897,11 +2897,18 @@ function showAuthOverlay(){document.getElementById('authOverlay').style.display=
 function hideAuthOverlay(){document.getElementById('authOverlay').style.display='none';}
 async function initAuth(){
   if(!_sb)return;
+  let sessionApplied=false;
   const{data:{session}}=await _sb.auth.getSession();
-  if(session){await applySession(session);}else{showAuthOverlay();}
+  if(session){await applySession(session);sessionApplied=true;}
+  else{showAuthOverlay();}
   _sb.auth.onAuthStateChange(async(event,sess)=>{
-    if(event==='SIGNED_OUT'){_currentUser=null;showAuthOverlay();}
-    else if(event==='SIGNED_IN'&&sess){await applySession(sess);}
+    if(event==='INITIAL_SESSION'){
+      if(sess&&!sessionApplied){await applySession(sess);sessionApplied=true;}
+      else if(!sess&&!sessionApplied){showAuthOverlay();}
+      return;
+    }
+    if(event==='SIGNED_OUT'){_currentUser=null;showAuthOverlay();return;}
+    if(event==='SIGNED_IN'&&sess){await applySession(sess);}
   });
 }
 /** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
@@ -3046,7 +3053,11 @@ function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line
 function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');return;}
-  try{_sb=window.supabase.createClient(url,key);saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();}
+  try{
+    const authOpts={auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined}};
+    _sb=window.supabase.createClient(url,key,authOpts);
+    saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
+  }
   catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
 }
 let _sbChannels=[];

@@ -1418,7 +1418,7 @@ body[data-theme="dark"] #pRegistrar .input[type="date"]{
 .input.ficha-fixed{border-color:#16a34a !important;background:#ecfdf3;color:#166534;font-weight:700;}
 body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;background:rgba(34,197,94,.16);color:#bbf7d0;}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <!-- ═══ LOGIN MODAL TABLET ═══ -->
@@ -2870,7 +2870,7 @@ const SEED={
   roles:[
     {id:1,nombre:'Administrador',codigo:'admin',permisos:{config:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:true,eliminar:true}},
     {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{config:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:true,eliminar:true}},
-    {id:3,nombre:'Planillero',codigo:'planillero',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:false,eliminar:false}},
+    {id:3,nombre:'Planillero',codigo:'planillero',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:false,eliminar:true}},
     {id:4,nombre:'Operario',codigo:'operario',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:false,pesaje:true,empaque:true,analisis:false,export:false,eliminar:false}},
   ],
 };
@@ -8211,9 +8211,17 @@ function _tbResolveSupabaseCreds(){
   }
 }
 let _tbSb=null;
+/** Opciones Auth: persistencia en localStorage (evita pedir login en cada recarga; compatible con INITIAL_SESSION en GoTrue). */
+function _tbSbAuthOptions(){
+  try{
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage}};
+  }catch(e){
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}};
+  }
+}
 try{
   const _c=_tbResolveSupabaseCreds();
-  if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key);
+  if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key,_tbSbAuthOptions());
 }catch(e){console.warn('[sb] init',e);}
 /** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
@@ -8497,15 +8505,21 @@ function tbShowAuth(){document.getElementById('tbAuthOverlay').style.display='fl
 function tbHideAuth(){document.getElementById('tbAuthOverlay').style.display='none';}
 async function tbInitAuth(){
   if(!_tbSb)return;
-  const{data:{session}}=await _tbSb.auth.getSession();
-  if(session){await tbApplySession(session);}else{tbShowAuth();}
+  let sessionApplied=false;
+  const{data:{session:initialSess}}=await _tbSb.auth.getSession();
+  if(initialSess){await tbApplySession(initialSess);sessionApplied=true;}else{tbShowAuth();}
   try{
     await TBSync.pullCatalogs();
     TBSync.subscribe();
   }catch(e){console.warn('[tb] pull catálogo inicial',e);}
   _tbSb.auth.onAuthStateChange(async(event,sess)=>{
-    if(event==='SIGNED_OUT'){_tbUser=null;tbShowAuth();}
-    else if(event==='SIGNED_IN'&&sess){
+    if(event==='INITIAL_SESSION'){
+      if(sess&&!sessionApplied){await tbApplySession(sess);sessionApplied=true;}
+      else if(!sess&&!sessionApplied){tbShowAuth();}
+      return;
+    }
+    if(event==='SIGNED_OUT'){_tbUser=null;tbShowAuth();return;}
+    if(event==='SIGNED_IN'&&sess){
       await tbApplySession(sess);
       try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
     }
