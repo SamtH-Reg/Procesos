@@ -1,0 +1,15 @@
+---
+description: Tras cambios en el repo, commit y push automáticos a GitHub (origin)
+globs: "**/*"
+alwaysApply: true
+---
+
+# Subida a GitHub
+
+Cuando completes cambios de código o configuración en este workspace (`controd`):
+
+1. Ejecuta `git status` y, si hay cambios, `git add` los archivos pertinentes.
+2. Haz `git commit` con un mensaje claro en español o inglés (qué cambió y por qué).
+3. Ejecuta `git push` hacia `origin` (rama actual, normalmente `main`).
+
+No dejes el trabajo solo en local si el usuario espera que quede en el remoto. Si `git push` falla (auth, red), intenta diagnosticar o indica el error concreto; no asumas que el push se hizo sin comprobar el resultado.
