@@ -6299,6 +6299,7 @@ let _editPLn=null;
 function editPArmadoLinea(ln){
   _ensureArmadoPesaje();
   _setPArmScopeDefaults();
+  try{window._pArmModalOpenScope={turno:String(_getPArmScopeTurno()||'dia').trim(),fecha:String(_getPArmScopeFecha()||'').trim()};}catch(e){window._pArmModalOpenScope=null;}
   _editPLn=ln;
   const data=_pArmGetEntry(ln,_getPArmScopeTurno(),_getPArmScopeFecha())||{planillero:null,trabajadores:[],especie:'',turno:_getPArmScopeTurno(),fecha:_getPArmScopeFecha()};
   const especies=_getEspecies();
@@ -6648,6 +6649,7 @@ function closePArmado(){
   const m=document.getElementById('pArmadoModal');if(m)m.remove();
   closeIosPicker();
   _editPLn=null;_editPArmado=null;
+  try{delete window._pArmModalOpenScope;}catch(e){window._pArmModalOpenScope=null;}
 }
 function savePArmado(){
   if(!_editPLn||!_editPArmado)return;
@@ -6670,13 +6672,21 @@ function savePArmado(){
   if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
   _editPArmado.fecha=fecha;
   _editPArmado.especie=especie;
-  _pArmDeleteEntry(_editPLn,_getPArmScopeTurno(),_getPArmScopeFecha());
+  const os=window._pArmModalOpenScope;
+  if(os&&String(os.fecha||'').trim())_pArmDeleteEntry(_editPLn,String(os.turno||'dia').trim(),String(os.fecha).trim());
+  else _pArmDeleteEntry(_editPLn,_getPArmScopeTurno(),_getPArmScopeFecha());
   const target=JSON.parse(JSON.stringify(_editPArmado));
   target.especie=especie;
   _pArmSetEntry(_editPLn,target,turnoRaw,fecha);
   _stripMarcaCopiaLinea(target);
   rtSave();
   const ln=_editPLn;
+  try{
+    const st=document.getElementById('pArmScopeTurno');
+    const sf=document.getElementById('pArmScopeFecha');
+    if(st)st.value=turnoRaw;
+    if(sf&&fecha)sf.value=fecha;
+  }catch(e){}
   closePArmado();renderPArmado();
   if(window.renderPRegLinea)renderPRegLinea();
   if(window.renderPRegTrab)renderPRegTrab();
@@ -7330,6 +7340,7 @@ window.openRegPicker=openRegPicker;window.clearRegPicker=clearRegPicker;window._
 function editMArmadoLinea(ln){
   _ensureArmadoMolde();
   _setMArmScopeDefaults();
+  try{window._mArmModalOpenScope={turno:String(_getMArmScopeTurno()||'dia').trim(),fecha:String(_getMArmScopeFecha()||'').trim()};}catch(e){window._mArmModalOpenScope=null;}
   _editMLn=ln;
   const data=_armGetEntry(ln,_getMArmScopeTurno(),_getMArmScopeFecha())||{planillero:null,trabajadores:[],especie:'',turno:_getMArmScopeTurno(),fecha:_getMArmScopeFecha()};
   const especies=_getEspecies();
@@ -7528,6 +7539,7 @@ function closeMArmado(){
   const m=document.getElementById('mArmadoModal');if(m)m.remove();
   closeIosPicker();
   _editMLn=null;_editMArmado=null;
+  try{delete window._mArmModalOpenScope;}catch(e){window._mArmModalOpenScope=null;}
 }
 function saveMArmado(){
   if(!_editMLn||!_editMArmado)return;
@@ -7550,7 +7562,9 @@ function saveMArmado(){
   _editMArmado.especie=especie;
   _editMArmado.turno=turnoRaw;
   _editMArmado.fecha=fecha;
-  _armDeleteEntry(_editMLn,_getMArmScopeTurno(),_getMArmScopeFecha());
+  const osM=window._mArmModalOpenScope;
+  if(osM&&String(osM.fecha||'').trim())_armDeleteEntry(_editMLn,String(osM.turno||'dia').trim(),String(osM.fecha).trim());
+  else _armDeleteEntry(_editMLn,_getMArmScopeTurno(),_getMArmScopeFecha());
   const target={
     planillero:_editMArmado.planillero,
     trabajadores:_editMArmado.trabajadores,
@@ -7565,6 +7579,12 @@ function saveMArmado(){
   RT.lineaProducto[_editMLn]=_editMArmado.especie||'';
   rtSave();
   const ln=_editMLn;
+  try{
+    const st=document.getElementById('mArmScopeTurno');
+    const sf=document.getElementById('mArmScopeFecha');
+    if(st)st.value=turnoRaw;
+    if(sf&&fecha)sf.value=fecha;
+  }catch(e){}
   closeMArmado();renderMArmado();
   // Re-render preset grid so especie filter applies immediately
   if(window.renderMRegLinea)renderMRegLinea();
