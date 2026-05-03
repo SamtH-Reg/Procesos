@@ -61,7 +61,8 @@ Esto crea:
 | `roles` | Permisos por módulo (JSONB) |
 | `moldes` | Registros de conteo de moldes |
 | `pesajes` | Registros de pesaje individual |
-| `armado_linea` | Asignación planillero+trabajadores por línea/turno/fecha |
+| `armado_linea` | Esquema antiguo / doc (PK incluye `area`: moldes o pesaje) |
+| `armado_lineas` | Lo que usa **tablet** `index.html`: planillero+trabajadores; ejecuta `supabase_migrate_armado_lineas_scope.sql` y luego **`supabase_migrate_armado_lineas_area.sql`** (columna `area`: `moldes` vs `pesaje`, misma línea/turno/fecha puede tener dos filas) |
 
 Además:
 - **Índices** en fecha, línea+turno, especie, trab_id

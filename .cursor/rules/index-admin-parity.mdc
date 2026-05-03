@@ -31,6 +31,11 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 - Mapeo de filas remotas ↔ objetos RT debe mantener los mismos nombres de campo que consume la tablet (`especie`, `presetId`, `producto`, `linea`, `turno`, `fecha`, etc.).
 - Si se añade un campo en una tabla, revisar **pull/push** en index y en admin (no solo uno).
 
+### Armado de línea en `armado_lineas`
+
+- Tabla `armado_lineas` con columna **`area`**: `moldes` ↔ `RT.armadoMolde`, `pesaje` ↔ `RT.armadoPesaje`. Misma `(linea, turno, fecha)` puede tener **dos** filas (una por área). Migración: `supabase_migrate_armado_lineas_area.sql` (tras `supabase_migrate_armado_lineas_scope.sql`).
+- Sin `area` en la base, el armado de **Pesaje** no se sincronizaba a la nube (solo `localStorage`) y parecía «borrado» al limpiar sitio o cambiar de dispositivo.
+
 ## CSS compartido (modales)
 
 - Reglas bajo `.modal`, `.modal-body`, `.modal-ftr` y `.modal > form` afectan a **todos** los modales dinámicos; al cambiar scroll o flex, comprobar armado Pesaje/Moldes y modales sin `form` (hdr + body + ftr).
