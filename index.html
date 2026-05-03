@@ -960,9 +960,11 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
   animation:toastIn .25s cubic-bezier(.16,1,.3,1);
   pointer-events:auto;
 }
-.toast svg{width:20px;height:20px;}
+.toast svg{width:20px;height:20px;flex-shrink:0;}
 .toast.success{background:var(--safety-green);}
 .toast.error{background:var(--safety-red);}
+.toast.warning{background:#d97706;}
+.toast.info{background:#2563eb;}
 @keyframes toastIn{
   from{opacity:0;transform:translateY(20px) scale(.96);}
   to{opacity:1;transform:translateY(0) scale(1);}
@@ -2759,11 +2761,25 @@ function setPesTab(el,id){
 
 function showToast(msg,type){
   const c=document.getElementById('toasts');
+  if(!c)return;
+  let kind=String(type||'').toLowerCase();
+  if(kind==='warn')kind='warning';
+  const icons={
+    success:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    error:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+    warning:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+    info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+  };
   const t=document.createElement('div');
-  t.className='toast '+(type||'');
-  t.innerHTML=(type==='success'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>':'')+'<span>'+msg+'</span>';
+  t.className='toast '+(kind==='success'||kind==='error'||kind==='warning'||kind==='info'?kind:'');
+  const ico=icons[kind]||icons.info;
+  const span=document.createElement('span');
+  span.textContent=String(msg==null?'':msg);
+  t.innerHTML=ico;
+  t.appendChild(span);
   c.appendChild(t);
-  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(20px)';t.style.transition='all .2s';setTimeout(()=>t.remove(),220);},2400);
+  const ms=(kind==='error'?9500:kind==='warning'?8000:kind==='info'?4200:2400);
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(20px)';t.style.transition='all .2s';setTimeout(()=>t.remove(),220);},ms);
 }
 
 /* Stepper + / − : los botones ya tienen onclick inline que llaman a mRegStep/gRegStep/eRegStep.
@@ -3547,6 +3563,15 @@ function _tbNormYmd(v){
   const m=s.match(/^(\d{4}-\d{2}-\d{2})/);
   return m?m[1]:'';
 }
+/** Turno estable: quita tildes («día» → «dia») para coincidir con Postgres y filtros de scope. */
+function _tbNormTurnoKey(s){
+  try{
+    const x=String(s==null||s===''?'dia':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return x||'dia';
+  }catch(e){
+    return String(s==null||s===''?'dia':s).trim().toLowerCase()||'dia';
+  }
+}
 function _armScopeKey(linea,turno,fecha){
   const fd=_tbNormYmd(fecha)||String(fecha||nowDate()).trim();
   return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+String(turno||'dia').trim()+ARM_SCOPE_SEP+fd;
@@ -3757,7 +3782,7 @@ function _armGetEntry(linea,turno,fecha){
   const legacy=RT.armadoMolde[linea];
   const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
   const legF=_tbNormYmd(legacy&&legacy.fecha)||String((legacy&&legacy.fecha)||'').trim();
-  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&legF===fN)return legacy;
+  if(legacy&&_tbNormTurnoKey(legacy.turno)===_tbNormTurnoKey(turno)&&legF===fN)return legacy;
   return null;
 }
 function _armSetEntry(linea,data,turno,fecha){
@@ -3774,18 +3799,19 @@ function _armDeleteEntry(linea,turno,fecha){
   const leg=RT.armadoMolde[L];
   const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
   const legF=_tbNormYmd(leg&&leg.fecha)||String((leg&&leg.fecha)||'').trim();
-  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&legF===fN)delete RT.armadoMolde[L];
+  if(leg&&_tbNormTurnoKey(leg.turno)===_tbNormTurnoKey(turno)&&legF===fN)delete RT.armadoMolde[L];
 }
 function _armEntriesForScope(turno,fecha){
   const out=[];
   const src=RT.armadoMolde||{};
   const fechaN=_tbNormYmd(fecha)||String(fecha||'').trim();
+  const tScope=_tbNormTurnoKey(turno);
   Object.entries(src).forEach(([k,d])=>{
     const meta=_armParseKey(k);
     const mt=d&&d.turno?d.turno:meta.turno;
     const mfRaw=d&&d.fecha?d.fecha:meta.fecha;
     const mf=_tbNormYmd(mfRaw)||String(mfRaw||'').trim();
-    if(String(mt||'dia')!==String(turno||'dia'))return;
+    if(_tbNormTurnoKey(mt)!==tScope)return;
     if(String(mf||'')!==String(fechaN||''))return;
     out.push({key:k,linea:meta.linea,data:d});
   });
@@ -3799,7 +3825,7 @@ function _pArmGetEntry(linea,turno,fecha){
   const legacy=RT.armadoPesaje[linea];
   const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
   const legF=_tbNormYmd(legacy&&legacy.fecha)||String((legacy&&legacy.fecha)||'').trim();
-  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&legF===fN)return legacy;
+  if(legacy&&_tbNormTurnoKey(legacy.turno)===_tbNormTurnoKey(turno)&&legF===fN)return legacy;
   return null;
 }
 function _pArmSetEntry(linea,data,turno,fecha){
@@ -3816,18 +3842,19 @@ function _pArmDeleteEntry(linea,turno,fecha){
   const leg=RT.armadoPesaje[L];
   const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
   const legF=_tbNormYmd(leg&&leg.fecha)||String((leg&&leg.fecha)||'').trim();
-  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&legF===fN)delete RT.armadoPesaje[L];
+  if(leg&&_tbNormTurnoKey(leg.turno)===_tbNormTurnoKey(turno)&&legF===fN)delete RT.armadoPesaje[L];
 }
 function _pArmEntriesForScope(turno,fecha){
   const out=[];
   const src=RT.armadoPesaje||{};
   const fechaN=_tbNormYmd(fecha)||String(fecha||'').trim();
+  const tScope=_tbNormTurnoKey(turno);
   Object.entries(src).forEach(([k,d])=>{
     const meta=_armParseKey(k);
     const mt=d&&d.turno?d.turno:meta.turno;
     const mfRaw=d&&d.fecha?d.fecha:meta.fecha;
     const mf=_tbNormYmd(mfRaw)||String(mfRaw||'').trim();
-    if(String(mt||'dia')!==String(turno||'dia'))return;
+    if(_tbNormTurnoKey(mt)!==tScope)return;
     if(String(mf||'')!==String(fechaN||''))return;
     out.push({key:k,linea:meta.linea,data:d});
   });
@@ -6332,25 +6359,46 @@ function confirmPAddLinea(){
   rtSave();rtPushArmadoCloud();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
 async function removePLinea(ln){
-  _ensureArmadoPesaje();
-  const turnoScope=_getPArmScopeTurno();
-  const fechaScope=_getPArmScopeFecha();
-  const Ln=String(ln||'').trim().toUpperCase();
-  const scopedRows=_pArmEntriesForScope(turnoScope,fechaScope);
-  const row=scopedRows.find(r=>String(r.linea||'').toUpperCase()===Ln);
-  const ent=(row&&row.data)||_pArmGetEntry(Ln,turnoScope,fechaScope);
-  const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
-  const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
-  if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
-  const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
-  if(row&&row.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,row.key))delete RT.armadoPesaje[row.key];
-  else _pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);
-  rtSave();
-  const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
-  try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
-  renderPArmado();
-  if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
-  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+(rem.err||'Revisa sesión, rol o RLS en Supabase.'),'warning');
+  try{
+    _ensureArmadoPesaje();
+    const turnoScope=_getPArmScopeTurno();
+    const fechaScope=_getPArmScopeFecha();
+    const Ln=String(ln||'').trim().toUpperCase();
+    const scopedRows=_pArmEntriesForScope(turnoScope,fechaScope);
+    const row=scopedRows.find(r=>String(r.linea||'').toUpperCase()===Ln);
+    const ent=(row&&row.data)||_pArmGetEntry(Ln,turnoScope,fechaScope);
+    const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
+    const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
+    if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+    const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
+    let localDel=false;
+    if(row&&row.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,row.key)){delete RT.armadoPesaje[row.key];localDel=true;}
+    else if(_pArmGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
+    if(!localDel){showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');return;}
+    rtSave();
+    const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
+    let pushErr=null;
+    try{
+      if(typeof TBSync!=='undefined'&&TBSync.pushImmediate){
+        const pr=await TBSync.pushImmediate();
+        if(pr&&pr.ok===false)pushErr=pr.err||'Error al subir cambios';
+      }
+    }catch(e){pushErr=e&&e.message?String(e.message):String(e);console.warn('[removePLinea] pushImmediate',e);}
+    const pushTail=pushErr?' · '+pushErr:'';
+    if(rem.ok){
+      if(pushErr)showToast('Línea '+ln+' eliminada; aviso al sincronizar: '+pushErr,'warning');
+      else showToast('Línea '+ln+' eliminada','success');
+    }else if(!_tbSb){
+      showToast('Línea quitada en este equipo. '+String(rem.err||'Sin cliente Supabase (no se tocó la nube).')+pushTail,'warning');
+    }else{
+      showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+String(rem.err||'Revisa sesión, rol o RLS en Supabase.')+pushTail,'error');
+    }
+  }catch(e){
+    console.error('[removePLinea]',e);
+    showToast('No se pudo eliminar la línea: '+(e&&e.message?e.message:String(e)),'error');
+  }finally{
+    if(typeof renderPArmado==='function')renderPArmado();
+  }
 }
 function guardarPArmadoSnapshot(){
   _ensureArmadoPesaje();
@@ -7045,25 +7093,46 @@ function confirmMAddLinea(){
   rtSave();rtPushArmadoCloud();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
 async function removeMLinea(ln){
-  _ensureArmadoMolde();
-  const turnoScope=_getMArmScopeTurno();
-  const fechaScope=_getMArmScopeFecha();
-  const Ln=String(ln||'').trim().toUpperCase();
-  const scopedRows=_armEntriesForScope(turnoScope,fechaScope);
-  const row=scopedRows.find(r=>String(r.linea||'').toUpperCase()===Ln);
-  const ent=(row&&row.data)||_armGetEntry(Ln,turnoScope,fechaScope);
-  const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
-  const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
-  if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
-  const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
-  if(row&&row.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,row.key))delete RT.armadoMolde[row.key];
-  else _armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);
-  rtSave();
-  const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
-  try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
-  renderMArmado();
-  if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
-  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+(rem.err||'Revisa sesión, rol o RLS en Supabase.'),'warning');
+  try{
+    _ensureArmadoMolde();
+    const turnoScope=_getMArmScopeTurno();
+    const fechaScope=_getMArmScopeFecha();
+    const Ln=String(ln||'').trim().toUpperCase();
+    const scopedRows=_armEntriesForScope(turnoScope,fechaScope);
+    const row=scopedRows.find(r=>String(r.linea||'').toUpperCase()===Ln);
+    const ent=(row&&row.data)||_armGetEntry(Ln,turnoScope,fechaScope);
+    const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
+    const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
+    if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+    const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
+    let localDel=false;
+    if(row&&row.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,row.key)){delete RT.armadoMolde[row.key];localDel=true;}
+    else if(_armGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
+    if(!localDel){showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');return;}
+    rtSave();
+    const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
+    let pushErr=null;
+    try{
+      if(typeof TBSync!=='undefined'&&TBSync.pushImmediate){
+        const pr=await TBSync.pushImmediate();
+        if(pr&&pr.ok===false)pushErr=pr.err||'Error al subir cambios';
+      }
+    }catch(e){pushErr=e&&e.message?String(e.message):String(e);console.warn('[removeMLinea] pushImmediate',e);}
+    const pushTail=pushErr?' · '+pushErr:'';
+    if(rem.ok){
+      if(pushErr)showToast('Línea '+ln+' eliminada; aviso al sincronizar: '+pushErr,'warning');
+      else showToast('Línea '+ln+' eliminada','success');
+    }else if(!_tbSb){
+      showToast('Línea quitada en este equipo. '+String(rem.err||'Sin cliente Supabase (no se tocó la nube).')+pushTail,'warning');
+    }else{
+      showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+String(rem.err||'Revisa sesión, rol o RLS en Supabase.')+pushTail,'error');
+    }
+  }catch(e){
+    console.error('[removeMLinea]',e);
+    showToast('No se pudo eliminar la línea: '+(e&&e.message?e.message:String(e)),'error');
+  }finally{
+    if(typeof renderMArmado==='function')renderMArmado();
+  }
 }
 function openMoverTrabArmadoMoldeFromChip(btn){
   if(!btn)return;
@@ -8314,15 +8383,6 @@ function _tbFechaEqFromRow(v){
   }
   return _tbNormYmd(v)||String(v).trim().slice(0,10);
 }
-/** Turno estable para comparar: quita marcas Unicode (día/Día → dia). Evita fallar .eq contra Postgres que guarda «dia». */
-function _tbNormTurnoKey(s){
-  try{
-    const x=String(s==null||s===''?'dia':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    return x||'dia';
-  }catch(e){
-    return String(s==null||s===''?'dia':s).trim().toLowerCase()||'dia';
-  }
-}
 /** Borra la fila en Supabase `armado_lineas` (el upsert no quita filas; sin esto la línea vuelve con sync). @returns {{ok:boolean,err?:string}} */
 async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
   if(!_tbSb)return{ok:false,err:'Sin cliente Supabase'};
@@ -8437,7 +8497,10 @@ const TBSync={
       // ── Pull armado de línea ──────────────────────────────────
       try{
         const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
-        if(armErr){console.warn('[sb pull armado_lineas]',armErr.message);}
+        if(armErr){
+          console.warn('[sb pull armado_lineas]',armErr.message);
+          if(typeof showToast==='function')showToast('No se pudo traer armado de línea desde la nube: '+armErr.message,'error');
+        }
         else if(armData&&armData.length)_applyRemoteArmadoLineasRows(armData);
         else console.log('[sb] armado_lineas vacía en Supabase.');
       }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
@@ -8459,7 +8522,7 @@ const TBSync={
   },
   /** Sube ya moldes/pesajes/armado (cancela el debounce). Tras registrar en planta. */
   pushImmediate(){
-    if(!_tbSb)return Promise.resolve();
+    if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
     if(this._pushTimer){clearTimeout(this._pushTimer);this._pushTimer=null;}
     this._pushQueued=false;
     return this.pushAll();
@@ -8469,7 +8532,7 @@ const TBSync={
     return JSON.stringify(list);
   },
   async pushAll(){
-    if(!_tbSb)return;
+    if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
     this.setStatus('☁ …','#f59e0b');
     try{
       const today=todayLocalYmd();
@@ -8559,7 +8622,14 @@ const TBSync={
       }
       this._pushLastAt=Date.now();
       this.setStatus('☁ Sync','#16a34a');
-    }catch(e){console.warn('[sb pushAll]',e);this.setStatus('⚠ Error','#dc2626');}
+      return{ok:true};
+    }catch(e){
+      console.warn('[sb pushAll]',e);
+      this.setStatus('⚠ Error','#dc2626');
+      const m=e&&e.message?String(e.message):String(e);
+      if(typeof showToast==='function')showToast('No se completó la sincronización con la nube: '+m,'error');
+      return{ok:false,err:m};
+    }
   },
   subscribe(){
     if(!_tbSb)return;
