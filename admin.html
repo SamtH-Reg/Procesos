@@ -677,7 +677,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 
 <!-- ═══ SUPABASE ═══ -->
 <div class="page" id="page-supabase">
-  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos. Para no gastar la cuota de <strong>mensajes Realtime</strong>, el modo ahorro (por defecto) evita escuchar moldes/pesajes en vivo: usa <strong>Traer moldes y pesajes</strong> cuando quieras ver lo de las tablets.</div></div></div>
+  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos. Por defecto el admin está en <strong>modo vivo</strong>: moldes, pesajes y armado de línea se actualizan desde la tablet (Realtime + comprobación cada 5s). Activa <strong>modo ahorro</strong> solo si quieres reducir mensajes Supabase y traer moldes/pesajes a mano.</div></div></div>
   <div class="grid-2">
     <div class="card">
       <div class="card-hdr"><div class="card-title">🔌 Conexión</div><span class="badge info" id="sbBadge">No conectado</span></div>
@@ -692,12 +692,12 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
       </div>
       <div class="form-field" style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px;line-height:1.45;">
-          <input type="checkbox" id="sbMsgEconomy" checked onchange="sbMsgEconomyOnChange()" style="margin-top:3px;">
-          <span><strong>Modo ahorro de mensajes</strong> (recomendado): no abre canales Realtime ni polling automático sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span>. Los catálogos (presets, turnos, equipos) siguen en Realtime con poco tráfico. Desmarca solo si necesitas ver cada registro al instante en todos los equipos.</span>
+          <input type="checkbox" id="sbMsgEconomy" onchange="sbMsgEconomyOnChange()" style="margin-top:3px;">
+          <span><strong>Modo ahorro de mensajes</strong> (opcional): no abre Realtime ni polling sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span> (menos tráfico WS). El <strong>armado de línea</strong> sigue sincronizándose en vivo. Usa <strong>Traer moldes y pesajes</strong> cuando este modo esté activo.</span>
         </label>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:12px;">
-        Al iniciar sesión se hace una descarga inicial de moldes/pesajes (HTTP). Después, en modo ahorro, pulsa <strong>Traer moldes y pesajes</strong> o el botón del topbar.
+        Al iniciar sesión se descargan moldes, pesajes y armado (HTTP). En modo ahorro, pulsa <strong>Traer moldes y pesajes</strong> para actualizar registros.
         Credenciales en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>); en producción usa RLS.
       </div>
     </div>
@@ -781,9 +781,9 @@ const STORE_KEY='friosur_app_v1';
 const RT_KEY='friosur_rt_v1';
 /** Credenciales Supabase compartidas con index.html (tablet): misma clave en localStorage. */
 const SB_KEY='friosur_sb';
-/** '1' o ausente = ahorro (sin Realtime/poll en moldes·pesajes). '0' = tiempo casi real (más mensajes Supabase). */
+/** Solo '1' = modo ahorro (sin Realtime/poll en moldes·pesajes). Ausente u otro valor = vivo (tablet → admin al instante). */
 const SB_MSG_ECONOMY_KEY='friosur_admin_msg_economy';
-function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)!=='0';}catch(e){return true;}}
+function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)==='1';}catch(e){return false;}}
 function sbMsgEconomySet(on){try{localStorage.setItem(SB_MSG_ECONOMY_KEY,on?'1':'0');}catch(e){}}
 function sbMsgEconomyInitCheckbox(){const el=document.getElementById('sbMsgEconomy');if(el)el.checked=sbMsgEconomyEnabled();}
 function sbMsgEconomyOnChange(){
@@ -1282,16 +1282,63 @@ function _adminCycleDateNorm(f){
   return _adminTodayLocalYmd();
 }
 function _adminCycleTurnoNorm(t){return String(t||'dia').toLowerCase()==='noche'?'noche':'dia';}
-function _adminArmGetEntry(store,linea,turno,fecha){
-  if(!store||!linea)return null;
+function _adminArmScopedKey(linea,turno,fecha){
   const L=String(linea||'').trim().toUpperCase();
   const T=String(turno||'dia').trim();
   const F=String(fecha||'').trim();
-  const scopedKey=L+_ADMIN_ARM_SCOPE_SEP+T+_ADMIN_ARM_SCOPE_SEP+F;
+  return L+_ADMIN_ARM_SCOPE_SEP+T+_ADMIN_ARM_SCOPE_SEP+F;
+}
+function _adminArmGetEntry(store,linea,turno,fecha){
+  if(!store||!linea)return null;
+  const scopedKey=_adminArmScopedKey(linea,turno,fecha);
   if(store[scopedKey])return store[scopedKey];
+  const L=String(linea||'').trim().toUpperCase();
+  const T=String(turno||'dia').trim();
+  const F=String(fecha||'').trim();
   const legacy=store[L];
   if(legacy&&String(legacy.turno||'dia')===String(T||'dia')&&String(legacy.fecha||'')===String(F||''))return legacy;
   return null;
+}
+/** Aplica una fila de `armado_lineas` (Supabase) en RT.data — paridad con index TBSync.pullCatalogs. */
+function _adminArmApplyCloudRow(row){
+  if(!row||!RT.data)return;
+  if(!RT.data.armadoMolde||typeof RT.data.armadoMolde!=='object')RT.data.armadoMolde={};
+  if(!RT.data.armadoPesaje||typeof RT.data.armadoPesaje!=='object')RT.data.armadoPesaje={};
+  const linea=String(row.linea||'').trim().toUpperCase();
+  const turno=row.turno||'dia';
+  const fecha=String(row.fecha||'').trim();
+  const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+  const store=area==='pesaje'?RT.data.armadoPesaje:RT.data.armadoMolde;
+  const payload={
+    planillero:row.planillero||null,
+    trabajadores:Array.isArray(row.trabajadores)?row.trabajadores:[],
+    especie:row.especie||'',
+    turno,
+    fecha
+  };
+  store[_adminArmScopedKey(linea,turno,fecha)]=payload;
+}
+function _adminArmDeleteCloudRow(row){
+  if(!row||!RT.data)return;
+  const linea=String(row.linea||'').trim().toUpperCase();
+  const turno=row.turno||'dia';
+  const fecha=String(row.fecha||'').trim();
+  const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+  const store=area==='pesaje'?(RT.data.armadoPesaje||{}):(RT.data.armadoMolde||{});
+  const k=_adminArmScopedKey(linea,turno,fecha);
+  if(k in store)delete store[k];
+}
+async function _adminPullArmadoLineasFromCloud(){
+  if(!_sb)return false;
+  try{
+    const{data:armData,error:armErr}=await _sb.from('armado_lineas').select('*');
+    if(armErr){sbLog('pull armado_lineas: '+armErr.message,false);return false;}
+    if(!armData||!armData.length)return false;
+    if(!RT.data)RT.data={};
+    armData.forEach(_adminArmApplyCloudRow);
+    RT._ensureShape&&RT._ensureShape();
+    return true;
+  }catch(e){sbLog('pull armado_lineas: '+(e&&e.message?e.message:String(e)),false);return false;}
 }
 function _adminTurnoArmadoMoldesForLinea(linea,fecha){
   if(!linea)return null;
@@ -2842,6 +2889,8 @@ async function sbPullRuntimeFromCloud(){
       const added=merged.length-remote.length;
       if(added>0)sbLog(t+': nube '+remote.length+' + solo-local '+added+' (conservados)',true);
     }
+    const armOk=await _adminPullArmadoLineasFromCloud();
+    if(armOk)sbLog('armado_lineas aplicado desde nube',true);
     RT._ensureShape();
     if(RT.save)RT.save();
     try{
@@ -2934,7 +2983,7 @@ function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line
 function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');return;}
-  try{_sb=window.supabase.createClient(url,key);saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();}
+  try{_sb=window.supabase.createClient(url,key);saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();}
   catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
 }
 let _sbChannels=[];
@@ -2976,6 +3025,19 @@ function sbSubscribeRealtime(){
     _sbChannels.push(ch);
   });
   try{
+    const chArm=_sb.channel('rt-admin-armado-lineas').on('postgres_changes',{event:'*',schema:'public',table:'armado_lineas'},(p)=>{
+      const rec=p.new||p.old;if(!rec)return;
+      if(!RT.data)RT.data={};
+      if(p.eventType==='DELETE')_adminArmDeleteCloudRow(rec);
+      else _adminArmApplyCloudRow(rec);
+      RT._ensureShape&&RT._ensureShape();
+      if(RT.save)RT.save();
+      sbRerenderCurrent('armado');
+      sbLog('↻ armado_lineas '+p.eventType);
+    }).subscribe((status)=>{sbLog('canal armado_lineas: '+status);});
+    _sbChannels.push(chArm);
+  }catch(e){sbLog('Realtime armado_lineas: '+(e&&e.message?e.message:String(e)),false);}
+  try{
     const chKv=_sb.channel('rt-app-kv').on('postgres_changes',{event:'*',schema:'public',table:'app_kv'},(p)=>{
       const row=p.new||p.old;
       if(!row||row.key!==DASH_CLOUD_KEY||p.eventType==='DELETE')return;
@@ -2988,7 +3050,7 @@ function sbSubscribeRealtime(){
     }).subscribe((status)=>{sbLog('canal app_kv: '+status);});
     _sbChannels.push(chKv);
   }catch(e){sbLog('Realtime app_kv: '+(e&&e.message?e.message:String(e)),false);}
-  sbLog('Realtime: '+(subs.length+1)+' canal(es)'+(liveRt?'':' (ahorro: sin moldes/pesajes)'));
+  sbLog('Realtime: '+(subs.length+2)+' canal(es)'+(liveRt?'':' (ahorro: sin moldes/pesajes; armado_lineas sí)'));
 }
 /* ── Re-render reactivo con debounce corto + indicador RT ── */
 let _rerenderTimer=null;
@@ -3020,7 +3082,7 @@ function _doRender(dirty){
   try{
     const active=document.querySelector('.page.active');
     const id=active?active.id:'page-dashboard';
-    const dataChanged=!dirty||dirty.has('moldes')||dirty.has('pesajes');
+    const dataChanged=!dirty||dirty.has('moldes')||dirty.has('pesajes')||dirty.has('armado');
     // KPIs + Dashboard siempre (actualización silenciosa, sin reconstruir DOM)
     if(typeof renderKPIs==='function')renderKPIs();
     if(typeof renderDashGrid==='function')renderDashGrid();
@@ -3191,6 +3253,7 @@ async function pullAll(){
       RT.data[t]=_rtMergeRemoteWithLocal(localBefore,remote);
       sbLog(t+': '+RT.data[t].length+' filas ↓ (nube '+remote.length+')');
     }
+    if(await _adminPullArmadoLineasFromCloud())sbLog('armado_lineas ↓',true);
     RT._ensureShape();
     DB.save();if(RT.save)RT.save();
     await sbPullDashboardCloud({silent:true});

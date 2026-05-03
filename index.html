@@ -8161,8 +8161,8 @@ try{
   const _c=_tbResolveSupabaseCreds();
   if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key);
 }catch(e){console.warn('[sb] init',e);}
-/** Ahorro de mensajes Realtime en tablet: '1'/ausente = no escuchar moldes·pesajes por WS; '0' = escuchar cambios remotos. */
-function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')!=='0';}catch(e){return true;}}
+/** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
+function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
 
 const TBSync={
   _pushLastAt:0,
@@ -8378,7 +8378,7 @@ const TBSync={
       .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
       .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
       .subscribe();
-    /* moldes/pesajes por Realtime: muchos mensajes WS; desactivado por defecto (localStorage friosur_tb_msg_economy='0' para activar). */
+    /* moldes/pesajes por Realtime; desactivar con localStorage friosur_tb_msg_economy='1' (ahorro WS). */
     if(!tbMsgEconomy()){
       _tbSb.channel('tb-moldes').on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
         const rec=p.new||p.old;if(!rec)return;

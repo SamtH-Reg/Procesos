@@ -41,6 +41,7 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 
 - Mapeo de filas remotas ↔ objetos RT debe mantener los mismos nombres de campo que consume la tablet (`especie`, `presetId`, `producto`, `linea`, `turno`, `fecha`, etc.).
 - Si se añade un campo en una tabla, revisar **pull/push** en index y en admin (no solo uno).
+- **Modo vivo (por defecto):** admin usa Realtime + polling ~5s en `moldes`/`pesajes` y Realtime en `armado_lineas` para ver lo que la tablet guarda sin pulsar «Traer». El modo ahorro de mensajes es **opción explícita** (`friosur_admin_msg_economy === '1'`). En tablet, `friosur_tb_msg_economy === '1'` desactiva el WS de moldes/pesajes; si no está en `'1'`, escucha cambios remotos.
 
 ### Armado de línea en `armado_lineas`
 
