@@ -31,6 +31,11 @@ cada moficacion de que se haga subelo sin que me pidas permiso
 - Si el usuario dice **no subas**, **no hagas push**, o **solo local**, respeta eso.
 - No fuerces `--force` a `main` ni reescrituras de historia salvo instrucción explícita y segura.
 
+## Supabase / MCP
+
+- Si piden ejecutar `supabase_schema.sql` (u otro DDL) **por MCP** y **no hay herramienta MCP de Supabase** en la sesión: indícalo, enlaza la guía del repo (`SUPABASE_SETUP.md` §2), el ejemplo `.cursor/mcp.json.example` (token personal de Supabase, sin commitear secretos en `mcp.json` real), y el script opcional `scripts/apply-supabase-schema.ps1` con `DATABASE_URL` + `psql`.
+- Documentación oficial MCP Supabase: `https://supabase.com/docs/guides/getting-started/mcp`
+
 ## Mensajes de commit
 
 - Una línea, imperativo o descriptivo: qué cambió y por qué (breve).
