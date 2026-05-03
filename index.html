@@ -1704,26 +1704,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <div id="mArmadoList"></div>
     </div>
 
-    <!-- TAB CONTENT: VER REGISTROS -->
+    <!-- TAB CONTENT: VER REGISTROS (misma barra fecha/turno/línea que Pesaje › Ver registros) -->
     <div id="mVer" class="mold-tab hidden">
-      <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;">
-        <div class="form-field" style="min-width:160px;">
-          <label class="form-label">Turno</label>
-          <select class="select" id="mVerTurno" onchange="renderMoldesTable()">
-            <option value="">Todos</option>
-          </select>
-        </div>
-        <div class="form-field" style="min-width:160px;">
-          <label class="form-label">Línea</label>
-          <select class="select" id="mVerLinea" onchange="renderMoldesTable()">
-            <option value="">Todas</option>
-          </select>
-        </div>
-        <div class="form-field" style="min-width:200px;">
-          <label class="form-label">Fecha</label>
-          <input type="date" class="input" id="mVerFecha" onchange="renderMoldesTable()">
-        </div>
-        <div class="form-field" style="min-width:200px;">
+      <div id="mVerFiltrosMount" style="margin-bottom:10px;"></div>
+      <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-field" style="min-width:200px;flex:1;">
           <label class="form-label">Buscar trabajador</label>
           <input class="input" id="mVerBuscar" placeholder="Nombre..." oninput="renderMoldesTable()">
         </div>
@@ -3711,6 +3696,23 @@ function _pesajeCoincideFechaTurnoFiltro(r,fFecha,filtro){
   if(t==null)return false;
   return t>=win.start&&t<win.end;
 }
+/** Misma ventana de turno/fecha que «Ver registros» pesaje — lista de moldes. */
+function _moldeListaCoincideFechaTurno(r,fFecha,filtro){
+  if(!fFecha)return true;
+  const match=filtro==='todos'||!filtro?null:(filtro==='actual'?(_inferTurnoCodigoPorHorario()||'dia'):String(filtro));
+  if(!match||match==='todos'){
+    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+  }
+  const win=_ventanaTurnoFechaRefMs(fFecha,match);
+  if(!win){
+    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+  }
+  if(typeof _moldeMatchesTurnoLineaFiltro==='function'&&!_moldeMatchesTurnoLineaFiltro(r,match))return false;
+  if(String(_moldeTurnoNorm(r))!==String(match).toLowerCase())return false;
+  const t=_registroTsMolde(r);
+  if(t==null)return false;
+  return t>=win.start&&t<win.end;
+}
 function _mRegEnsureFechaDefault(){
   const fe=document.getElementById('mRegFechaArmado');
   const tEl=document.getElementById('mRegTurno');
@@ -4233,76 +4235,8 @@ window.renderMRegTurnos=renderMRegTurnos;window.onMRegFechaArmadoChange=onMRegFe
 function _armadoMoldeHasPeople(d){
   return !!(d&&(d.planillero||((d.trabajadores||[]).length>0)));
 }
-function _armadoMoldeActiveScopes(){
-  _ensureArmadoMolde&&_ensureArmadoMolde();
-  const scopes=new Map();
-  Object.entries(RT.armadoMolde||{}).forEach(([k,d])=>{
-    if(!_armadoMoldeHasPeople(d))return;
-    const meta=_armParseKey(k);
-    const turno=String((d&&d.turno)||meta.turno||'dia');
-    const fecha=String((d&&d.fecha)||meta.fecha||'');
-    if(!fecha)return;
-    scopes.set(turno+'|'+fecha,{turno,fecha});
-  });
-  return [...scopes.values()].sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha))||String(a.turno).localeCompare(String(b.turno)));
-}
-function _mVerFillSelects(){
-  // Turno
-  const selT=document.getElementById('mVerTurno');
-  const fd=document.getElementById('mVerFecha');
-  const scopes=_armadoMoldeActiveScopes();
-  if(selT){
-    const current=selT.value||'';
-    const turnos=[...new Set(scopes.map(s=>s.turno))];
-    while(selT.options.length>1)selT.remove(1);
-    if(turnos.length){
-      turnos.forEach(t=>{
-        const o=document.createElement('option');
-        o.value=t;
-        o.textContent=t==='noche'?'Noche':'Día';
-        selT.appendChild(o);
-      });
-    }else{
-      const ts=(DB.data.turnos||[]).filter(t=>t.activo!==false);
-      ts.forEach(t=>{const o=document.createElement('option');o.value=t.codigo||t.nombre;o.textContent=t.nombre||t.codigo;selT.appendChild(o);});
-    }
-    if(current&&[...selT.options].some(o=>o.value===current))selT.value=current;
-    else if(scopes[0])selT.value=scopes[0].turno;
-  }
-  if(fd){
-    if(!fd.value){
-      const selCod=(selT&&String(selT.value||'').trim())||'todos';
-      fd.value=_fechaFiltroResumenDefault(selCod);
-    }
-  }
-  const fTurno=(selT&&selT.value)||'';
-  const fFecha=(fd&&fd.value)||nowDate();
-  // Línea — solo las que tienen trabajadores en armado de molde
-  const selL=document.getElementById('mVerLinea');
-  if(selL){
-    _ensureArmadoMolde&&_ensureArmadoMolde();
-    const lineasConDatos=_armEntriesForScope(fTurno||'dia',fFecha)
-      .filter(row=>_armadoMoldeHasPeople(row.data))
-      .map(row=>row.linea)
-      .sort();
-    // Reconstruir opciones solo si cambió la lista
-    const actuals=[...selL.options].slice(1).map(o=>o.value).join(',');
-    const nuevas=lineasConDatos.join(',');
-    if(actuals!==nuevas){
-      while(selL.options.length>1)selL.remove(1);
-      lineasConDatos.forEach(ln=>{
-        const o=document.createElement('option');
-        o.value=ln;
-        // etiqueta amigable
-        const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3'};
-        o.textContent=mapa[ln]||ln;
-        selL.appendChild(o);
-      });
-    }
-  }
-}
-function _mVerRowsInActiveArmado(rows){
-  const fe=(document.getElementById('mVerFecha')||{}).value||nowDate();
+function _mVerRowsInActiveArmado(rows,fechaFiltro){
+  const fe=(fechaFiltro!=null&&String(fechaFiltro).trim()!=='')?String(fechaFiltro).trim():nowDate();
   const exigir=_mResumenHasArmadoConPersonasParaFecha(fe);
   if(!exigir)return(rows||[]).slice();
   return(rows||[]).filter(r=>{
@@ -4315,16 +4249,18 @@ function _mVerRowsInActiveArmado(rows){
 function renderMoldesTable(){
   const tb=document.getElementById('tbMoldes');if(!tb)return;
   const badge=document.getElementById('moldVerBadge');if(badge)badge.textContent=RT.moldes.length;
-  _mVerFillSelects();
-  // Leer filtros
-  const fTurno=(document.getElementById('mVerTurno')||{}).value||'';
-  const fLinea=(document.getElementById('mVerLinea')||{}).value||'';
-  const fFecha=(document.getElementById('mVerFecha')||{}).value||'';
+  const mount=document.getElementById('mVerFiltrosMount');
+  const state=_readMoldesListaFiltrosFromDom();
+  if(mount){
+    mount.innerHTML=_pesajeListaToolbarHtml({
+      fechaId:'mVerFechaTurno',turnoId:'mVerTurnoLinea',lineaId:'mVerFiltroLinea',
+      onChange:'renderMoldesTable',state,
+      hintHtml:'Filtra por <strong>fecha del registro</strong>, turno del <strong>Armado de moldes</strong> por línea (y catálogo Admin), y <strong>línea</strong>.'
+    });
+  }
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
-  let rows=_mVerRowsInActiveArmado(RT.moldes.slice());
-  if(fLinea)rows=rows.filter(r=>(r.linea||'')===fLinea);
-  if(fFecha)rows=rows.filter(r=>_moldeCoincideFechaTurnoFiltro(r,fFecha,fTurno));
-  else if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')===fTurno);
+  let rows=_mVerRowsInActiveArmado(RT.moldes.slice(),state.fechaTurno);
+  rows=_filterMoldesPorListaFiltros(rows,state);
   if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
   // Info badge
   const info=document.getElementById('mVerInfo');
@@ -4362,7 +4298,6 @@ function renderMoldesTable(){
     </td>
   </tr>`;}).join('');
 }
-window._mVerFillSelects=_mVerFillSelects;
 function editMolde(id){
   const r=RT.moldes.find(x=>x.id===id);if(!r)return;
   const presetsOpt=DB.data.presets.filter(p=>p.activo).map(p=>`<option value="${p.id}" ${p.id===r.presetId?'selected':''}>${esc(p.nombre)} (${p.kgRef} kg/u)</option>`).join('');
@@ -4416,21 +4351,17 @@ function delMolde(id){
 }
 window.delMolde=delMolde;window.renderMoldesTable=renderMoldesTable;
 function exportarMoldesExcel(){
-  const fTurno=(document.getElementById('mVerTurno')||{}).value||'';
-  const fLinea=(document.getElementById('mVerLinea')||{}).value||'';
-  const fFecha=(document.getElementById('mVerFecha')||{}).value||'';
+  const state=_readMoldesListaFiltrosFromDom();
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
-  let rows=_mVerRowsInActiveArmado(RT.moldes.slice());
-  if(fLinea)rows=rows.filter(r=>(r.linea||'')===fLinea);
-  if(fFecha)rows=rows.filter(r=>_moldeCoincideFechaTurnoFiltro(r,fFecha,fTurno));
-  else if(fTurno)rows=rows.filter(r=>(r.turno||'').toLowerCase()===fTurno.toLowerCase()||(r.turno||'')===fTurno);
+  let rows=_mVerRowsInActiveArmado(RT.moldes.slice(),state.fechaTurno);
+  rows=_filterMoldesPorListaFiltros(rows,state);
   if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
   const hdr=['Fecha','Hora','Turno','Línea','Trabajador','Ficha','Producto','Especie','Cantidad','Kg','Guía'];
   const body=rows.map(r=>[r.fecha||'',r.hora||'',r.turno||'',r.linea||'',r.nombre||'',r.ficha||'',r.producto||'',r.especie||'',r.cant||0,(r.kg||0).toFixed(1),r.guia||'']);
   const csv=[hdr,...body].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='moldes_'+(fFecha||nowDate())+'.csv';a.click();
+  a.download='moldes_'+(state.fechaTurno||nowDate())+'.csv';a.click();
 }
 window.exportarMoldesExcel=exportarMoldesExcel;
 
@@ -5406,6 +5337,19 @@ function _readPesajeListaFiltrosFromDom(){
   const fechaTurno=fechaRaw||_fechaFiltroResumenDefault(filtro);
   return{fechaTurno,filtro,lineaVal};
 }
+/** Igual que _readPesajeListaFiltrosFromDom pero para Moldes › Ver registros (ids mVer*). */
+function _readMoldesListaFiltrosFromDom(){
+  const mVer=document.getElementById('mVer');
+  const verVisible=!!(mVer&&!mVer.classList.contains('hidden'));
+  const tv=document.getElementById('mVerTurnoLinea');
+  const filtro=_defaultResumenTurnoSelect(tv,null);
+  const fv=document.getElementById('mVerFechaTurno');
+  const fechaRaw=(verVisible&&fv&&String(fv.value||'').trim())||(fv&&String(fv.value||'').trim())||'';
+  const fechaTurno=fechaRaw||_fechaFiltroResumenDefault(filtro);
+  const lv=document.getElementById('mVerFiltroLinea');
+  const lineaVal=String((verVisible&&lv&&lv.value)||(lv&&lv.value)||'').trim();
+  return{fechaTurno,filtro,lineaVal};
+}
 function _filterPesajesPorListaFiltros(rows,state){
   const{fechaTurno,filtro,lineaVal}=state;
   let pes=Array.isArray(rows)?rows.slice():[];
@@ -5413,6 +5357,14 @@ function _filterPesajesPorListaFiltros(rows,state){
   if(lineaVal)pes=pes.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
   if(filtro!=='todos')pes=pes.filter(r=>_pesajeMatchesTurnoLineaFiltro(r,filtro));
   return pes;
+}
+function _filterMoldesPorListaFiltros(rows,state){
+  const{fechaTurno,filtro,lineaVal}=state;
+  let mol=Array.isArray(rows)?rows.slice():[];
+  mol=mol.filter(r=>_moldeListaCoincideFechaTurno(r,fechaTurno,filtro));
+  if(lineaVal)mol=mol.filter(r=>String((r.linea||'')).trim().toUpperCase()===lineaVal.toUpperCase());
+  if(filtro!=='todos')mol=mol.filter(r=>_moldeMatchesTurnoLineaFiltro(r,filtro));
+  return mol;
 }
 function renderPesajeTable(){
   const tb=document.getElementById('tbPesaje');if(!tb)return;
@@ -5853,8 +5805,8 @@ function _resumenLineaOptionsHtml(selected){
 }
 /** Barra de filtros compartida entre «Ver registros» y «Resumen x hora» (Pesaje). */
 function _pesajeListaToolbarHtml(cfg){
-  const{fechaId,turnoId,lineaId,onChange,state}=cfg;
-  const hintP='Filtra por <strong>fecha del registro</strong>, turno del <strong>Armado de pesaje</strong> por línea (y catálogo Admin), y <strong>línea</strong>.';
+  const{fechaId,turnoId,lineaId,onChange,state,hintHtml}=cfg;
+  const hintP=hintHtml!=null?hintHtml:'Filtra por <strong>fecha del registro</strong>, turno del <strong>Armado de pesaje</strong> por línea (y catálogo Admin), y <strong>línea</strong>.';
   return`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
     <label class="form-label" style="margin:0;">Fecha (turno)</label>
     <input type="date" class="input" id="${esc(fechaId)}" value="${esc(state.fechaTurno)}" style="max-width:168px;" onchange="${esc(onChange)}()">
