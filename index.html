@@ -5089,8 +5089,11 @@ function renderPRegTrab(){
         const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
         const nom=t?t.nombre:(entry.nombre||'');
         const id=t?t.id:entry.trabId;
-        if(nom&&!fromArmado.find(w=>w.id===id))
-          fromArmado.push({id,nombre:nom,ficha:entry.ficha||'',__fromArmado:true});
+        if(nom&&!fromArmado.find(w=>w.id===id)){
+          const fichArm=(entry.ficha!=null&&String(entry.ficha).trim()!=='')?String(entry.ficha).trim():'';
+          const fichDb=(t&&t.ficha!=null&&String(t.ficha).trim()!=='')?String(t.ficha).trim():'';
+          fromArmado.push({id,nombre:nom,ficha:fichArm||fichDb,__fromArmado:true});
+        }
       }
     });
     const tlist=DB&&DB.data&&DB.data.trabajadores?DB.data.trabajadores:[];
@@ -7314,7 +7317,14 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
       }
       if(!tDb)tDb=DB.data.trabajadores.find(t=>String(t.id)===String(id));
       if(selectId==='pRegTrab'){
-        const fichaTxt=(opt&&opt.dataset&&opt.dataset.ficha)||((tDb&&tDb.ficha)||'');
+        const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
+        const arm=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
+        const entryArm=arm?(arm.trabajadores||[]).find(e=>String(e.trabId)===String(id)):null;
+        const fichArm=(entryArm&&entryArm.ficha!=null&&String(entryArm.ficha).trim()!=='')?String(entryArm.ficha).trim():'';
+        const fichOpt=(opt&&opt.dataset&&String(opt.dataset.ficha||'').trim())||'';
+        const fichDb=(tDb&&tDb.ficha!=null&&String(tDb.ficha).trim()!=='')?String(tDb.ficha).trim():'';
+        const fichaTxt=fichArm||fichOpt||fichDb;
+        if(opt)opt.dataset.ficha=fichaTxt;
         displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
       }else if(selectId==='pRegPlanillero'){
         const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
