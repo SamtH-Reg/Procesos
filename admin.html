@@ -1356,9 +1356,32 @@ async function _adminPullArmadoLineasFromCloud(){
   try{
     const{data:armData,error:armErr}=await _sb.from('armado_lineas').select('*');
     if(armErr){sbLog('pull armado_lineas: '+armErr.message,false);return false;}
-    if(!armData||!armData.length)return false;
     if(!RT.data)RT.data={};
-    armData.forEach(_adminArmApplyCloudRow);
+    const rows=Array.isArray(armData)?armData:[];
+    const newMolde={};
+    const newPesaje={};
+    rows.forEach(row=>{
+      const lineaRaw=String(row.linea==null?'':row.linea).trim().toUpperCase();
+      if(!/^L\d{1,3}$/i.test(lineaRaw))return;
+      let fechaRow=String(row.fecha||'').trim();
+      const fm=fechaRow.match(/^(\d{4}-\d{2}-\d{2})/);
+      if(fm)fechaRow=fm[1];
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRow))return;
+      const turno=_adminCycleTurnoNorm(row.turno||'dia');
+      const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+      const payload={
+        planillero:row.planillero||null,
+        trabajadores:Array.isArray(row.trabajadores)?row.trabajadores:[],
+        especie:row.especie||'',
+        turno,
+        fecha:fechaRow
+      };
+      const k=_adminArmScopedKey(lineaRaw,turno,fechaRow);
+      if(area==='pesaje')newPesaje[k]={...payload};
+      else newMolde[k]={...payload};
+    });
+    RT.data.armadoMolde=newMolde;
+    RT.data.armadoPesaje=newPesaje;
     RT._ensureShape&&RT._ensureShape();
     return true;
   }catch(e){sbLog('pull armado_lineas: '+(e&&e.message?e.message:String(e)),false);return false;}

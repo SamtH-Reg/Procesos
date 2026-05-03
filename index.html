@@ -2147,9 +2147,13 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           Agregar línea
         </button>
         <div class="spacer"></div>
-        <button class="btn ghost sm" type="button" onclick="guardarPArmadoSnapshot()" title="Guardar estado actual como 'día anterior'">
+        <button class="btn ghost sm" type="button" onclick="guardarPArmadoSnapshot()" title="Guardar estado actual del armado de pesaje (este turno/fecha) como referencia local">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Guardar día
+        </button>
+        <button class="btn ghost sm" type="button" onclick="syncPArmadoScopeDesdePRegistrar()" title="Alinea turno y fecha con Pesaje › Registrar (mismas líneas que verás al pesar)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
+          Desde Registrar
         </button>
         <button class="btn ghost sm" type="button" onclick="syncPArmadoScopeDesdeMoldes()" title="Copia planillero, trabajadores y especie desde Moldes · Armado (mismo turno y fecha que arriba)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
@@ -6917,7 +6921,12 @@ function savePArmado(){
   if(window.renderPRegLinea)renderPRegLinea();
   if(window.renderPRegTrab)renderPRegTrab();
   if(window.renderPRegPlanilleros)renderPRegPlanilleros();
-  showToast('Línea '+ln+' actualizada','success');
+  if(typeof renderMArmado==='function'){try{renderMArmado();}catch(_e){}}
+  if(typeof renderMRegLinea==='function'){try{renderMRegLinea();}catch(_e){}}
+  if(typeof renderMRegTrab==='function'){try{renderMRegTrab();}catch(_e){}}
+  if(typeof renderMRegPresets==='function'){try{renderMRegPresets();}catch(_e){}}
+  if(typeof mRegRefreshGate==='function'){try{mRegRefreshGate();}catch(_e){}}
+  showToast('Línea '+ln+' guardada. En Moldes › Armado puedes replicar con «Desde Moldes» si aplica.','success');
 }
 window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
 window.onPArmScopeChange=onPArmScopeChange;window.onPArmScopeTurnoPick=onPArmScopeTurnoPick;
@@ -7377,6 +7386,7 @@ function confirmMoverTrabArmadoPesaje(){
   renderPArmado();
   if(window.renderPRegLinea)renderPRegLinea();
   if(window.renderPRegTrab)renderPRegTrab();
+  if(window.renderPRegPlanilleros)renderPRegPlanilleros();
   showToast((moved.nombre||'')+' → '+destLinea,'success');
 }
 
@@ -7810,6 +7820,26 @@ function syncPArmadoScopeDesdeMoldes(){
   if(n)showToast('Pesaje actualizado desde Moldes ('+n+' línea'+(n!==1?'s':'')+').','success');
   else showToast('No hay armado de Moldes con planillero o trabajadores para este turno/fecha.','info');
 }
+/** Pesaje · Armado: alinea turno y fecha con Pesaje › Registrar (paridad con Moldes › «Desde Registrar»). */
+function syncPArmadoScopeDesdePRegistrar(){
+  _pRegEnsureFechaDefault();
+  const st=document.getElementById('pArmScopeTurno');
+  const sf=document.getElementById('pArmScopeFecha');
+  const rt=document.getElementById('pRegTurno');
+  const rf=document.getElementById('pRegFechaArmado');
+  if(!st||!sf||!rt||!rf){showToast('No se encontraron los campos de turno/fecha','error');return;}
+  const rfv=String(rf.value||'').trim();
+  if(!_isValidYmd(rfv)){showToast('Define primero fecha de armado en Pesaje › Registrar','warn');return;}
+  const rtv=String(rt.value||'').trim()||_inferTurnoCodigoPorHorario();
+  st.value=rtv;
+  sf.value=_tbNormYmd(rfv)||rfv;
+  renderPArmado();
+  if(typeof renderPRegLinea==='function')renderPRegLinea();
+  if(typeof renderPRegTrab==='function')renderPRegTrab();
+  if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
+  if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
+  showToast('Armado pesaje alineado con Registrar ('+sf.value+', '+rtv+').','success');
+}
 /** Moldes · Armado: alinea selectores con Moldes › Registrar (mismo criterio que Pesaje usa con «Desde Moldes»). */
 function syncMArmadoScopeDesdeMRegistrar(){
   _mRegEnsureFechaDefault();
@@ -7991,6 +8021,7 @@ window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelec
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
 window.syncPArmadoLineaDesdeMoldes=syncPArmadoLineaDesdeMoldes;window.syncPArmadoScopeDesdeMoldes=syncPArmadoScopeDesdeMoldes;
+window.syncPArmadoScopeDesdePRegistrar=syncPArmadoScopeDesdePRegistrar;
 window.syncMArmadoScopeDesdeMRegistrar=syncMArmadoScopeDesdeMRegistrar;
 window.onMArmScopeChange=onMArmScopeChange;window.onMArmScopeTurnoPick=onMArmScopeTurnoPick;
 
@@ -8685,6 +8716,7 @@ const TBSync={
         Object.entries(src||{}).filter(([,d])=>d).forEach(([key,d])=>{
           const meta=_armParseKey(key);
           const linea=String(meta.linea||'').trim().toUpperCase();
+          if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(linea))return;
           const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
           const fechaRaw=String(d.fecha||meta.fecha||today).trim();
           const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
