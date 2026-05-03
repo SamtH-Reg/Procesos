@@ -6368,6 +6368,30 @@ function confirmPAddLinea(){
   _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaKey},turnoScope,fechaKey);
   rtSave();rtPushArmadoCloud();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
+/** Confirmación de borrado de línea de armado (evita `window.confirm` roto en algunas tablets/WebView). */
+function _confirmArmadoLineDelete(ln,areaLabel){
+  const a=String(areaLabel||'moldes').toLowerCase()==='pesaje'?'pesaje':'moldes';
+  const zona=a==='pesaje'?'Pesaje':'Moldes';
+  return new Promise(resolve=>{
+    const id='armadoLineDelConfirm';
+    try{const ex=document.getElementById(id);if(ex)ex.remove();}catch(_){}
+    const m=document.createElement('div');m.className='modal-backdrop';m.id=id;
+    m.innerHTML='<div class="modal" style="max-width:440px;">\
+      <div class="modal-hdr"><div class="modal-title">Eliminar línea '+esc(ln)+'</div><button type="button" class="modal-x" aria-label="Cerrar" data-arm-del="0">×</button></div>\
+      <div class="modal-body"><p style="font-size:14px;color:var(--text-2);line-height:1.55;margin:0;">¿Quitar <strong>'+esc(ln)+'</strong> del armado de <strong>'+esc(zona)+'</strong> para el <strong>turno y fecha</strong> seleccionados arriba? También se intentará borrar la fila en Supabase.</p></div>\
+      <div class="modal-ftr">\
+        <button type="button" class="btn ghost" data-arm-del="0">Cancelar</button>\
+        <button type="button" class="btn danger" data-arm-del="1">Eliminar</button>\
+      </div></div>';
+    const fin=v=>{try{m.remove();}catch(_){}resolve(!!v);};
+    m.addEventListener('click',e=>{
+      if(e.target===m){fin(false);return;}
+      const b=e.target.closest&&e.target.closest('[data-arm-del]');
+      if(b){fin(b.getAttribute('data-arm-del')==='1');}
+    });
+    document.body.appendChild(m);
+  });
+}
 async function removePLinea(ln){
   try{
     _ensureArmadoPesaje();
@@ -6379,11 +6403,14 @@ async function removePLinea(ln){
     const ent=(row&&row.data)||_pArmGetEntry(Ln,turnoScope,fechaScope);
     const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
     const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
-    if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+    const okDel=await _confirmArmadoLineDelete(ln,'pesaje');
+    if(!okDel){showToast('Eliminación cancelada','info');return;}
     const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
     let localDel=false;
-    if(row&&row.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,row.key)){delete RT.armadoPesaje[row.key];localDel=true;}
-    else if(_pArmGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
+    scopedRows.filter(r=>String(r.linea||'').toUpperCase()===Ln).forEach(r=>{
+      if(r.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,r.key)){delete RT.armadoPesaje[r.key];localDel=true;}
+    });
+    if(!localDel&&_pArmGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
     if(!localDel){
       _tbArmadoDeleteReport({outcome:'no_local_line',area:'pesaje',linea:Ln,scopeTurno:turnoScope,scopeFecha:fechaScope,rowKey:row&&row.key});
       showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');
@@ -7126,11 +7153,14 @@ async function removeMLinea(ln){
     const ent=(row&&row.data)||_armGetEntry(Ln,turnoScope,fechaScope);
     const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
     const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
-    if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+    const okDel=await _confirmArmadoLineDelete(ln,'moldes');
+    if(!okDel){showToast('Eliminación cancelada','info');return;}
     const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
     let localDel=false;
-    if(row&&row.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,row.key)){delete RT.armadoMolde[row.key];localDel=true;}
-    else if(_armGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
+    scopedRows.filter(r=>String(r.linea||'').toUpperCase()===Ln).forEach(r=>{
+      if(r.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,r.key)){delete RT.armadoMolde[r.key];localDel=true;}
+    });
+    if(!localDel&&_armGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
     if(!localDel){
       _tbArmadoDeleteReport({outcome:'no_local_line',area:'moldes',linea:Ln,scopeTurno:turnoScope,scopeFecha:fechaScope,rowKey:row&&row.key});
       showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');
