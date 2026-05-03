@@ -3574,7 +3574,8 @@ function _tbNormTurnoKey(s){
 }
 function _armScopeKey(linea,turno,fecha){
   const fd=_tbNormYmd(fecha)||String(fecha||nowDate()).trim();
-  return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+String(turno||'dia').trim()+ARM_SCOPE_SEP+fd;
+  const tk=_tbNormTurnoKey(turno);
+  return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+tk+ARM_SCOPE_SEP+fd;
 }
 function _armParseKey(key){
   const raw=String(key||'');
@@ -3868,14 +3869,14 @@ function _applyRemoteArmadoLineasRows(armData){
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   armData.forEach(row=>{
     const fechaRow=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10)||'';
+    const turno=_tbNormTurnoKey(row.turno||'dia');
     const payload={
       planillero:row.planillero||null,
       trabajadores:row.trabajadores||[],
       especie:row.especie||'',
-      turno:row.turno||'dia',
+      turno,
       fecha:fechaRow
     };
-    const turno=row.turno||'dia';
     const fecha=fechaRow;
     const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
     if(area==='pesaje')_pArmSetEntry(row.linea,payload,turno,fecha);
@@ -6376,6 +6377,7 @@ async function removePLinea(ln){
     else if(_pArmGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
     if(!localDel){showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');return;}
     rtSave();
+    try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
     let pushErr=null;
     try{
@@ -7110,6 +7112,7 @@ async function removeMLinea(ln){
     else if(_armGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
     if(!localDel){showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');return;}
     rtSave();
+    try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
     let pushErr=null;
     try{
@@ -8415,10 +8418,6 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
         }
       }
     }
-    if(!row&&list.length===1){
-      const only=list[0];
-      if((_tbFechaEqFromRow(only.fecha)||'')===fWant)row=only;
-    }
     if(!row){
       try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
       const hayAlgunaConEsaFecha=list.some(r=>_tbFechaEqFromRow(r.fecha)===fWant);
@@ -8582,7 +8581,7 @@ const TBSync={
         Object.entries(src||{}).filter(([,d])=>d).forEach(([key,d])=>{
           const meta=_armParseKey(key);
           const linea=String(meta.linea||'').trim().toUpperCase();
-          const turno=String(d.turno||meta.turno||'dia').trim();
+          const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
           const fechaRaw=String(d.fecha||meta.fecha||today).trim();
           const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
           const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
@@ -8605,20 +8604,24 @@ const TBSync={
         const kb=[b.linea,b.turno,b.fecha,b.area].map(x=>String(x||'')).join('\0');
         return ka.localeCompare(kb);
       }));
-      if(armadoRows.length&&sigA!==this._lastSig.armado){
-        const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea,turno,fecha,area'});
-        if(armErr){
-          console.warn('[sb push armado_lineas]',armErr.message);
-          if(typeof showToast==='function'){
-            const msg=String(armErr.message||'');
-            const hint=/no unique or exclusion constraint/i.test(msg)
-              ?' · En Supabase ejecuta: supabase_migrate_armado_lineas_scope.sql y luego supabase_migrate_armado_lineas_area.sql'
-              :(/column/i.test(msg)&&/area/i.test(msg))
-              ?' · En Supabase ejecuta supabase_migrate_armado_lineas_area.sql (columna area + índice único).'
-              :'';
-            showToast('Armado línea: '+armErr.message+hint,'error');
-          }
-        }else this._lastSig.armado=sigA;
+      if(sigA!==this._lastSig.armado){
+        if(armadoRows.length){
+          const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea,turno,fecha,area'});
+          if(armErr){
+            console.warn('[sb push armado_lineas]',armErr.message);
+            if(typeof showToast==='function'){
+              const msg=String(armErr.message||'');
+              const hint=/no unique or exclusion constraint/i.test(msg)
+                ?' · En Supabase ejecuta: supabase_migrate_armado_lineas_scope.sql y luego supabase_migrate_armado_lineas_area.sql'
+                :(/column/i.test(msg)&&/area/i.test(msg))
+                ?' · En Supabase ejecuta supabase_migrate_armado_lineas_area.sql (columna area + índice único).'
+                :'';
+              showToast('Armado línea: '+armErr.message+hint,'error');
+            }
+          }else this._lastSig.armado=sigA;
+        }else{
+          this._lastSig.armado=sigA;
+        }
       }
       this._pushLastAt=Date.now();
       this.setStatus('☁ Sync','#16a34a');
@@ -8675,21 +8678,39 @@ const TBSync={
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
       const area=String(rec.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
-      const turno=rec.turno||'dia';
-      const fecha=_tbNormYmd(rec.fecha)||String(rec.fecha||'').trim().slice(0,10)||'';
+      const turno=_tbNormTurnoKey(rec.turno||'dia');
+      const fecha=_tbFechaEqFromRow(rec.fecha)||_tbNormYmd(rec.fecha)||String(rec.fecha||'').trim().slice(0,10)||'';
       if(p.eventType==='DELETE'){
-        if(area==='pesaje')_pArmDeleteEntry(rec.linea,turno,fecha);
-        else _armDeleteEntry(rec.linea,turno,fecha);
+        const ln=String(rec.linea||'').trim().toUpperCase();
+        if(!ln)return;
+        if(fecha){
+          if(area==='pesaje')_pArmDeleteEntry(ln,turno,fecha);
+          else _armDeleteEntry(ln,turno,fecha);
+        }else{
+          const src=area==='pesaje'?RT.armadoPesaje:RT.armadoMolde;
+          const purge=(obj)=>{
+            if(!obj||typeof obj!=='object')return;
+            Object.keys(obj).forEach(k=>{
+              const m=_armParseKey(k);
+              const d=obj[k];
+              const mt=_tbNormTurnoKey((d&&d.turno)||m.turno);
+              if(String(m.linea||'').toUpperCase()===ln&&mt===turno)delete obj[k];
+            });
+          };
+          purge(src);
+        }
       }else{
+        let fe=fecha;
+        if(!fe||!/^\d{4}-\d{2}-\d{2}$/.test(fe))fe=todayLocalYmd();
         const payload={
           planillero:rec.planillero||null,
           trabajadores:rec.trabajadores||[],
           especie:rec.especie||'',
           turno,
-          fecha
+          fecha:fe
         };
-        if(area==='pesaje')_pArmSetEntry(rec.linea,payload,turno,fecha);
-        else _armSetEntry(rec.linea,payload,turno,fecha);
+        if(area==='pesaje')_pArmSetEntry(rec.linea,payload,turno,fe);
+        else _armSetEntry(rec.linea,payload,turno,fe);
       }
       // Guardar local sin disparar re-push (evita loop infinito)
       _rtSaveOrig&&_rtSaveOrig();
