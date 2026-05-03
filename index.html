@@ -2782,6 +2782,15 @@ function showToast(msg,type){
   setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(20px)';t.style.transition='all .2s';setTimeout(()=>t.remove(),220);},ms);
 }
 
+/** Tras borrar línea de armado: consola F12 → `__friosurLastArmadoOp` o `copy(JSON.stringify(__friosurLastArmadoOp,null,2))`. */
+function _tbArmadoDeleteReport(payload){
+  try{
+    const o=Object.assign({ts:new Date().toISOString()},payload||{});
+    window.__friosurLastArmadoOp=o;
+    console.info('[FRIOSUR armado] Diagnóstico borrado (__friosurLastArmadoOp):',o);
+  }catch(_){}
+}
+
 /* Stepper + / − : los botones ya tienen onclick inline que llaman a mRegStep/gRegStep/eRegStep.
    NO añadir listener genérico aquí: duplicaría el incremento (+2 por pulsación). */
 
@@ -6375,7 +6384,11 @@ async function removePLinea(ln){
     let localDel=false;
     if(row&&row.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,row.key)){delete RT.armadoPesaje[row.key];localDel=true;}
     else if(_pArmGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
-    if(!localDel){showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');return;}
+    if(!localDel){
+      _tbArmadoDeleteReport({outcome:'no_local_line',area:'pesaje',linea:Ln,scopeTurno:turnoScope,scopeFecha:fechaScope,rowKey:row&&row.key});
+      showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');
+      return;
+    }
     rtSave();
     try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
@@ -6393,10 +6406,18 @@ async function removePLinea(ln){
     }else if(!_tbSb){
       showToast('Línea quitada en este equipo. '+String(rem.err||'Sin cliente Supabase (no se tocó la nube).')+pushTail,'warning');
     }else{
-      showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+String(rem.err||'Revisa sesión, rol o RLS en Supabase.')+pushTail,'error');
+      showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+String(rem.err||'Revisa sesión, rol o RLS en Supabase.')+pushTail+' · F12: __friosurLastArmadoOp','error');
     }
+    _tbArmadoDeleteReport({
+      outcome:rem.ok?(pushErr?'ok_push_warn':'ok'):(!_tbSb?'local_only':'remote_fail'),
+      area:'pesaje',linea:Ln,scopeTurno:turnoScope,scopeFecha:fechaScope,
+      turnoDelete:_tbNormTurnoKey(turnoDel),fechaDelete:fechaDel,rowKey:row&&row.key,
+      remoteDelete:rem,pushError:pushErr||null,
+      rol:(typeof _tbUser!=='undefined'&&_tbUser&&_tbUser.rol)?_tbUser.rol:null
+    });
   }catch(e){
     console.error('[removePLinea]',e);
+    _tbArmadoDeleteReport({outcome:'exception',area:'pesaje',linea:String(ln||'').trim().toUpperCase(),error:String(e&&e.message||e)});
     showToast('No se pudo eliminar la línea: '+(e&&e.message?e.message:String(e)),'error');
   }finally{
     if(typeof renderPArmado==='function')renderPArmado();
@@ -7110,7 +7131,11 @@ async function removeMLinea(ln){
     let localDel=false;
     if(row&&row.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,row.key)){delete RT.armadoMolde[row.key];localDel=true;}
     else if(_armGetEntry(Ln,turnoScope,fechaScopeNorm||fechaScope)){_armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);localDel=true;}
-    if(!localDel){showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');return;}
+    if(!localDel){
+      _tbArmadoDeleteReport({outcome:'no_local_line',area:'moldes',linea:Ln,scopeTurno:turnoScope,scopeFecha:fechaScope,rowKey:row&&row.key});
+      showToast('No se encontró la línea '+ln+' en este turno/fecha (armado local).','error');
+      return;
+    }
     rtSave();
     try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
@@ -7128,10 +7153,18 @@ async function removeMLinea(ln){
     }else if(!_tbSb){
       showToast('Línea quitada en este equipo. '+String(rem.err||'Sin cliente Supabase (no se tocó la nube).')+pushTail,'warning');
     }else{
-      showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+String(rem.err||'Revisa sesión, rol o RLS en Supabase.')+pushTail,'error');
+      showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+String(rem.err||'Revisa sesión, rol o RLS en Supabase.')+pushTail+' · F12: __friosurLastArmadoOp','error');
     }
+    _tbArmadoDeleteReport({
+      outcome:rem.ok?(pushErr?'ok_push_warn':'ok'):(!_tbSb?'local_only':'remote_fail'),
+      area:'moldes',linea:Ln,scopeTurno:turnoScope,scopeFecha:fechaScope,
+      turnoDelete:_tbNormTurnoKey(turnoDel),fechaDelete:fechaDel,rowKey:row&&row.key,
+      remoteDelete:rem,pushError:pushErr||null,
+      rol:(typeof _tbUser!=='undefined'&&_tbUser&&_tbUser.rol)?_tbUser.rol:null
+    });
   }catch(e){
     console.error('[removeMLinea]',e);
+    _tbArmadoDeleteReport({outcome:'exception',area:'moldes',linea:String(ln||'').trim().toUpperCase(),error:String(e&&e.message||e)});
     showToast('No se pudo eliminar la línea: '+(e&&e.message?e.message:String(e)),'error');
   }finally{
     if(typeof renderMArmado==='function')renderMArmado();
