@@ -8,6 +8,13 @@ alwaysApply: false
 
 Solo existen estos dos HTML en el repo; comparten **la misma base local** y deben seguir alineados.
 
+## Cómo se unen en runtime
+
+- **Mismo origen (misma URL: host + puerto + esquema):** los dos leen y escriben el mismo `localStorage`. Ahí vive el vínculo: no hay API intermedia entre páginas.
+- **Claves compartidas:** catálogo `friosur_app_v1` y runtime `friosur_rt_v1` (ver abajo). Credenciales Supabase en `friosur_sb` (tablet e admin usan el mismo patrón para URL/anon key).
+- **Mismo JSON bajo `friosur_rt_v1`:** el objeto guardado tiene la misma forma (`moldes`, `pesajes`, `armadoMolde`, `armadoPesaje`, `eqState`, …). En **index** ese objeto **es** la variable `RT` (se hace `Object.assign(RT, JSON.parse(...))` y `rtSave()` serializa `RT` entero). En **admin** se parsea en **`RT.data`** (`RT` es un contenedor con `load`/`save` que lee/escribe el mismo JSON). Cualquier referencia en esta guía a `RT.armadoPesaje` en index equivale a **`RT.data.armadoPesaje`** en admin.
+- **Orígenes distintos** (p. ej. dos dominios de GitHub Pages o uno en `file://`): cada uno tiene su propio `localStorage`; no se mezclan solos. Ahí entra **Supabase** (pull/push) o export/import/backup para alinear datos.
+
 ## localStorage (no romper sin migración explícita)
 
 - Catálogo: `STORE_KEY` = `friosur_app_v1` (presets, trabajadores, turnos, equipos, roles).
@@ -16,12 +23,12 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 
 ## Filtro por turno en el dashboard (admin)
 
-- Con turno **Noche/Día** seleccionado, los pesajes sin `r.turno` deben incluirse si el **armado de línea** (`RT.armadoPesaje` por línea+fecha) coincide, igual que `_pesajeMatchesTurnoLineaFiltro` en **index**. Moldes: análogo con `RT.armadoMolde` y `_moldeMatchesTurnoLineaFiltro`. `_filterRecs` usa `kind` `'molde'` / `'pesaje'` para aplicar esa paridad.
+- Con turno **Noche/Día** seleccionado, los pesajes sin `r.turno` deben incluirse si el **armado de línea** (mismo mapa que en index: `armadoPesaje` por línea+fecha, claves `L*@@turno@@fecha`) coincide, igual que `_pesajeMatchesTurnoLineaFiltro` en **index**. Moldes: análogo con `armadoMolde` y `_moldeMatchesTurnoLineaFiltro`. `_filterRecs` usa `kind` `'molde'` / `'pesaje'` para aplicar esa paridad.
 
 ## Especie en moldes (filtros, KPI y análisis)
 
-- En **index**, la especie efectiva para agregaciones va en `_especieDe(r)`: `r.especie` → preset por `presetId` → preset por `r.producto === nombre`.
-- En **admin**, usar la misma prioridad en `_adminEspecieForRec(r)`; `_filterRecs` y chips del dashboard deben basarse en esa función (no solo `r.especie` crudo). Comparación de especies/líneas: **insensible a mayúsculas** donde ya esté implementado.
+- En **index**, la especie efectiva para agregaciones va en `_especieDe(r)`: `r.especie` → preset por `presetId` → preset por `r.producto === nombre` (devuelve mayúsculas / `'—'` si no hay dato).
+- En **admin**, la misma **prioridad** en `_adminEspecieForRec(r)`; `_filterRecs` y chips del dashboard deben basarse en esa función (no solo `r.especie` crudo). Comparación en filtros: suele normalizarse a minúsculas. Diferencia cosmética: index puede mostrar `'—'` y admin cadena vacía; no afecta si los filtros comparan en minúsculas.
 - `RT._ensureShape` en admin puede rellenar `especie` en moldes vacíos desde preset; al cambiar la lógica de deducción, actualizar **index y admin** a la vez.
 
 ## Armado de línea (Pesaje / Moldes)
@@ -37,7 +44,7 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 
 ### Armado de línea en `armado_lineas`
 
-- Tabla `armado_lineas` con columna **`area`**: `moldes` ↔ `RT.armadoMolde`, `pesaje` ↔ `RT.armadoPesaje`. Misma `(linea, turno, fecha)` puede tener **dos** filas (una por área). Migración: `supabase_migrate_armado_lineas_area.sql` (tras `supabase_migrate_armado_lineas_scope.sql`).
+- Tabla `armado_lineas` con columna **`area`**: `moldes` ↔ `armadoMolde`, `pesaje` ↔ `armadoPesaje` dentro del JSON de `friosur_rt_v1` (en index: `RT.*`; en admin: `RT.data.*`). Misma `(linea, turno, fecha)` puede tener **dos** filas (una por área). Migración: `supabase_migrate_armado_lineas_area.sql` (tras `supabase_migrate_armado_lineas_scope.sql`).
 - Sin `area` en la base, el armado de **Pesaje** no se sincronizaba a la nube (solo `localStorage`) y parecía «borrado» al limpiar sitio o cambiar de dispositivo.
 - **Moldes → Pesaje:** al guardar una línea en Moldes · Armado (`saveMArmado`), se replica en Pesaje · Armado la misma línea/turno/fecha (`syncPArmadoLineaDesdeMoldes`). En Pesaje · Armado el botón **«Desde Moldes»** aplica todas las líneas del alcance actual. Moldes sigue pudiendo rellenar planillero desde pesaje (`_mArmPrefillPlanilleroDesdePesaje`).
 - **`_ensureArmadoPesaje` / `_ensureArmadoMolde`:** con clave scoped `L*@@turno@@fecha`, el turno/fecha del **objeto** no debe desalinear la clave; la migración usa el trío de la clave cuando `meta.scoped` para no “mover” filas a otro bucket y que parezca que no guardó.
