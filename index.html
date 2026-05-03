@@ -6342,8 +6342,9 @@ async function removePLinea(ln){
   const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
   const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+  const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
   if(row&&row.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,row.key))delete RT.armadoPesaje[row.key];
-  else _pArmDeleteEntry(Ln,turnoScope,fechaScope);
+  else _pArmDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);
   rtSave();
   const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
   try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
@@ -7054,8 +7055,9 @@ async function removeMLinea(ln){
   const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
   const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
+  const fechaScopeNorm=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
   if(row&&row.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,row.key))delete RT.armadoMolde[row.key];
-  else _armDeleteEntry(Ln,turnoScope,fechaScope);
+  else _armDeleteEntry(Ln,turnoScope,fechaScopeNorm||fechaScope);
   rtSave();
   const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
   try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
@@ -8303,19 +8305,56 @@ try{
 }catch(e){console.warn('[sb] init',e);}
 /** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
+/** Valor `fecha` tal como lo espera .eq() contra Postgres (AAAA-MM-DD o prefijo ISO). */
+function _tbFechaEqFromRow(v){
+  if(v==null||v==='')return'';
+  if(typeof v==='string'){
+    const m=v.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m?m[1]:String(v).trim().slice(0,10);
+  }
+  return _tbNormYmd(v)||String(v).trim().slice(0,10);
+}
 /** Borra la fila en Supabase `armado_lineas` (el upsert no quita filas; sin esto la línea vuelve con sync). @returns {{ok:boolean,err?:string}} */
 async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
   if(!_tbSb)return{ok:false,err:'Sin cliente Supabase'};
   const ln=String(linea||'').trim().toUpperCase();
-  const t=String(turno||'dia').trim();
-  const f=_tbNormYmd(fecha)||String(fecha||'').trim().slice(0,10);
+  const tWant=String(turno||'dia').trim().toLowerCase();
+  const fWant=_tbNormYmd(fecha)||String(fecha||'').trim().slice(0,10);
   const a=String(area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
-  if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(f))return{ok:false,err:'Fecha o línea inválida para borrar en la nube'};
+  if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(fWant))return{ok:false,err:'Fecha o línea inválida para borrar en la nube'};
   try{
-    const{error}=await _tbSb.from('armado_lineas').delete().eq('linea',ln).eq('turno',t).eq('fecha',f).eq('area',a);
-    if(error){
-      console.warn('[sb delete armado_lineas]',error.message);
-      return{ok:false,err:error.message||'Error al borrar en la nube'};
+    const{data:rows,error:selErr}=await _tbSb.from('armado_lineas').select('linea,turno,fecha,area').eq('linea',ln).eq('area',a);
+    if(selErr){
+      console.warn('[sb delete armado_lineas] select',selErr.message);
+      return{ok:false,err:selErr.message};
+    }
+    const list=rows||[];
+    const sameTf=r=>{
+      const rf=_tbFechaEqFromRow(r.fecha);
+      const rt=String(r.turno==null?'dia':r.turno).trim().toLowerCase();
+      return rf===fWant&&rt===tWant;
+    };
+    let row=list.find(sameTf);
+    if(!row&&list.length===1){
+      const only=list[0];
+      if((_tbFechaEqFromRow(only.fecha)||'')===fWant)row=only;
+    }
+    if(!row){
+      try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
+      if(list.length>1)return{ok:false,err:'En la nube hay varias filas para '+ln+'/'+a+'; no coincide turno/fecha. Revisa selectores o datos en Supabase.'};
+      return{ok:true};
+    }
+    const lineaEq=String(row.linea==null?ln:row.linea).trim().toUpperCase();
+    const turnoEq=row.turno;
+    const fechaEq=_tbFechaEqFromRow(row.fecha)||fWant;
+    const areaEq=String(row.area||a).toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+    let{error:delErr}=await _tbSb.from('armado_lineas').delete().eq('linea',lineaEq).eq('turno',turnoEq).eq('fecha',fechaEq).eq('area',areaEq);
+    if(delErr){
+      const{error:del2}=await _tbSb.from('armado_lineas').delete().eq('linea',lineaEq).eq('turno',turnoEq).eq('fecha',row.fecha).eq('area',areaEq);
+      if(del2){
+        console.warn('[sb delete armado_lineas]',del2.message);
+        return{ok:false,err:del2.message||'Error al borrar en la nube'};
+      }
     }
     try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     return{ok:true};
