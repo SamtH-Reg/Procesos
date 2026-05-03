@@ -3423,6 +3423,8 @@ function rtLoad(){
   rtSave();
 }
 function rtSave(){try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}}
+/** Tras cambiar armado de línea: fuerza subida a Supabase (además del debounce de rtSave). */
+function rtPushArmadoCloud(){try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();}catch(e){}}
 window.RT=RT;
 rtLoad();
 
@@ -6072,12 +6074,19 @@ function _ensureArmadoPesaje(){
       if(!d||typeof d!=='object'||Array.isArray(d))d={};
       if(!Array.isArray(d.trabajadores))d.trabajadores=[];
       if(!('especie' in d))d.especie=d.producto||'';
-      if(!d.turno)d.turno='dia';
-      if(!d.fecha)d.fecha=nowDate();
       const meta=_armParseKey(k);
       const linea=(meta.linea||k||'').trim().toUpperCase();
-      const finalKey=_armScopeKey(linea,d.turno,d.fecha);
-      migrated[finalKey]={...d,turno:d.turno,fecha:d.fecha};
+      let turno,fecha;
+      if(meta.scoped){
+        turno=String(meta.turno||d.turno||'dia').trim()||'dia';
+        fecha=String(meta.fecha||d.fecha||'').trim();
+        if(!fecha)fecha=nowDate();
+      }else{
+        turno=String(d.turno||'dia').trim()||'dia';
+        fecha=String(d.fecha||'').trim()||nowDate();
+      }
+      const finalKey=_armScopeKey(linea,turno,fecha);
+      migrated[finalKey]={...d,turno,fecha};
     });
   }catch(e){
     console.error('_ensureArmadoPesaje',e);
@@ -6278,14 +6287,14 @@ function confirmPAddLinea(){
   const fechaScope=_getPArmScopeFecha();
   if(_pArmGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
   _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
-  rtSave();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
+  rtSave();rtPushArmadoCloud();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
 function removePLinea(ln){
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _pArmDeleteEntry(ln,turnoScope,fechaScope);
-  rtSave();renderPArmado();showToast('Línea '+ln+' eliminada','success');
+  rtSave();rtPushArmadoCloud();renderPArmado();showToast('Línea '+ln+' eliminada','success');
 }
 function guardarPArmadoSnapshot(){
   _ensureArmadoPesaje();
@@ -6295,7 +6304,7 @@ function guardarPArmadoSnapshot(){
     guardadoEn:new Date().toLocaleString('es-CL'),
     data:_clonePArmadoSinMarcasCopia()
   };
-  rtSave();showToast('Armado guardado como referencia de día anterior','success');
+  rtSave();rtPushArmadoCloud();showToast('Armado guardado como referencia de día anterior','success');
 }
 
 /* Editor de línea: planillero + lista de trabajadores con buscar/agregar/cambiar ficha/eliminar */
@@ -6683,7 +6692,7 @@ function savePArmado(){
   target.especie=especie;
   _pArmSetEntry(_editPLn,target,turnoRaw,fecha);
   _stripMarcaCopiaLinea(target);
-  rtSave();
+  rtSave();rtPushArmadoCloud();
   const ln=_editPLn;
   try{
     const st=document.getElementById('pArmScopeTurno');
@@ -6718,12 +6727,19 @@ function _ensureArmadoMolde(){
       if(!d||typeof d!=='object'||Array.isArray(d))d={};
       if(!Array.isArray(d.trabajadores))d.trabajadores=[];
       if(!('especie' in d))d.especie=d.producto||'';
-      if(!d.turno)d.turno='dia';
-      if(!d.fecha)d.fecha=nowDate();
       const meta=_armParseKey(k);
       const linea=(meta.linea||k||'').trim().toUpperCase();
-      const finalKey=_armScopeKey(linea,d.turno,d.fecha);
-      migrated[finalKey]={...d,turno:d.turno,fecha:d.fecha};
+      let turno,fecha;
+      if(meta.scoped){
+        turno=String(meta.turno||d.turno||'dia').trim()||'dia';
+        fecha=String(meta.fecha||d.fecha||'').trim();
+        if(!fecha)fecha=nowDate();
+      }else{
+        turno=String(d.turno||'dia').trim()||'dia';
+        fecha=String(d.fecha||'').trim()||nowDate();
+      }
+      const finalKey=_armScopeKey(linea,turno,fecha);
+      migrated[finalKey]={...d,turno,fecha};
     });
   }catch(e){
     console.error('_ensureArmadoMolde',e);
@@ -6937,14 +6953,14 @@ function confirmMAddLinea(){
   const fechaScope=_getMArmScopeFecha();
   if(_armGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
   _armSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
-  rtSave();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
+  rtSave();rtPushArmadoCloud();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
 function removeMLinea(ln){
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _armDeleteEntry(ln,turnoScope,fechaScope);
-  rtSave();renderMArmado();showToast('Línea '+ln+' eliminada','success');
+  rtSave();rtPushArmadoCloud();renderMArmado();showToast('Línea '+ln+' eliminada','success');
 }
 function openMoverTrabArmadoMoldeFromChip(btn){
   if(!btn)return;
@@ -7008,7 +7024,7 @@ function confirmMoverTrabArmadoMolde(){
   dst.trabajadores.push(moved);
   _armSetEntry(fromLinea,src,turno,fecha);
   _armSetEntry(destLinea,dst,turno,fecha);
-  rtSave();
+  rtSave();rtPushArmadoCloud();
   closeMoverTrabArmadoMolde();
   renderMArmado();
   if(window.renderMRegLinea)renderMRegLinea();
@@ -7077,7 +7093,7 @@ function confirmMoverTrabArmadoPesaje(){
   dst.trabajadores.push(moved);
   _pArmSetEntry(fromLinea,src,turno,fecha);
   _pArmSetEntry(destLinea,dst,turno,fecha);
-  rtSave();
+  rtSave();rtPushArmadoCloud();
   closeMoverTrabArmadoPesaje();
   renderPArmado();
   if(window.renderPRegLinea)renderPRegLinea();
@@ -7500,7 +7516,7 @@ function syncPArmadoScopeDesdeMoldes(){
   rows.forEach(row=>{
     if(syncPArmadoLineaDesdeMoldes(row.linea,turno,fecha))n++;
   });
-  rtSave();
+  rtSave();rtPushArmadoCloud();
   renderPArmado();
   if(typeof renderPRegLinea==='function')renderPRegLinea();
   if(typeof renderPRegTrab==='function')renderPRegTrab();
@@ -7641,7 +7657,7 @@ function saveMArmado(){
   RT.lineaProducto[_editMLn]=_editMArmado.especie||'';
   const ln=_editMLn;
   try{syncPArmadoLineaDesdeMoldes(ln,turnoRaw,fecha);}catch(e){console.warn('syncPArmadoLineaDesdeMoldes',e);}
-  rtSave();
+  rtSave();rtPushArmadoCloud();
   try{
     const st=document.getElementById('mArmScopeTurno');
     const sf=document.getElementById('mArmScopeFecha');
