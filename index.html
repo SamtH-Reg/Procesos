@@ -3537,8 +3537,15 @@ window.idxUpdateFsBtn=idxUpdateFsBtn;
 ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,idxUpdateFsBtn);});
 idxUpdateFsBtn();
 const ARM_SCOPE_SEP='@@';
+/** AAAA-MM-DD desde date/ISO/texto (evita que .eq en Supabase falle si la fila guardó timestamp). */
+function _tbNormYmd(v){
+  const s=String(v==null?'':v).trim();
+  const m=s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?m[1]:'';
+}
 function _armScopeKey(linea,turno,fecha){
-  return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+String(turno||'dia').trim()+ARM_SCOPE_SEP+String(fecha||nowDate()).trim();
+  const fd=_tbNormYmd(fecha)||String(fecha||nowDate()).trim();
+  return String(linea||'').trim().toUpperCase()+ARM_SCOPE_SEP+String(turno||'dia').trim()+ARM_SCOPE_SEP+fd;
 }
 function _armParseKey(key){
   const raw=String(key||'');
@@ -3744,7 +3751,9 @@ function _armGetEntry(linea,turno,fecha){
   const scopedKey=_armScopeKey(linea,turno,fecha);
   if(RT.armadoMolde[scopedKey])return RT.armadoMolde[scopedKey];
   const legacy=RT.armadoMolde[linea];
-  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&String(legacy.fecha||'')===String(fecha||''))return legacy;
+  const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
+  const legF=_tbNormYmd(legacy&&legacy.fecha)||String((legacy&&legacy.fecha)||'').trim();
+  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&legF===fN)return legacy;
   return null;
 }
 function _armSetEntry(linea,data,turno,fecha){
@@ -3759,17 +3768,21 @@ function _armDeleteEntry(linea,turno,fecha){
   if(k in RT.armadoMolde)delete RT.armadoMolde[k];
   const L=String(linea||'').trim().toUpperCase();
   const leg=RT.armadoMolde[L];
-  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&String(leg.fecha||'')===String(fecha||''))delete RT.armadoMolde[L];
+  const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
+  const legF=_tbNormYmd(leg&&leg.fecha)||String((leg&&leg.fecha)||'').trim();
+  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&legF===fN)delete RT.armadoMolde[L];
 }
 function _armEntriesForScope(turno,fecha){
   const out=[];
   const src=RT.armadoMolde||{};
+  const fechaN=_tbNormYmd(fecha)||String(fecha||'').trim();
   Object.entries(src).forEach(([k,d])=>{
     const meta=_armParseKey(k);
     const mt=d&&d.turno?d.turno:meta.turno;
-    const mf=d&&d.fecha?d.fecha:meta.fecha;
+    const mfRaw=d&&d.fecha?d.fecha:meta.fecha;
+    const mf=_tbNormYmd(mfRaw)||String(mfRaw||'').trim();
     if(String(mt||'dia')!==String(turno||'dia'))return;
-    if(String(mf||'')!==String(fecha||''))return;
+    if(String(mf||'')!==String(fechaN||''))return;
     out.push({key:k,linea:meta.linea,data:d});
   });
   _sortArmadoLineRows(out);
@@ -3780,7 +3793,9 @@ function _pArmGetEntry(linea,turno,fecha){
   const scopedKey=_armScopeKey(linea,turno,fecha);
   if(RT.armadoPesaje[scopedKey])return RT.armadoPesaje[scopedKey];
   const legacy=RT.armadoPesaje[linea];
-  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&String(legacy.fecha||'')===String(fecha||''))return legacy;
+  const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
+  const legF=_tbNormYmd(legacy&&legacy.fecha)||String((legacy&&legacy.fecha)||'').trim();
+  if(legacy&&String(legacy.turno||'dia')===String(turno||'dia')&&legF===fN)return legacy;
   return null;
 }
 function _pArmSetEntry(linea,data,turno,fecha){
@@ -3795,17 +3810,21 @@ function _pArmDeleteEntry(linea,turno,fecha){
   if(k in RT.armadoPesaje)delete RT.armadoPesaje[k];
   const L=String(linea||'').trim().toUpperCase();
   const leg=RT.armadoPesaje[L];
-  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&String(leg.fecha||'')===String(fecha||''))delete RT.armadoPesaje[L];
+  const fN=_tbNormYmd(fecha)||String(fecha||'').trim();
+  const legF=_tbNormYmd(leg&&leg.fecha)||String((leg&&leg.fecha)||'').trim();
+  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&legF===fN)delete RT.armadoPesaje[L];
 }
 function _pArmEntriesForScope(turno,fecha){
   const out=[];
   const src=RT.armadoPesaje||{};
+  const fechaN=_tbNormYmd(fecha)||String(fecha||'').trim();
   Object.entries(src).forEach(([k,d])=>{
     const meta=_armParseKey(k);
     const mt=d&&d.turno?d.turno:meta.turno;
-    const mf=d&&d.fecha?d.fecha:meta.fecha;
+    const mfRaw=d&&d.fecha?d.fecha:meta.fecha;
+    const mf=_tbNormYmd(mfRaw)||String(mfRaw||'').trim();
     if(String(mt||'dia')!==String(turno||'dia'))return;
-    if(String(mf||'')!==String(fecha||''))return;
+    if(String(mf||'')!==String(fechaN||''))return;
     out.push({key:k,linea:meta.linea,data:d});
   });
   _sortArmadoLineRows(out);
@@ -3817,15 +3836,16 @@ function _applyRemoteArmadoLineasRows(armData){
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   armData.forEach(row=>{
+    const fechaRow=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10)||'';
     const payload={
       planillero:row.planillero||null,
       trabajadores:row.trabajadores||[],
       especie:row.especie||'',
       turno:row.turno||'dia',
-      fecha:row.fecha||''
+      fecha:fechaRow
     };
     const turno=row.turno||'dia';
-    const fecha=row.fecha||'';
+    const fecha=fechaRow;
     const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
     if(area==='pesaje')_pArmSetEntry(row.linea,payload,turno,fecha);
     else _armSetEntry(row.linea,payload,turno,fecha);
@@ -6088,6 +6108,9 @@ function _ensureArmadoPesaje(){
         turno=String(d.turno||'dia').trim()||'dia';
         fecha=String(d.fecha||'').trim()||nowDate();
       }
+      const fd=_tbNormYmd(fecha);
+      if(fd)fecha=fd;
+      else if(!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha||'').trim()))fecha=nowDate();
       const finalKey=_armScopeKey(linea,turno,fecha);
       migrated[finalKey]={...d,turno,fecha};
     });
@@ -6306,11 +6329,14 @@ function confirmPAddLinea(){
 async function removePLinea(ln){
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
+  const ent=_pArmGetEntry(ln,turnoScope,fechaScope);
+  const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
+  const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _pArmDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();
-  const rem=await tbDeleteArmadoLineaRemote(ln,turnoScope,fechaScope,'pesaje');
-  rtPushArmadoCloud();
+  const rem=await tbDeleteArmadoLineaRemote(ln,turnoDel,fechaDel,'pesaje');
+  try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
   renderPArmado();
   if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
   else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+(rem.err||'Revisa sesión, rol o RLS en Supabase.'),'warning');
@@ -6771,6 +6797,9 @@ function _ensureArmadoMolde(){
         turno=String(d.turno||'dia').trim()||'dia';
         fecha=String(d.fecha||'').trim()||nowDate();
       }
+      const fd=_tbNormYmd(fecha);
+      if(fd)fecha=fd;
+      else if(!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha||'').trim()))fecha=nowDate();
       const finalKey=_armScopeKey(linea,turno,fecha);
       migrated[finalKey]={...d,turno,fecha};
     });
@@ -7002,11 +7031,14 @@ function confirmMAddLinea(){
 async function removeMLinea(ln){
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
+  const ent=_armGetEntry(ln,turnoScope,fechaScope);
+  const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
+  const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _armDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();
-  const rem=await tbDeleteArmadoLineaRemote(ln,turnoScope,fechaScope,'moldes');
-  rtPushArmadoCloud();
+  const rem=await tbDeleteArmadoLineaRemote(ln,turnoDel,fechaDel,'moldes');
+  try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
   renderMArmado();
   if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
   else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+(rem.err||'Revisa sesión, rol o RLS en Supabase.'),'warning');
@@ -8230,7 +8262,7 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
   if(!_tbSb)return{ok:false,err:'Sin cliente Supabase'};
   const ln=String(linea||'').trim().toUpperCase();
   const t=String(turno||'dia').trim();
-  const f=String(fecha||'').trim();
+  const f=_tbNormYmd(fecha)||String(fecha||'').trim().slice(0,10);
   const a=String(area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
   if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(f))return{ok:false,err:'Fecha o línea inválida para borrar en la nube'};
   try{
@@ -8317,10 +8349,10 @@ const TBSync={
   },
   /** Sube ya moldes/pesajes/armado (cancela el debounce). Tras registrar en planta. */
   pushImmediate(){
-    if(!_tbSb)return;
+    if(!_tbSb)return Promise.resolve();
     if(this._pushTimer){clearTimeout(this._pushTimer);this._pushTimer=null;}
     this._pushQueued=false;
-    this.pushAll();
+    return this.pushAll();
   },
   _sigRows(rows,pk){
     const list=(rows||[]).slice().sort((a,b)=>String(a[pk]||'').localeCompare(String(b[pk]||'')));
@@ -8378,7 +8410,8 @@ const TBSync={
           const meta=_armParseKey(key);
           const linea=String(meta.linea||'').trim().toUpperCase();
           const turno=String(d.turno||meta.turno||'dia').trim();
-          const fecha=String(d.fecha||meta.fecha||today).trim();
+          const fechaRaw=String(d.fecha||meta.fecha||today).trim();
+          const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
           const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
           armadoByKey.set(k,{
             linea,
@@ -8463,7 +8496,7 @@ const TBSync={
       if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
       const area=String(rec.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
       const turno=rec.turno||'dia';
-      const fecha=rec.fecha||'';
+      const fecha=_tbNormYmd(rec.fecha)||String(rec.fecha||'').trim().slice(0,10)||'';
       if(p.eventType==='DELETE'){
         if(area==='pesaje')_pArmDeleteEntry(rec.linea,turno,fecha);
         else _armDeleteEntry(rec.linea,turno,fecha);
