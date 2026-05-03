@@ -8314,11 +8314,20 @@ function _tbFechaEqFromRow(v){
   }
   return _tbNormYmd(v)||String(v).trim().slice(0,10);
 }
+/** Turno estable para comparar: quita marcas Unicode (día/Día → dia). Evita fallar .eq contra Postgres que guarda «dia». */
+function _tbNormTurnoKey(s){
+  try{
+    const x=String(s==null||s===''?'dia':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return x||'dia';
+  }catch(e){
+    return String(s==null||s===''?'dia':s).trim().toLowerCase()||'dia';
+  }
+}
 /** Borra la fila en Supabase `armado_lineas` (el upsert no quita filas; sin esto la línea vuelve con sync). @returns {{ok:boolean,err?:string}} */
 async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
   if(!_tbSb)return{ok:false,err:'Sin cliente Supabase'};
   const ln=String(linea||'').trim().toUpperCase();
-  const tWant=String(turno||'dia').trim().toLowerCase();
+  const tWant=_tbNormTurnoKey(turno);
   const fWant=_tbNormYmd(fecha)||String(fecha||'').trim().slice(0,10);
   const a=String(area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
   if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(fWant))return{ok:false,err:'Fecha o línea inválida para borrar en la nube'};
@@ -8329,7 +8338,7 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
       return{ok:false,err:selErr.message};
     }
     const list=rows||[];
-    const rtNorm=r=>{const x=String(r.turno==null?'':r.turno).trim().toLowerCase();return x||'dia';};
+    const rtNorm=r=>_tbNormTurnoKey(r.turno);
     const sameTf=r=>{
       const rf=_tbFechaEqFromRow(r.fecha);
       return rf===fWant&&rtNorm(r)===tWant;
@@ -8337,7 +8346,7 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
     let row=list.find(sameTf);
     if(!row){
       const byDate=list.filter(r=>_tbFechaEqFromRow(r.fecha)===fWant);
-      if(byDate.length===1)row=byDate[0];
+      if(byDate.length===1&&rtNorm(byDate[0])===tWant)row=byDate[0];
       else if(byDate.length>1){
         row=byDate.find(r=>rtNorm(r)===tWant);
         if(!row){
@@ -8352,8 +8361,10 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
     }
     if(!row){
       try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
+      const hayAlgunaConEsaFecha=list.some(r=>_tbFechaEqFromRow(r.fecha)===fWant);
+      if(list.length>0&&!hayAlgunaConEsaFecha)return{ok:true};
       if(list.length>0){
-        const hint=list.slice(0,8).map(r=>rtNorm(r)+'@'+_tbFechaEqFromRow(r.fecha)).join(' · ');
+        const hint=list.slice(0,8).map(r=>rtNorm(r)+'@'+(_tbFechaEqFromRow(r.fecha)||'(sin fecha)')).join(' · ');
         return{ok:false,err:'No hay fila en la nube para '+ln+' con turno «'+tWant+'» y fecha '+fWant+'. En Supabase figura: '+hint+(list.length>8?'…':'')};
       }
       return{ok:true};
