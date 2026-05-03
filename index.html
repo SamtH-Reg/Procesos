@@ -1705,6 +1705,10 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Guardar día
         </button>
+        <button class="btn ghost sm" type="button" onclick="syncMArmadoScopeDesdeMRegistrar()" title="Igual que en Pesaje › «Desde Moldes»: alinea turno y fecha con Moldes › Registrar para ver y borrar las mismas líneas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
+          Desde Registrar
+        </button>
       </div>
       <div id="mArmadoCopiaHint" style="display:none;margin-bottom:12px;padding:12px 14px;background:color-mix(in srgb,var(--safety-blue) 10%,var(--surface));border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);line-height:1.45;"></div>
       <div id="mArmadoList"></div>
@@ -6322,20 +6326,26 @@ function confirmPAddLinea(){
   const key='L'+n;
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
-  if(_pArmGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
-  _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
+  const fechaKey=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
+  if(_pArmGetEntry(key,turnoScope,fechaKey)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
+  _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaKey},turnoScope,fechaKey);
   rtSave();rtPushArmadoCloud();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
 async function removePLinea(ln){
+  _ensureArmadoPesaje();
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
-  const ent=_pArmGetEntry(ln,turnoScope,fechaScope);
+  const Ln=String(ln||'').trim().toUpperCase();
+  const scopedRows=_pArmEntriesForScope(turnoScope,fechaScope);
+  const row=scopedRows.find(r=>String(r.linea||'').toUpperCase()===Ln);
+  const ent=(row&&row.data)||_pArmGetEntry(Ln,turnoScope,fechaScope);
   const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
   const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
-  _pArmDeleteEntry(ln,turnoScope,fechaScope);
+  if(row&&row.key&&RT.armadoPesaje&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,row.key))delete RT.armadoPesaje[row.key];
+  else _pArmDeleteEntry(Ln,turnoScope,fechaScope);
   rtSave();
-  const rem=await tbDeleteArmadoLineaRemote(ln,turnoDel,fechaDel,'pesaje');
+  const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
   try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
   renderPArmado();
   if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
@@ -6740,13 +6750,17 @@ function savePArmado(){
   if(turnoRaw!=='dia'&&turnoRaw!=='noche'){showToast('El turno de la línea es obligatorio','error');if(selTurno)selTurno.focus();return;}
   _editPArmado.turno=turnoRaw;
   const fe=document.getElementById('pArmFecha');
-  const fecha=(fe&&fe.value||'').trim();
-  if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
+  const fechaRaw=(fe&&fe.value||'').trim();
+  if(!fechaRaw){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
+  const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){showToast('Usa una fecha AAAA-MM-DD válida','error');if(fe)fe.focus();return;}
   _editPArmado.fecha=fecha;
   _editPArmado.especie=especie;
   const os=window._pArmModalOpenScope;
-  if(os&&String(os.fecha||'').trim())_pArmDeleteEntry(_editPLn,String(os.turno||'dia').trim(),String(os.fecha).trim());
-  else _pArmDeleteEntry(_editPLn,_getPArmScopeTurno(),_getPArmScopeFecha());
+  if(os&&String(os.fecha||'').trim()){
+    const fo=_tbNormYmd(os.fecha)||String(os.fecha).trim();
+    _pArmDeleteEntry(_editPLn,String(os.turno||'dia').trim(),fo);
+  }else _pArmDeleteEntry(_editPLn,_getPArmScopeTurno(),_getPArmScopeFecha());
   const target=JSON.parse(JSON.stringify(_editPArmado));
   target.especie=especie;
   _pArmSetEntry(_editPLn,target,turnoRaw,fecha);
@@ -6932,7 +6946,7 @@ function renderMArmado(){
     const trabs=_sortTrabajadoresArmadoChips(data.trabajadores||[],trabDbList);
     const p=data.planillero;
     const especie=data.especie||data.producto||'';
-    const fechaStr=data.fecha?data.fecha.split('-').reverse().join('/'):'';
+    const fechaStr=data.fecha?String(data.fecha).split('-').reverse().join('/'):'';
     return `<div class="line-card" style="margin-bottom:12px;">
       <div class="line-hdr">
         <div class="line-id">${esc(ln)}</div>
@@ -7024,20 +7038,26 @@ function confirmMAddLinea(){
   const key='L'+n;
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
-  if(_armGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
-  _armSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
+  const fechaKey=_tbNormYmd(fechaScope)||String(fechaScope||'').trim();
+  if(_armGetEntry(key,turnoScope,fechaKey)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
+  _armSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaKey},turnoScope,fechaKey);
   rtSave();rtPushArmadoCloud();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
 async function removeMLinea(ln){
+  _ensureArmadoMolde();
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
-  const ent=_armGetEntry(ln,turnoScope,fechaScope);
+  const Ln=String(ln||'').trim().toUpperCase();
+  const scopedRows=_armEntriesForScope(turnoScope,fechaScope);
+  const row=scopedRows.find(r=>String(r.linea||'').toUpperCase()===Ln);
+  const ent=(row&&row.data)||_armGetEntry(Ln,turnoScope,fechaScope);
   const turnoDel=String((ent&&ent.turno)||turnoScope||'dia').trim()||'dia';
   const fechaDel=_tbNormYmd((ent&&ent.fecha)||fechaScope)||_tbNormYmd(fechaScope)||String(fechaScope||'').trim().slice(0,10);
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
-  _armDeleteEntry(ln,turnoScope,fechaScope);
+  if(row&&row.key&&RT.armadoMolde&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,row.key))delete RT.armadoMolde[row.key];
+  else _armDeleteEntry(Ln,turnoScope,fechaScope);
   rtSave();
-  const rem=await tbDeleteArmadoLineaRemote(ln,turnoDel,fechaDel,'moldes');
+  const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
   try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(_){}
   renderMArmado();
   if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
@@ -7454,7 +7474,7 @@ function editMArmadoLinea(ln){
   const especies=_getEspecies();
   const currentEspecie=data.especie||data.producto||'';
   const especieIni=(currentEspecie&&especies.includes(currentEspecie))?currentEspecie:'';
-  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:especieIni,turno:data.turno||'dia',fecha:data.fecha||_getMArmScopeFecha()||''};
+  _editMArmado={planillero:data.planillero?{...data.planillero}:null,trabajadores:(data.trabajadores||[]).map(t=>({...t})),especie:especieIni,turno:data.turno||_getMArmScopeTurno()||'dia',fecha:data.fecha||_getMArmScopeFecha()};
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mArmadoModal';
   modal.innerHTML=`<div class="modal" style="max-width:720px;">
     <div class="modal-hdr"><div class="modal-title">Editar línea ${esc(ln)} — Moldes</div><button class="modal-x" type="button" onclick="closeMArmado()">×</button></div>
@@ -7612,6 +7632,27 @@ function syncPArmadoScopeDesdeMoldes(){
   if(n)showToast('Pesaje actualizado desde Moldes ('+n+' línea'+(n!==1?'s':'')+').','success');
   else showToast('No hay armado de Moldes con planillero o trabajadores para este turno/fecha.','info');
 }
+/** Moldes · Armado: alinea selectores con Moldes › Registrar (mismo criterio que Pesaje usa con «Desde Moldes»). */
+function syncMArmadoScopeDesdeMRegistrar(){
+  _mRegEnsureFechaDefault();
+  const st=document.getElementById('mArmScopeTurno');
+  const sf=document.getElementById('mArmScopeFecha');
+  const rt=document.getElementById('mRegTurno');
+  const rf=document.getElementById('mRegFechaArmado');
+  if(!st||!sf||!rt||!rf){showToast('No se encontraron los campos de turno/fecha','error');return;}
+  const rfv=String(rf.value||'').trim();
+  if(!_isValidYmd(rfv)){showToast('Define primero fecha de armado en Moldes › Registrar','warn');return;}
+  const rtv=String(rt.value||'').trim()||_inferTurnoCodigoPorHorario();
+  st.value=rtv;
+  sf.value=_tbNormYmd(rfv)||rfv;
+  renderMArmado();
+  if(window.renderMRegLinea)renderMRegLinea();
+  if(window.renderMRegTrab)renderMRegTrab();
+  if(window.renderMRegPresets)renderMRegPresets();
+  if(typeof mRegRefreshGate==='function')mRegRefreshGate();
+  if(typeof _updateMArmScopeStatus==='function')_updateMArmScopeStatus();
+  showToast('Armado moldes alineado con Registrar ('+sf.value+', '+rtv+').','success');
+}
 function _mArmUpdatePresetHint(){
   const hint=document.getElementById('mArmPresetHint');if(!hint)return;
   const esp=_editMArmado.especie;
@@ -7722,14 +7763,18 @@ function saveMArmado(){
   const turnoRaw=(selTurno&&selTurno.value)||'';
   if(turnoRaw!=='dia'&&turnoRaw!=='noche'){showToast('El turno de la línea es obligatorio','error');if(selTurno)selTurno.focus();return;}
   const fe=document.getElementById('mArmFecha');
-  const fecha=(fe&&fe.value||'').trim();
-  if(!fecha){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
+  const fechaRaw=(fe&&fe.value||'').trim();
+  if(!fechaRaw){showToast('La fecha de inicio es obligatoria','error');if(fe)fe.focus();return;}
+  const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){showToast('Usa una fecha AAAA-MM-DD válida','error');if(fe)fe.focus();return;}
   _editMArmado.especie=especie;
   _editMArmado.turno=turnoRaw;
   _editMArmado.fecha=fecha;
   const osM=window._mArmModalOpenScope;
-  if(osM&&String(osM.fecha||'').trim())_armDeleteEntry(_editMLn,String(osM.turno||'dia').trim(),String(osM.fecha).trim());
-  else _armDeleteEntry(_editMLn,_getMArmScopeTurno(),_getMArmScopeFecha());
+  if(osM&&String(osM.fecha||'').trim()){
+    const fo=_tbNormYmd(osM.fecha)||String(osM.fecha).trim();
+    _armDeleteEntry(_editMLn,String(osM.turno||'dia').trim(),fo);
+  }else _armDeleteEntry(_editMLn,_getMArmScopeTurno(),_getMArmScopeFecha());
   const target={
     planillero:_editMArmado.planillero,
     trabajadores:_editMArmado.trabajadores,
@@ -7768,6 +7813,7 @@ window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelec
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
 window.syncPArmadoLineaDesdeMoldes=syncPArmadoLineaDesdeMoldes;window.syncPArmadoScopeDesdeMoldes=syncPArmadoScopeDesdeMoldes;
+window.syncMArmadoScopeDesdeMRegistrar=syncMArmadoScopeDesdeMRegistrar;
 window.onMArmScopeChange=onMArmScopeChange;window.onMArmScopeTurnoPick=onMArmScopeTurnoPick;
 
 /* ═══ EMPAQUE — Registrar + lotes ══════════════════════════════ */
