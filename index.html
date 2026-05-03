@@ -6045,12 +6045,6 @@ function _ensureArmadoPesaje(){
     return;
   }
   RT.armadoPesaje=migrated;
-  if(!Object.keys(RT.armadoPesaje).length){
-    const fd=nowDate();
-    ['L1','L2','L3'].forEach(ln=>{
-      RT.armadoPesaje[_armScopeKey(ln,'dia',fd)]={planillero:null,trabajadores:[],especie:'',turno:'dia',fecha:fd};
-    });
-  }
 }
 function _getPArmScopeTurno(){
   const el=document.getElementById('pArmScopeTurno');
@@ -6197,15 +6191,17 @@ function addPLinea(){
   const fechaScope=_getPArmScopeFecha();
   const existentes=_pArmEntriesForScope(turnoScope,fechaScope).map(r=>r.linea);
   let nextN=1;while(existentes.indexOf('L'+nextN)>=0)nextN++;
-  const sugerido='L'+nextN;
-  // Modal propio (prompt() es poco fiable en tablet)
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='pAddLineaModal';
   modal.innerHTML=`<div class="modal" style="max-width:420px;">
     <div class="modal-hdr"><div class="modal-title">Agregar línea de pesaje</div><button class="modal-x" onclick="closePAddLinea()">×</button></div>
     <div class="modal-body">
       <div class="form-field">
-        <label class="form-label">Nombre de la línea</label>
-        <input class="input" id="pAddLineaInput" value="${sugerido}" placeholder="L1, L2, L3..." autocomplete="off" style="font-size:16px;">
+        <label class="form-label">Número de línea</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="mono" style="font-size:17px;font-weight:800;padding:10px 12px;background:var(--surface-alt);border-radius:10px;border:1px solid var(--border);letter-spacing:.02em;">L</span>
+          <input class="input" id="pAddLineaNum" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${nextN}" placeholder="1" autocomplete="off" style="font-size:16px;max-width:100px;">
+        </div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;">Solo cambia el número; el prefijo <strong>L</strong> queda fijo (ej. L1, L12).</div>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:6px;">Líneas actuales: ${existentes.length?existentes.join(', '):'(ninguna)'}</div>
     </div>
@@ -6215,16 +6211,26 @@ function addPLinea(){
     </div>
   </div>`;
   document.body.appendChild(modal);
-  setTimeout(()=>{const inp=document.getElementById('pAddLineaInput');if(inp){inp.focus();inp.select();inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmPAddLinea();}});}},50);
+  setTimeout(()=>{
+    const inp=document.getElementById('pAddLineaNum');
+    if(inp){
+      inp.focus();inp.select();
+      inp.addEventListener('input',()=>{inp.value=String(inp.value||'').replace(/\D/g,'').slice(0,3);});
+      inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmPAddLinea();}});
+    }
+  },50);
 }
 function closePAddLinea(){const m=document.getElementById('pAddLineaModal');if(m)m.remove();}
 function confirmPAddLinea(){
-  const inp=document.getElementById('pAddLineaInput');if(!inp)return;
-  const key=(inp.value||'').trim().toUpperCase();
-  if(!key){showToast('Nombre inválido','error');inp.focus();return;}
+  const numEl=document.getElementById('pAddLineaNum');if(!numEl)return;
+  const digits=String(numEl.value||'').replace(/\D/g,'');
+  if(!digits){showToast('Indica el número de línea','error');numEl.focus();return;}
+  const n=parseInt(digits,10);
+  if(!n||n<1||n>999){showToast('Usa un número entre 1 y 999','error');numEl.focus();return;}
+  const key='L'+n;
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
-  if(_pArmGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');inp.focus();return;}
+  if(_pArmGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
   _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
@@ -6828,14 +6834,17 @@ function addMLinea(){
   const fechaScope=_getMArmScopeFecha();
   const existentes=_armEntriesForScope(turnoScope,fechaScope).map(r=>r.linea);
   let nextN=1;while(existentes.indexOf('L'+nextN)>=0)nextN++;
-  const sugerido='L'+nextN;
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='mAddLineaModal';
   modal.innerHTML=`<div class="modal" style="max-width:420px;">
     <div class="modal-hdr"><div class="modal-title">Agregar línea de moldes</div><button class="modal-x" onclick="closeMAddLinea()">×</button></div>
     <div class="modal-body">
       <div class="form-field">
-        <label class="form-label">Nombre de la línea</label>
-        <input class="input" id="mAddLineaInput" value="${sugerido}" placeholder="L1, L2, L3..." autocomplete="off" style="font-size:16px;">
+        <label class="form-label">Número de línea</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="mono" style="font-size:17px;font-weight:800;padding:10px 12px;background:var(--surface-alt);border-radius:10px;border:1px solid var(--border);letter-spacing:.02em;">L</span>
+          <input class="input" id="mAddLineaNum" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${nextN}" placeholder="1" autocomplete="off" style="font-size:16px;max-width:100px;">
+        </div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;">Solo cambia el número; el prefijo <strong>L</strong> queda fijo (ej. L1, L12).</div>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:6px;">Líneas actuales: ${existentes.length?existentes.join(', '):'(ninguna)'}</div>
     </div>
@@ -6845,16 +6854,26 @@ function addMLinea(){
     </div>
   </div>`;
   document.body.appendChild(modal);
-  setTimeout(()=>{const inp=document.getElementById('mAddLineaInput');if(inp){inp.focus();inp.select();inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmMAddLinea();}});}},50);
+  setTimeout(()=>{
+    const inp=document.getElementById('mAddLineaNum');
+    if(inp){
+      inp.focus();inp.select();
+      inp.addEventListener('input',()=>{inp.value=String(inp.value||'').replace(/\D/g,'').slice(0,3);});
+      inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();confirmMAddLinea();}});
+    }
+  },50);
 }
 function closeMAddLinea(){const m=document.getElementById('mAddLineaModal');if(m)m.remove();}
 function confirmMAddLinea(){
-  const inp=document.getElementById('mAddLineaInput');if(!inp)return;
-  const key=(inp.value||'').trim().toUpperCase();
-  if(!key){showToast('Nombre inválido','error');inp.focus();return;}
+  const numEl=document.getElementById('mAddLineaNum');if(!numEl)return;
+  const digits=String(numEl.value||'').replace(/\D/g,'');
+  if(!digits){showToast('Indica el número de línea','error');numEl.focus();return;}
+  const n=parseInt(digits,10);
+  if(!n||n<1||n>999){showToast('Usa un número entre 1 y 999','error');numEl.focus();return;}
+  const key='L'+n;
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
-  if(_armGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');inp.focus();return;}
+  if(_armGetEntry(key,turnoScope,fechaScope)){showToast('Esa línea ya existe para este turno/fecha','error');numEl.focus();return;}
   _armSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
