@@ -3757,6 +3757,9 @@ function _armDeleteEntry(linea,turno,fecha){
   if(!RT.armadoMolde)return;
   const k=_armScopeKey(linea,turno,fecha);
   if(k in RT.armadoMolde)delete RT.armadoMolde[k];
+  const L=String(linea||'').trim().toUpperCase();
+  const leg=RT.armadoMolde[L];
+  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&String(leg.fecha||'')===String(fecha||''))delete RT.armadoMolde[L];
 }
 function _armEntriesForScope(turno,fecha){
   const out=[];
@@ -3790,6 +3793,9 @@ function _pArmDeleteEntry(linea,turno,fecha){
   if(!RT.armadoPesaje)return;
   const k=_armScopeKey(linea,turno,fecha);
   if(k in RT.armadoPesaje)delete RT.armadoPesaje[k];
+  const L=String(linea||'').trim().toUpperCase();
+  const leg=RT.armadoPesaje[L];
+  if(leg&&String(leg.turno||'dia')===String(turno||'dia')&&String(leg.fecha||'')===String(fecha||''))delete RT.armadoPesaje[L];
 }
 function _pArmEntriesForScope(turno,fecha){
   const out=[];
@@ -6297,12 +6303,17 @@ function confirmPAddLinea(){
   _pArmSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();rtPushArmadoCloud();closePAddLinea();renderPArmado();showToast('Línea '+key+' creada','success');
 }
-function removePLinea(ln){
+async function removePLinea(ln){
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _pArmDeleteEntry(ln,turnoScope,fechaScope);
-  rtSave();rtPushArmadoCloud();renderPArmado();showToast('Línea '+ln+' eliminada','success');
+  rtSave();
+  const rem=await tbDeleteArmadoLineaRemote(ln,turnoScope,fechaScope,'pesaje');
+  rtPushArmadoCloud();
+  renderPArmado();
+  if(rem||!_tbSb)showToast('Línea '+ln+' eliminada','success');
+  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). Revisa sesión o red.','warning');
 }
 function guardarPArmadoSnapshot(){
   _ensureArmadoPesaje();
@@ -6988,12 +6999,17 @@ function confirmMAddLinea(){
   _armSetEntry(key,{planillero:null,trabajadores:[],especie:'',turno:turnoScope,fecha:fechaScope},turnoScope,fechaScope);
   rtSave();rtPushArmadoCloud();closeMAddLinea();renderMArmado();showToast('Línea '+key+' creada','success');
 }
-function removeMLinea(ln){
+async function removeMLinea(ln){
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _armDeleteEntry(ln,turnoScope,fechaScope);
-  rtSave();rtPushArmadoCloud();renderMArmado();showToast('Línea '+ln+' eliminada','success');
+  rtSave();
+  const rem=await tbDeleteArmadoLineaRemote(ln,turnoScope,fechaScope,'moldes');
+  rtPushArmadoCloud();
+  renderMArmado();
+  if(rem||!_tbSb)showToast('Línea '+ln+' eliminada','success');
+  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). Revisa sesión o red.','warning');
 }
 function openMoverTrabArmadoMoldeFromChip(btn){
   if(!btn)return;
@@ -8201,6 +8217,21 @@ try{
 }catch(e){console.warn('[sb] init',e);}
 /** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
+/** Borra la fila en Supabase `armado_lineas` (el upsert no quita filas; sin esto la línea vuelve con sync). */
+async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
+  if(!_tbSb)return false;
+  const ln=String(linea||'').trim().toUpperCase();
+  const t=String(turno||'dia').trim();
+  const f=String(fecha||'').trim();
+  const a=String(area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+  if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(f))return false;
+  try{
+    const{error}=await _tbSb.from('armado_lineas').delete().eq('linea',ln).eq('turno',t).eq('fecha',f).eq('area',a);
+    if(error){console.warn('[sb delete armado_lineas]',error.message);return false;}
+    try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
+    return true;
+  }catch(e){console.warn('[sb delete armado_lineas]',e);return false;}
+}
 
 const TBSync={
   _pushLastAt:0,
