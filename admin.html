@@ -915,6 +915,29 @@ function _adminInferTurnoCodigoPorHorario(){
   if(activos.find(x=>String(x.codigo)===fb))return fb;
   return String(activos[0].codigo||'dia');
 }
+/** Orden visual de horas en un turno (paridad con index: noche 19…23 luego 0…6). */
+function _adminSortHoursChronologicalInTurn(hours,aMin,bMin){
+  if(!hours||!hours.length)return[];
+  if(aMin==null||bMin==null)return hours.slice().sort((x,y)=>x-y);
+  if(bMin>aMin)return hours.slice().sort((x,y)=>x-y);
+  const norm=h=>{const m=h*60+30;return m>=aMin?m:m+24*60;};
+  return hours.slice().sort((x,y)=>norm(x)-norm(y));
+}
+/** Columnas de hora según filtro de turno del dashboard (misma idea que _mResumenHourColsFromFiltro en index). */
+function _adminResumenHourColsFromFiltro(rows,filtro){
+  const obs=new Set();
+  (rows||[]).forEach(r2=>{const m=(r2.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
+  const arr=[...obs];
+  if(!arr.length)return[];
+  const f=String(filtro||'').trim()||'todos';
+  if(f==='todos')return arr.sort((a,b)=>a-b);
+  const code=f==='actual'?(_adminInferTurnoCodigoPorHorario()||'dia'):f;
+  const tu=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===String(code).toLowerCase());
+  const a=tu?_adminParseHMToMinutes(tu.inicio):null,b=tu?_adminParseHMToMinutes(tu.fin):null;
+  if(a==null||b==null)return arr.sort((x,y)=>x-y);
+  return _adminSortHoursChronologicalInTurn(arr,a,b);
+}
+function _adminFmtHoraResumenTh(h){return String(h)+':'+String(0).padStart(2,'0');}
 /** Tras traer de Supabase: conserva filas que solo existen en esta PC (tablet sin subir aún). */
 function _rtMergeRemoteWithLocal(localArr,remoteArr){
   const remote=Array.isArray(remoteArr)?remoteArr:[];
@@ -2068,47 +2091,87 @@ function drawTableWidget(w,moldes,pesajes){
       host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">'+(lineF?'Sin registros para <strong>'+esc(lineF)+'</strong>':'Sin registros')+'</div>';
       return;
     }
-    const hoursSet=new Set();src.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));});
-    const hours=[...hoursSet].sort((a,b)=>a-b);
+    const filtroTurno=String(_filters.turno||'').trim()||'todos';
+    const hours=_adminResumenHourColsFromFiltro(src,filtroTurno);
+    if(!hours.length){
+      host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin horas en datos para este filtro.</div>';
+      return;
+    }
+    const isMol=w.type==='pv-hora-mol';
     const map={};
     src.forEach(r=>{
-      const lin=r.linea||'—', esp=r.especie||'—', nom=r.nombre||'—';
-      const k=lineF?(esp+'\u0001'+nom):(lin+'\u0001'+esp+'\u0001'+nom);
-      if(!map[k])map[k]={lin,esp,nom,byH:{},tot:0,cant:0};
-      const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
-      const v=+r.kg||0;
-      if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+v;
-      map[k].tot+=v;
-      if(w.type==='pv-hora-mol')map[k].cant+=(+r.cant||0);
+      const nom=r.nombre||'—';
+      const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1],10):null;
+      if(isMol){
+        const prod=String(r.producto||r.preset||'—').trim()||'—';
+        const tid=String(r.trabId||nom);
+        const k=tid+'\u0001'+prod;
+        if(!map[k])map[k]={nom, prod, byH:{},totCant:0,totKg:0};
+        const cant=+r.cant||0,kg=+r.kg||0;
+        if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+cant;
+        map[k].totCant+=cant;
+        map[k].totKg+=kg;
+      }else{
+        const esp=String(r.especie||'—').trim()||'—';
+        const k=String(r.trabId||nom)+'\u0001'+esp;
+        if(!map[k])map[k]={nom, esp, byH:{},tot:0};
+        const kg=+r.kg||0;
+        if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+kg;
+        map[k].tot+=kg;
+      }
     });
-    const rows=Object.values(map).sort((a,b)=>lineF?(a.esp+a.nom).localeCompare(b.esp+b.nom):(a.lin+a.esp+a.nom).localeCompare(b.lin+b.esp+b.nom));
-    const totCol={};let gt=0;rows.forEach(r=>{hours.forEach(h=>totCol[h]=(totCol[h]||0)+(r.byH[h]||0));gt+=r.tot;});
-    const cantHdr=w.type==='pv-hora-mol'?'<th class="num">Cant</th>':'';
-    const cantTot=w.type==='pv-hora-mol'?`<th class="num">${_fmtInt(rows.reduce((s,r)=>s+r.cant,0))}</th>`:'';
-    const thLinea=lineF?'':'<th>Línea</th>';
-    const footSpan=lineF?2:3;
-    html=`<table>
+    const rows=Object.values(map).sort((a,b)=>{
+      if(isMol)return a.nom.localeCompare(b.nom)||a.prod.localeCompare(b.prod);
+      return a.nom.localeCompare(b.nom)||a.esp.localeCompare(b.esp);
+    });
+    const totCol={};
+    if(isMol){
+      let totGrandCant=0,totGrandKg=0;
+      rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byH[h]||0);});totGrandCant+=r.totCant;totGrandKg+=r.totKg;});
+      html=`<table>
       <thead><tr>
-        ${thLinea}<th>Especie</th><th>Operario</th>
-        ${hours.map(h=>`<th class="num">${String(h).padStart(2,'0')}h</th>`).join('')}
-        ${cantHdr}<th class="num">Total kg</th>
+        <th>Operario</th><th>Producto</th>
+        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}
+        <th class="num">Moldes</th><th class="num">KG</th>
       </tr></thead>
       <tbody>`+
       rows.map(r=>`<tr>
-        ${lineF?'':`<td><strong>${esc(r.lin)}</strong></td>`}
-        <td>${esc(r.esp)}</td>
-        <td>${esc(r.nom)}</td>
+        <td><strong>${esc(r.nom)}</strong></td>
+        <td style="color:var(--text-2);">${esc(r.prod)}</td>
+        ${hours.map(h=>`<td class="num">${r.byH[h]?_fmtInt(r.byH[h]):'—'}</td>`).join('')}
+        <td class="num"><strong>${_fmtInt(r.totCant)}</strong></td>
+        <td class="num"><strong>${_fmt(r.totKg)}</strong></td>
+      </tr>`).join('')+
+      `</tbody>
+      <tfoot><tr>
+        <td colspan="2">TOTAL</td>
+        ${hours.map(h=>`<td class="num">${totCol[h]?_fmtInt(totCol[h]):'—'}</td>`).join('')}
+        <td class="num"><strong>${_fmtInt(totGrandCant)}</strong></td>
+        <td class="num"><strong>${_fmt(totGrandKg)}</strong></td>
+      </tr></tfoot></table>`;
+    }else{
+      let gt=0;
+      rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byH[h]||0);});gt+=r.tot;});
+      html=`<table>
+      <thead><tr>
+        <th>Operario</th><th>Especie</th>
+        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}
+        <th class="num">Total kg</th>
+      </tr></thead>
+      <tbody>`+
+      rows.map(r=>`<tr>
+        <td><strong>${esc(r.nom)}</strong></td>
+        <td style="color:var(--text-2);">${esc(r.esp)}</td>
         ${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}
-        ${w.type==='pv-hora-mol'?`<td class="num">${_fmtInt(r.cant)}</td>`:''}
         <td class="num"><strong>${_fmt(r.tot)}</strong></td>
       </tr>`).join('')+
       `</tbody>
       <tfoot><tr>
-        <td colspan="${footSpan}">TOTAL</td>
+        <td colspan="2">TOTAL</td>
         ${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}
-        ${cantTot}
         <td class="num">${_fmt(gt)}</td>
       </tr></tfoot></table>`;
+    }
   } else if(w.type==='pv-consol-mol'){
     if(!moldes.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
     const hoursSet=new Set();const linSet=new Set();
