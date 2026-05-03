@@ -1700,17 +1700,13 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Agregar línea
         </button>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" type="button" onclick="guardarMArmadoSnapshot()" title="Guardar estado actual del armado de moldes (este turno/fecha) como referencia">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Guardar día
+        </button>
       </div>
-      <div style="margin-bottom:14px;padding:12px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);line-height:1.45;">
-        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:600;color:var(--text);">
-          <input type="checkbox" id="mArmSyncCloudCb" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--brand);" onchange="tbOnArmadoSyncCloudToggle(this)">
-          <span>Recibir armado desde la nube (pull al sincronizar y cambios en tiempo real). Desmarcado = solo líneas creadas aquí con «Agregar línea».</span>
-        </label>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <button class="btn ghost sm" type="button" onclick="tbPullArmadoLineasManual()">Traer armado desde la nube ahora</button>
-          <span style="font-size:11px;color:var(--text-3);">Una descarga puntual; no cambia la casilla anterior.</span>
-        </div>
-      </div>
+      <div id="mArmadoCopiaHint" style="display:none;margin-bottom:12px;padding:12px 14px;background:color-mix(in srgb,var(--safety-blue) 10%,var(--surface));border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);line-height:1.45;"></div>
       <div id="mArmadoList"></div>
     </div>
 
@@ -2154,6 +2150,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           Desde Moldes
         </button>
       </div>
+      <div id="pArmadoCopiaHint" style="display:none;margin-bottom:12px;padding:12px 14px;background:color-mix(in srgb,var(--safety-blue) 10%,var(--surface));border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);line-height:1.45;"></div>
       <div id="pArmadoList"></div>
     </div>
     <div id="pVer" class="pes-tab hidden">
@@ -3578,6 +3575,12 @@ function _addDaysLocalYmd(ymd,deltaDays){
   const p=n=>String(n).padStart(2,'0');
   return dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate());
 }
+/** Fecha (AAAA-MM-DD) del armado homólogo anterior: mismo código de turno (día↔día, noche↔noche), ancla al día calendario previo del inicio del ciclo. */
+function _armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoCod){
+  const f=String(fechaRef||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return f;
+  return _addDaysLocalYmd(f,-1);
+}
 /**
  * Fecha de armado / registro según turno:
  * - Día: calendario actual (jornada 07:00–antes de 19:00 = hasta ~18 h).
@@ -3801,6 +3804,37 @@ function _pArmEntriesForScope(turno,fecha){
   });
   _sortArmadoLineRows(out);
   return out;
+}
+/** Aplica filas remotas de `armado_lineas` (moldes + pesaje); persiste RT y refresca UI. */
+function _applyRemoteArmadoLineasRows(armData){
+  if(!armData||!armData.length)return 0;
+  if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+  armData.forEach(row=>{
+    const payload={
+      planillero:row.planillero||null,
+      trabajadores:row.trabajadores||[],
+      especie:row.especie||'',
+      turno:row.turno||'dia',
+      fecha:row.fecha||''
+    };
+    const turno=row.turno||'dia';
+    const fecha=row.fecha||'';
+    const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+    if(area==='pesaje')_pArmSetEntry(row.linea,payload,turno,fecha);
+    else _armSetEntry(row.linea,payload,turno,fecha);
+  });
+  _rtSaveOrig&&_rtSaveOrig();
+  if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
+  if(typeof renderMArmado==='function')renderMArmado();
+  if(typeof renderMRegLinea==='function')renderMRegLinea();
+  if(typeof renderMRegTrab==='function')renderMRegTrab();
+  if(typeof renderPArmado==='function')renderPArmado();
+  if(typeof renderPRegLinea==='function')renderPRegLinea();
+  if(typeof renderPRegTrab==='function')renderPRegTrab();
+  if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
+  if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
+  return armData.length;
 }
 
 /** L1, L2, … L9, L10 (no orden léxico L1, L10, L2). */
@@ -6132,8 +6166,19 @@ function _applyMarcaCopiaArmadoPesaje(fechaSnap,guardadoSnap){
 function _renderPArmadoCopiaBanner(){
   const el=document.getElementById('pArmadoCopiaHint');
   if(!el)return;
-  el.style.display='none';
-  el.innerHTML='';
+  const turno=_getPArmScopeTurno();
+  const fecha=String(_getPArmScopeFecha()||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){
+    el.style.display='none';
+    el.innerHTML='';
+    return;
+  }
+  const fPrev=_armFechaOrigenCopiaTurnoAnterior(fecha,turno);
+  const fPrevLbl=fPrev.split('-').reverse().join('/');
+  const fCurLbl=fecha.split('-').reverse().join('/');
+  const tLbl=turno==='noche'?'Noche':'Día';
+  el.style.display='';
+  el.innerHTML='💡 <strong>Turno '+esc(tLbl)+' · '+esc(fCurLbl)+':</strong> en <em>Editar</em> línea usa <strong>Copiar del turno anterior</strong> (referencia <strong>'+esc(fPrevLbl)+'</strong>, misma línea y mismo día/noche). <strong>Guardar día</strong> guarda este armado como respaldo local.';
 }
 function renderPArmado(){
   const box=document.getElementById('pArmadoList');if(!box)return;
@@ -6269,6 +6314,16 @@ function guardarPArmadoSnapshot(){
   };
   rtSave();rtPushArmadoCloud();showToast('Armado guardado como referencia de día anterior','success');
 }
+function guardarMArmadoSnapshot(){
+  _ensureArmadoMolde();
+  _setMArmScopeDefaults();
+  RT.armadoMoldeSnapshot={
+    fecha:new Date().toLocaleDateString('es-CL'),
+    guardadoEn:new Date().toLocaleString('es-CL'),
+    data:_cloneArmadoMoldeSinMarcasCopia()
+  };
+  rtSave();rtPushArmadoCloud();showToast('Armado moldes guardado como referencia','success');
+}
 
 /* Editor de línea: planillero + lista de trabajadores con buscar/agregar/cambiar ficha/eliminar */
 let _editPLn=null;
@@ -6312,13 +6367,13 @@ function editPArmadoLinea(ln){
       </div>
       <div style="margin-bottom:14px;padding:12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
         <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;">
-          Origen de la copia (misma línea <strong>${esc(ln)}</strong> y mismo turno): armado del <strong id="pArmModalCopySourceDate" style="color:#0369a1;font-size:15px;">—</strong>
+          Origen sugerido (misma línea <strong>${esc(ln)}</strong>, mismo código de turno — día con día, noche con noche): <strong id="pArmModalCopySourceDate" style="color:#0369a1;font-size:15px;">—</strong>
         </div>
-        <button class="btn ghost" type="button" onclick="copiarPArmadoModalDiaAnterior()" title="Misma línea y mismo turno (día/noche): trae planillero y trabajadores del día calendario anterior a la fecha de inicio">
+        <button class="btn ghost" type="button" onclick="copiarPArmadoModalDiaAnterior()" title="Copia planillero y trabajadores del turno anterior homólogo (misma línea y mismo día/noche)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copiar armado día anterior
+          Copiar del turno anterior
         </button>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong> al copiar; solo se rellenan planillero y trabajadores desde el día indicado arriba. La <strong>especie</strong> elegida arriba se conserva (igual que en moldes).</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong>; solo se rellenan planillero y trabajadores desde la referencia mostrada. La <strong>especie</strong> elegida arriba se conserva.</div>
       </div>
 
       <!-- PLANILLERO LÍNEA -->
@@ -6531,19 +6586,23 @@ function addPArmTrabManual(){
   renderPArmModal();
   showToast(nombre.toUpperCase()+' agregado','success');
 }
-/** Actualiza en el modal la fecha (DD-MM-AAAA) desde la que se copiaría: un día calendario antes de la fecha de inicio. mod: 'p' pesaje | 'm' moldes */
+/** Muestra la fecha de referencia del turno homólogo anterior (día↔día, noche↔noche). mod: 'p' pesaje | 'm' moldes */
 function _armModalUpdateCopySourceHint(mod){
   const dateEl=document.getElementById(mod==='m'?'mArmModalCopySourceDate':'pArmModalCopySourceDate');
   const fe=document.getElementById(mod==='m'?'mArmFecha':'pArmFecha');
+  const turnoEl=document.getElementById(mod==='m'?'mArmTurno':'pArmTurno');
   if(!dateEl)return;
   if(!fe||!/^\d{4}-\d{2}-\d{2}$/.test(String(fe.value||'').trim())){
     dateEl.textContent='— (indica fecha de inicio)';
     return;
   }
-  const prev=_addDaysLocalYmd(fe.value.trim(),-1);
-  dateEl.textContent=prev.split('-').reverse().join('/');
+  const fechaRef=fe.value.trim();
+  const turnoRaw=(turnoEl&&String(turnoEl.value||'').trim())||'dia';
+  const prev=_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
+  const tLbl=String(turnoRaw).toLowerCase()==='noche'?'Noche':'Día';
+  dateEl.textContent=prev.split('-').reverse().join('/')+' · '+tLbl+' anterior';
 }
-/** Desde el modal de edición: copia planillero + trabajadores de la misma línea y turno (día/noche) en la fecha calendario anterior a la fecha de inicio mostrada. No altera la fecha ni el turno del armado que estás editando. */
+/** Desde el modal: copia planillero + trabajadores del turno homólogo anterior (misma línea, mismo código día/noche). No cambia la fecha de inicio del armado que editas. */
 function copiarPArmadoModalDiaAnterior(){
   if(!_editPLn||!_editPArmado){showToast('Cierra y vuelve a abrir el editor','error');return;}
   const selTurno=document.getElementById('pArmTurno');
@@ -6552,7 +6611,7 @@ function copiarPArmadoModalDiaAnterior(){
   const fe=document.getElementById('pArmFecha');
   const fechaRef=String((fe&&fe.value)||_editPArmado.fecha||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)){showToast('Indica una fecha de inicio válida (AAAA-MM-DD)','error');if(fe)fe.focus();return;}
-  const fechaPrev=_addDaysLocalYmd(fechaRef,-1);
+  const fechaPrev=_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
   _ensureArmadoPesaje();
   const src=_pArmGetEntry(_editPLn,turnoRaw,fechaPrev);
   const nTrab=src&&(src.trabajadores||[]).length||0;
@@ -6582,7 +6641,7 @@ function copiarPArmadoModalDiaAnterior(){
   renderPArmModal();
   showToast('Copiado desde '+fAnt+' · Revisa fichas y pulsa Guardar línea','success');
 }
-/** Igual que pesaje: copia planillero + trabajadores del armado de moldes del día calendario anterior (misma línea y turno). No cambia fecha ni turno del editor; la especie del formulario se conserva. */
+/** Copia planillero + trabajadores del turno homólogo anterior en moldes (misma línea, mismo día/noche). Conserva la especie del formulario. */
 function copiarMArmadoModalDiaAnterior(){
   if(!_editMLn||!_editMArmado){showToast('Cierra y vuelve a abrir el editor','error');return;}
   const selTurno=document.getElementById('mArmTurno');
@@ -6591,7 +6650,7 @@ function copiarMArmadoModalDiaAnterior(){
   const fe=document.getElementById('mArmFecha');
   const fechaRef=String((fe&&fe.value)||_editMArmado.fecha||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)){showToast('Indica una fecha de inicio válida (AAAA-MM-DD)','error');if(fe)fe.focus();return;}
-  const fechaPrev=_addDaysLocalYmd(fechaRef,-1);
+  const fechaPrev=_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
   _ensureArmadoMolde();
   const src=_armGetEntry(_editMLn,turnoRaw,fechaPrev);
   const nTrab=src&&(src.trabajadores||[]).length||0;
@@ -6796,14 +6855,23 @@ function _applyMarcaCopiaArmadoMolde(fechaSnap,guardadoSnap){
 function _renderMArmadoCopiaBanner(){
   const el=document.getElementById('mArmadoCopiaHint');
   if(!el)return;
-  el.style.display='none';
-  el.innerHTML='';
+  const turno=_getMArmScopeTurno();
+  const fecha=String(_getMArmScopeFecha()||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){
+    el.style.display='none';
+    el.innerHTML='';
+    return;
+  }
+  const fPrev=_armFechaOrigenCopiaTurnoAnterior(fecha,turno);
+  const fPrevLbl=fPrev.split('-').reverse().join('/');
+  const fCurLbl=fecha.split('-').reverse().join('/');
+  const tLbl=turno==='noche'?'Noche':'Día';
+  el.style.display='';
+  el.innerHTML='💡 <strong>Turno '+esc(tLbl)+' · '+esc(fCurLbl)+':</strong> para reutilizar el equipo del <strong>mismo tipo de turno anterior</strong>, abre una línea con <em>Editar</em> y pulsa <strong>Copiar del turno anterior</strong> (referencia <strong>'+esc(fPrevLbl)+'</strong>, misma línea). También puedes usar <strong>Guardar día</strong> como respaldo local.';
 }
 function renderMArmado(){
   const box=document.getElementById('mArmadoList');if(!box)return;
   window.__mArmRenderDepth=(window.__mArmRenderDepth||0)+1;
-  const syncCb=document.getElementById('mArmSyncCloudCb');
-  if(syncCb)syncCb.checked=tbSyncArmadoCloudEnabled();
   const trabDbList=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
   try{
   _ensureArmadoMolde();
@@ -7371,13 +7439,13 @@ function editMArmadoLinea(ln){
 
       <div style="margin-bottom:14px;padding:12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
         <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;">
-          Origen de la copia (misma línea <strong>${esc(ln)}</strong> y mismo turno): armado del <strong id="mArmModalCopySourceDate" style="color:#0369a1;font-size:15px;">—</strong>
+          Origen sugerido (misma línea <strong>${esc(ln)}</strong>, mismo código de turno — día con día, noche con noche): <strong id="mArmModalCopySourceDate" style="color:#0369a1;font-size:15px;">—</strong>
         </div>
-        <button class="btn ghost" type="button" onclick="copiarMArmadoModalDiaAnterior()" title="Misma línea y mismo turno (día/noche): trae planillero y trabajadores del día calendario anterior a la fecha de inicio">
+        <button class="btn ghost" type="button" onclick="copiarMArmadoModalDiaAnterior()" title="Copia planillero y trabajadores del turno anterior homólogo (misma línea y mismo día/noche)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Copiar armado día anterior
+          Copiar del turno anterior
         </button>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong> al copiar; solo se rellenan planillero y trabajadores desde el día indicado arriba.</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.35;">La fecha de inicio del armado actual <strong>no cambia</strong>; solo se rellenan planillero y trabajadores desde la referencia mostrada.</div>
       </div>
 
       <!-- PLANILLERO LÍNEA -->
@@ -7646,7 +7714,7 @@ function saveMArmado(){
   showToast('Línea '+ln+' guardada. En Pesaje › Armado pulsa «Desde Moldes» si quieres replicar allí.','success');
 }
 window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;window.closeMArmado=closeMArmado;window.saveMArmado=saveMArmado;
-window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;
+window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;window.guardarMArmadoSnapshot=guardarMArmadoSnapshot;
 window.openMoverTrabArmadoMoldeFromChip=openMoverTrabArmadoMoldeFromChip;window.openMoverTrabArmadoMolde=openMoverTrabArmadoMolde;window.closeMoverTrabArmadoMolde=closeMoverTrabArmadoMolde;window.confirmMoverTrabArmadoMolde=confirmMoverTrabArmadoMolde;
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
@@ -8133,55 +8201,6 @@ try{
 }catch(e){console.warn('[sb] init',e);}
 /** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
-/** Armado de línea: solo si es '1' se aplica pull + Realtime desde `armado_lineas`. Por defecto el armado es manual en esta tablet. */
-function tbSyncArmadoCloudEnabled(){try{return localStorage.getItem('friosur_sync_armado_cloud')==='1';}catch(e){return false;}}
-function tbSetSyncArmadoCloud(on){try{localStorage.setItem('friosur_sync_armado_cloud',on?'1':'0');}catch(e){}}
-function tbOnArmadoSyncCloudToggle(el){tbSetSyncArmadoCloud(!!(el&&el.checked));}
-/** Aplica filas remotas de armado (moldes + pesaje) en RT local y refresca UI. */
-function tbApplyArmadoLineasRows(armData){
-  if(!armData||!armData.length)return 0;
-  if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
-  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
-  armData.forEach(row=>{
-    const payload={
-      planillero:row.planillero||null,
-      trabajadores:row.trabajadores||[],
-      especie:row.especie||'',
-      turno:row.turno||'dia',
-      fecha:row.fecha||''
-    };
-    const turno=row.turno||'dia';
-    const fecha=row.fecha||'';
-    const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
-    if(area==='pesaje')_pArmSetEntry(row.linea,payload,turno,fecha);
-    else _armSetEntry(row.linea,payload,turno,fecha);
-  });
-  _rtSaveOrig&&_rtSaveOrig();
-  if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
-  if(typeof renderMArmado==='function')renderMArmado();
-  if(typeof renderMRegLinea==='function')renderMRegLinea();
-  if(typeof renderMRegTrab==='function')renderMRegTrab();
-  if(typeof renderPArmado==='function')renderPArmado();
-  if(typeof renderPRegLinea==='function')renderPRegLinea();
-  if(typeof renderPRegTrab==='function')renderPRegTrab();
-  if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
-  if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
-  return armData.length;
-}
-async function tbPullArmadoLineasManual(){
-  if(!_tbSb){if(typeof showToast==='function')showToast('Sin conexión a Supabase','error');return;}
-  try{
-    const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
-    if(armErr){if(typeof showToast==='function')showToast(armErr.message,'error');return;}
-    const n=tbApplyArmadoLineasRows(armData||[]);
-    if(typeof showToast==='function'){
-      if(n)showToast('Armado aplicado: '+n+' fila(s) desde la nube','success');
-      else showToast('La nube no tiene filas de armado','info');
-    }
-  }catch(e){
-    if(typeof showToast==='function')showToast(String(e&&e.message||e),'error');
-  }
-}
 
 const TBSync={
   _pushLastAt:0,
@@ -8227,14 +8246,12 @@ const TBSync={
         if(typeof renderEquiposCfg==='function')renderEquiposCfg();
         if(typeof renderEquipos==='function')renderEquipos();
       }
-      // ── Pull armado de línea (solo si el usuario activó recepción desde nube) ──
+      // ── Pull armado de línea ──────────────────────────────────
       try{
-        if(tbSyncArmadoCloudEnabled()){
-          const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
-          if(armErr){console.warn('[sb pull armado_lineas]',armErr.message);}
-          else if(armData&&armData.length)tbApplyArmadoLineasRows(armData);
-          else console.log('[sb] armado_lineas vacía en Supabase.');
-        }
+        const{data:armData,error:armErr}=await _tbSb.from('armado_lineas').select('*');
+        if(armErr){console.warn('[sb pull armado_lineas]',armErr.message);}
+        else if(armData&&armData.length)_applyRemoteArmadoLineasRows(armData);
+        else console.log('[sb] armado_lineas vacía en Supabase.');
       }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
@@ -8396,7 +8413,6 @@ const TBSync={
     // ── Realtime armado de línea ──────────────────────────────
     _tbSb.channel('tb-armado-lineas').on('postgres_changes',{event:'*',schema:'public',table:'armado_lineas'},(p)=>{
       const rec=p.new||p.old;if(!rec)return;
-      if(!tbSyncArmadoCloudEnabled())return;
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
       const area=String(rec.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
