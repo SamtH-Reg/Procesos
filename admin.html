@@ -1274,13 +1274,78 @@ function onDashTurnoChange(){
     applyFilters();
   }
 }
-function _filterRecs(recs){
+/** Misma convención que index (armado por línea+turno+fecha). */
+const _ADMIN_ARM_SCOPE_SEP='@@';
+function _adminCycleDateNorm(f){
+  const v=String(f||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
+  return _adminTodayLocalYmd();
+}
+function _adminCycleTurnoNorm(t){return String(t||'dia').toLowerCase()==='noche'?'noche':'dia';}
+function _adminArmGetEntry(store,linea,turno,fecha){
+  if(!store||!linea)return null;
+  const L=String(linea||'').trim().toUpperCase();
+  const T=String(turno||'dia').trim();
+  const F=String(fecha||'').trim();
+  const scopedKey=L+_ADMIN_ARM_SCOPE_SEP+T+_ADMIN_ARM_SCOPE_SEP+F;
+  if(store[scopedKey])return store[scopedKey];
+  const legacy=store[L];
+  if(legacy&&String(legacy.turno||'dia')===String(T||'dia')&&String(legacy.fecha||'')===String(F||''))return legacy;
+  return null;
+}
+function _adminTurnoArmadoMoldesForLinea(linea,fecha){
+  if(!linea)return null;
+  const am=(RT.data&&RT.data.armadoMolde)||{};
+  const fd=_adminCycleDateNorm(fecha||'');
+  const d=_adminArmGetEntry(am,linea,'dia',fd)||_adminArmGetEntry(am,linea,'noche',fd);
+  if(!d)return null;
+  return _adminCycleTurnoNorm(d.turno)==='noche'?'noche':'dia';
+}
+function _adminTurnoArmadoPesajeForLinea(linea,fecha){
+  if(!linea)return null;
+  const ap=(RT.data&&RT.data.armadoPesaje)||{};
+  const fd=_adminCycleDateNorm(fecha||'');
+  const d=_adminArmGetEntry(ap,linea,'dia',fd)||_adminArmGetEntry(ap,linea,'noche',fd);
+  if(!d)return null;
+  return _adminCycleTurnoNorm(d.turno)==='noche'?'noche':'dia';
+}
+/** Paridad con index: turno del registro o turno de armado por línea/fecha. */
+function _adminMoldeMatchesTurnoFilter(r,filtro){
+  const f=String(filtro||'').trim();
+  if(!f||f==='todos')return true;
+  const codAct=_adminInferTurnoCodigoPorHorario()||'dia';
+  if(f==='actual'){
+    if(r&&r.turno)return String(r.turno)===String(codAct);
+    const arm=_adminTurnoArmadoMoldesForLinea(r.linea,r&&r.fecha||'');
+    return arm!=null&&String(arm)===String(codAct);
+  }
+  if(r&&r.turno)return String(r.turno)===String(f);
+  const arm=_adminTurnoArmadoMoldesForLinea(r.linea,r&&r.fecha||'');
+  if(arm==null)return false;
+  return String(arm)===String(f);
+}
+function _adminPesajeMatchesTurnoFilter(r,filtro){
+  const f=String(filtro||'').trim();
+  if(!f||f==='todos')return true;
+  const codAct=_adminInferTurnoCodigoPorHorario()||'dia';
+  const arm=_adminTurnoArmadoPesajeForLinea(r.linea,r&&r.fecha||'');
+  if(f==='actual')return arm!=null&&String(arm)===String(codAct);
+  if(r&&r.turno&&String(r.turno)===String(f))return true;
+  if(arm!=null&&String(arm)===String(f))return true;
+  return false;
+}
+function _filterRecs(recs, kind){
   const arr=Array.isArray(recs)?recs:[];
   return arr.filter(r=>{
     if(_filters.turno){
-      const a=String(_filters.turno||'').toLowerCase();
-      const b=String(r.turno||'').toLowerCase();
-      if(b!==a)return false;
+      const filtro=String(_filters.turno||'').trim();
+      if(kind==='pesaje'){if(!_adminPesajeMatchesTurnoFilter(r,filtro))return false;}
+      else if(kind==='molde'){if(!_adminMoldeMatchesTurnoFilter(r,filtro))return false;}
+      else{
+        const a=String(_filters.turno||'').toLowerCase();
+        const b=String(r.turno||'').toLowerCase();
+        if(b!==a)return false;
+      }
     }
     if(_filters.especies.size){
       const eff=String(_adminEspecieForRec(r)||'').trim().toLowerCase();
@@ -1675,8 +1740,8 @@ function renderKPIs(){
   if(!row)return;
   RT._ensureShape&&RT._ensureShape();
   if(!RT.data){row.innerHTML='';return;}
-  const moldes=_filterRecs(RT.data.moldes);
-  const pesajes=_filterRecs(RT.data.pesajes);
+  const moldes=_filterRecs(RT.data.moldes,'molde');
+  const pesajes=_filterRecs(RT.data.pesajes,'pesaje');
   const totCant=Math.round(moldes.reduce((s,r)=>s+(+r.cant||0),0));
   const kgMol=moldes.reduce((s,r)=>s+(+r.kg||0),0);
   const kgPes=pesajes.reduce((s,r)=>s+(+r.kg||0),0);
@@ -1888,8 +1953,8 @@ function _buildChartData(w,all,moldes,pesajes){
 function drawWidget(w){
   const cv=document.getElementById('c_'+w.id);if(!cv)return;
   RT._ensureShape();
-  const moldes=_filterRecs(RT.data.moldes);
-  const pesajes=_filterRecs(RT.data.pesajes);
+  const moldes=_filterRecs(RT.data.moldes,'molde');
+  const pesajes=_filterRecs(RT.data.pesajes,'pesaje');
   const all=[...moldes,...pesajes];
   // Tablas y pivots: actualizar innerHTML silenciosamente
   if(w.type.startsWith('tbl-')||w.type.startsWith('pv-')){
@@ -2195,8 +2260,8 @@ let _drillPath=[];
 let _repChart=null;
 function renderReport(){
   const tipo=document.getElementById('repTipo').value;
-  const moldes=_filterRecs(RT.data.moldes);
-  const pesajes=_filterRecs(RT.data.pesajes);
+  const moldes=_filterRecs(RT.data.moldes,'molde');
+  const pesajes=_filterRecs(RT.data.pesajes,'pesaje');
   let labels=[],values=[],rows=[];
   const tit=document.getElementById('repTitle');const sub=document.getElementById('repSub');
   if(tipo==='produccion'){
@@ -2268,7 +2333,7 @@ function setAnalTab(btn,id){
   renderAnalisis();
 }
 function renderAnalisis(){
-  const moldes=_filterRecs(RT.data.moldes);const pesajes=_filterRecs(RT.data.pesajes);
+  const moldes=_filterRecs(RT.data.moldes,'molde');const pesajes=_filterRecs(RT.data.pesajes,'pesaje');
   // Pivot hora
   const horas=[...new Set([...moldes,...pesajes].map(r=>(r.hora||'').slice(0,2)).filter(Boolean))].sort();
   const th=document.getElementById('anTblHora');
@@ -2736,8 +2801,8 @@ function dashRefreshKgSummary(opts){
     RT.load();
     const m=RT.data.moldes||[],p=RT.data.pesajes||[];
     const kgM=m.reduce((s,r)=>s+(+r.kg||0),0),kgP=p.reduce((s,r)=>s+(+r.kg||0),0);
-    const fm=typeof _filterRecs==='function'?_filterRecs(m):m;
-    const fp=typeof _filterRecs==='function'?_filterRecs(p):p;
+    const fm=typeof _filterRecs==='function'?_filterRecs(m,'molde'):m;
+    const fp=typeof _filterRecs==='function'?_filterRecs(p,'pesaje'):p;
     const kgFM=fm.reduce((s,r)=>s+(+r.kg||0),0),kgFP=fp.reduce((s,r)=>s+(+r.kg||0),0);
     const ts=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
     const fmt=n=>Number(n).toLocaleString('es-CL',{maximumFractionDigits:1});

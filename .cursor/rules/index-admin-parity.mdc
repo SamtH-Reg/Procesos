@@ -14,6 +14,10 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 - Producción en vivo: `RT_KEY` = `friosur_rt_v1` (moldes, pesajes, generales, armadoMolde, armadoPesaje, eqState, etc.).
 - Cualquier renombre de clave debe actualizarse **en los dos archivos** y documentar migración de datos si aplica.
 
+## Filtro por turno en el dashboard (admin)
+
+- Con turno **Noche/Día** seleccionado, los pesajes sin `r.turno` deben incluirse si el **armado de línea** (`RT.armadoPesaje` por línea+fecha) coincide, igual que `_pesajeMatchesTurnoLineaFiltro` en **index**. Moldes: análogo con `RT.armadoMolde` y `_moldeMatchesTurnoLineaFiltro`. `_filterRecs` usa `kind` `'molde'` / `'pesaje'` para aplicar esa paridad.
+
 ## Especie en moldes (filtros, KPI y análisis)
 
 - En **index**, la especie efectiva para agregaciones va en `_especieDe(r)`: `r.especie` → preset por `presetId` → preset por `r.producto === nombre`.
