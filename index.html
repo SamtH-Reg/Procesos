@@ -3871,13 +3871,100 @@ function _pArmEntriesForScope(turno,fecha){
   _sortArmadoLineRows(out);
   return out;
 }
+/** Código de línea válido (L1…L999); evita filas corruptas en Supabase («Linea» sin número). */
+function _armValidLineaCodigo(ln){
+  return/^L\d{1,3}$/i.test(String(ln||'').trim());
+}
+/** Quita claves locales con línea inválida (basura tras migraciones o JSON roto). */
+function _pruneInvalidArmadoKeys(){
+  try{
+    if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+    if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+    const purge=(src)=>{
+      if(!src||typeof src!=='object')return;
+      Object.keys(src).forEach(k=>{
+        const m=_armParseKey(k);
+        const ln=String(m.linea||'').trim().toUpperCase();
+        if(!_armValidLineaCodigo(ln))delete src[k];
+      });
+    };
+    purge(RT.armadoMolde);
+    purge(RT.armadoPesaje);
+  }catch(e){console.warn('_pruneInvalidArmadoKeys',e);}
+}
+/**
+ * Tras pull: para el turno/fecha que muestra la UI de armado moldes, quita del local las líneas
+ * que ya no existen en la nube (evita que reaparezcan tras DELETE en Supabase).
+ * No se ejecuta si la nube no trae ninguna fila de ese scope (no borrar armado offline recién creado).
+ */
+function _reconcileArmadoMoldeWithRemote(armData){
+  try{
+    const tEl=document.getElementById('mArmScopeTurno');
+    const fEl=document.getElementById('mArmScopeFecha');
+    if(!tEl||!fEl||!RT.armadoMolde)return;
+    const turnoScope=_tbNormTurnoKey(tEl.value||'dia');
+    const fechaScope=_tbNormYmd(fEl.value)||String(fEl.value||'').trim().slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaScope))return;
+    const remote=new Set();
+    (armData||[]).forEach(row=>{
+      if(String(row.area||'moldes').toLowerCase().trim()==='pesaje')return;
+      const fn=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10);
+      if(fn!==fechaScope)return;
+      if(_tbNormTurnoKey(row.turno)!==turnoScope)return;
+      const ln=String(row.linea||'').trim().toUpperCase();
+      if(_armValidLineaCodigo(ln))remote.add(ln);
+    });
+    if(remote.size===0)return;
+    const rows=_armEntriesForScope(tEl.value||'dia',fEl.value||fechaScope);
+    rows.forEach(r=>{
+      const L=String(r.linea||'').trim().toUpperCase();
+      if(remote.has(L))return;
+      if(r.key&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,r.key))delete RT.armadoMolde[r.key];
+    });
+  }catch(e){console.warn('_reconcileArmadoMoldeWithRemote',e);}
+}
+function _reconcileArmadoPesajeWithRemote(armData){
+  try{
+    const tEl=document.getElementById('pArmScopeTurno');
+    const fEl=document.getElementById('pArmScopeFecha');
+    if(!tEl||!fEl||!RT.armadoPesaje)return;
+    const turnoScope=_tbNormTurnoKey(tEl.value||'dia');
+    const fechaScope=_tbNormYmd(fEl.value)||String(fEl.value||'').trim().slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaScope))return;
+    const remote=new Set();
+    (armData||[]).forEach(row=>{
+      if(String(row.area||'moldes').toLowerCase().trim()!=='pesaje')return;
+      const fn=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10);
+      if(fn!==fechaScope)return;
+      if(_tbNormTurnoKey(row.turno)!==turnoScope)return;
+      const ln=String(row.linea||'').trim().toUpperCase();
+      if(_armValidLineaCodigo(ln))remote.add(ln);
+    });
+    if(remote.size===0)return;
+    const rows=_pArmEntriesForScope(tEl.value||'dia',fEl.value||fechaScope);
+    rows.forEach(r=>{
+      const L=String(r.linea||'').trim().toUpperCase();
+      if(remote.has(L))return;
+      if(r.key&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,r.key))delete RT.armadoPesaje[r.key];
+    });
+  }catch(e){console.warn('_reconcileArmadoPesajeWithRemote',e);}
+}
 /** Aplica filas remotas de `armado_lineas` (moldes + pesaje); persiste RT y refresca UI. */
 function _applyRemoteArmadoLineasRows(armData){
   if(!armData||!armData.length)return 0;
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   armData.forEach(row=>{
+    const lineaRaw=String(row.linea==null?'':row.linea).trim().toUpperCase();
+    if(!_armValidLineaCodigo(lineaRaw)){
+      console.warn('[armado_lineas] fila omitida: linea inválida',row.linea,row.turno,row.fecha,row.area);
+      return;
+    }
     const fechaRow=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10)||'';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRow)){
+      console.warn('[armado_lineas] fila omitida: fecha inválida',row.linea,row.fecha);
+      return;
+    }
     const turno=_tbNormTurnoKey(row.turno||'dia');
     const payload={
       planillero:row.planillero||null,
@@ -3888,9 +3975,12 @@ function _applyRemoteArmadoLineasRows(armData){
     };
     const fecha=fechaRow;
     const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
-    if(area==='pesaje')_pArmSetEntry(row.linea,payload,turno,fecha);
-    else _armSetEntry(row.linea,payload,turno,fecha);
+    if(area==='pesaje')_pArmSetEntry(lineaRaw,payload,turno,fecha);
+    else _armSetEntry(lineaRaw,payload,turno,fecha);
   });
+  _pruneInvalidArmadoKeys();
+  _reconcileArmadoMoldeWithRemote(armData);
+  _reconcileArmadoPesajeWithRemote(armData);
   _rtSaveOrig&&_rtSaveOrig();
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   if(typeof renderMArmado==='function')renderMArmado();
@@ -6197,7 +6287,7 @@ function _updatePArmScopeStatus(){
   if(!el)return;
   const turno=_getPArmScopeTurno();
   const fecha=_getPArmScopeFecha();
-  const n=_pArmEntriesForScope(turno,fecha).length;
+  const n=_pArmEntriesForScope(turno,fecha).filter(r=>_armValidLineaCodigo(r.linea)).length;
   const t=turno==='noche'?'Noche':'Día';
   el.textContent=`${n} línea(s) configurada(s) para ${t} · ${fecha}`;
 }
@@ -6259,7 +6349,7 @@ function renderPArmado(){
   _setPArmScopeDefaults();
   const turnoScope=_getPArmScopeTurno();
   const fechaScope=_getPArmScopeFecha();
-  const scopedRows=_pArmEntriesForScope(turnoScope,fechaScope);
+  const scopedRows=_pArmEntriesForScope(turnoScope,fechaScope).filter(r=>_armValidLineaCodigo(r.linea));
   const lineas=scopedRows.map(x=>x.linea);
   _updatePArmScopeStatus();
   if(!lineas.length){
@@ -6962,7 +7052,7 @@ function _updateMArmScopeStatus(){
   if(!el)return;
   const turno=_getMArmScopeTurno();
   const fecha=_getMArmScopeFecha();
-  const n=_armEntriesForScope(turno,fecha).length;
+  const n=_armEntriesForScope(turno,fecha).filter(r=>_armValidLineaCodigo(r.linea)).length;
   const t=turno==='noche'?'Noche':'Día';
   el.textContent=`${n} línea(s) configurada(s) para ${t} · ${fecha}`;
 }
@@ -7031,7 +7121,7 @@ function renderMArmado(){
   _setMArmScopeDefaults();
   const turnoScope=_getMArmScopeTurno();
   const fechaScope=_getMArmScopeFecha();
-  const scopedRows=_armEntriesForScope(turnoScope,fechaScope);
+  const scopedRows=_armEntriesForScope(turnoScope,fechaScope).filter(r=>_armValidLineaCodigo(r.linea));
   const lineas=scopedRows.map(x=>x.linea);
   _updateMArmScopeStatus();
   if(!lineas.length){
@@ -8763,6 +8853,11 @@ const TBSync={
           purge(src);
         }
       }else{
+        const lineaRt=String(rec.linea==null?'':rec.linea).trim().toUpperCase();
+        if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(lineaRt)){
+          console.warn('[rt armado_lineas] omitido INSERT/UPDATE: linea inválida',rec.linea);
+          return;
+        }
         let fe=fecha;
         if(!fe||!/^\d{4}-\d{2}-\d{2}$/.test(fe))fe=todayLocalYmd();
         const payload={
@@ -8772,8 +8867,8 @@ const TBSync={
           turno,
           fecha:fe
         };
-        if(area==='pesaje')_pArmSetEntry(rec.linea,payload,turno,fe);
-        else _armSetEntry(rec.linea,payload,turno,fe);
+        if(area==='pesaje')_pArmSetEntry(lineaRt,payload,turno,fe);
+        else _armSetEntry(lineaRt,payload,turno,fe);
       }
       // Guardar local sin disparar re-push (evita loop infinito)
       _rtSaveOrig&&_rtSaveOrig();
