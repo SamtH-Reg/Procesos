@@ -5175,17 +5175,15 @@ function onPRegTrabChange(){
       }
       return;
     }
-    const id=parseInt(val)||0;
-    const t=id?DB.data.trabajadores.find(x=>x.id===id):null;
+    const id=parseInt(val,10)||0;
+    const t=id?DB.data.trabajadores.find(x=>String(x.id)===String(id)):null;
     const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
     const armadoLinea=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
     const entryArmado=armadoLinea?(armadoLinea.trabajadores||[]).find(e=>String(e.trabId)===String(id)):null;
     const opt=sel.options[sel.selectedIndex];
     const nombreDisp=t?t.nombre:(opt&&opt.dataset.nombre)||val;
-    const fichaDisp=(opt&&opt.dataset&&opt.dataset.ficha)
-      || (entryArmado&&entryArmado.ficha)
-      || (t&&t.ficha)
-      || '';
+    const _nfF=v=>(v==null||String(v).trim()==='')?'':String(v).trim();
+    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)||_nfF(entryArmado&&entryArmado.ficha)||_nfF(t&&t.ficha);
     badge.style.display='';
     const ini=(nombreDisp||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     document.getElementById('pRegWorkerInit').textContent=ini;
@@ -7306,7 +7304,7 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
     if(sel){
       // Ensure option exists in the hidden select
       let opt=Array.from(sel.options).find(o=>String(o.value)===String(id));
-      let tDb=DB.data.trabajadores.find(t=>t.id===id);
+      let tDb=DB.data.trabajadores.find(t=>String(t.id)===String(id));
       if(!opt){
         opt=document.createElement('option');
         opt.value=String(id);
