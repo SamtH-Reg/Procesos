@@ -62,7 +62,7 @@ Esto crea:
 | `moldes` | Registros de conteo de moldes |
 | `pesajes` | Registros de pesaje individual |
 | `armado_linea` | Esquema antiguo / doc (PK incluye `area`: moldes o pesaje) |
-| `armado_lineas` | Lo que usa **tablet** `index.html`: planillero+trabajadores; ejecuta `supabase_migrate_armado_lineas_scope.sql` y luego **`supabase_migrate_armado_lineas_area.sql`** (columna `area`: `moldes` vs `pesaje`, misma línea/turno/fecha puede tener dos filas) |
+| `armado_lineas` | Lo que usa **tablet** `index.html`: planillero+trabajadores; ejecuta `supabase_migrate_armado_lineas_scope.sql` y luego **`supabase_migrate_armado_lineas_area.sql`** (columna `area`: `moldes` vs `pesaje`, misma línea/turno/fecha puede tener dos filas). **RLS:** tras `supabase_auth.sql` (perfiles), ejecuta **`supabase_rls_armado_lineas_policies.sql`** para que admin/planillero/supervisor puedan borrar filas (sin esto el DELETE falla y la línea vuelve al sincronizar). |
 
 Además:
 - **Índices** en fecha, línea+turno, especie, trab_id

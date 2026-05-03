@@ -6312,8 +6312,8 @@ async function removePLinea(ln){
   const rem=await tbDeleteArmadoLineaRemote(ln,turnoScope,fechaScope,'pesaje');
   rtPushArmadoCloud();
   renderPArmado();
-  if(rem||!_tbSb)showToast('Línea '+ln+' eliminada','success');
-  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). Revisa sesión o red.','warning');
+  if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
+  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+(rem.err||'Revisa sesión, rol o RLS en Supabase.'),'warning');
 }
 function guardarPArmadoSnapshot(){
   _ensureArmadoPesaje();
@@ -7008,8 +7008,8 @@ async function removeMLinea(ln){
   const rem=await tbDeleteArmadoLineaRemote(ln,turnoScope,fechaScope,'moldes');
   rtPushArmadoCloud();
   renderMArmado();
-  if(rem||!_tbSb)showToast('Línea '+ln+' eliminada','success');
-  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). Revisa sesión o red.','warning');
+  if(rem.ok||!_tbSb)showToast('Línea '+ln+' eliminada','success');
+  else showToast('Línea borrada aquí; no se pudo quitar en la nube (puede reaparecer). '+(rem.err||'Revisa sesión, rol o RLS en Supabase.'),'warning');
 }
 function openMoverTrabArmadoMoldeFromChip(btn){
   if(!btn)return;
@@ -8217,20 +8217,27 @@ try{
 }catch(e){console.warn('[sb] init',e);}
 /** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
-/** Borra la fila en Supabase `armado_lineas` (el upsert no quita filas; sin esto la línea vuelve con sync). */
+/** Borra la fila en Supabase `armado_lineas` (el upsert no quita filas; sin esto la línea vuelve con sync). @returns {{ok:boolean,err?:string}} */
 async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
-  if(!_tbSb)return false;
+  if(!_tbSb)return{ok:false,err:'Sin cliente Supabase'};
   const ln=String(linea||'').trim().toUpperCase();
   const t=String(turno||'dia').trim();
   const f=String(fecha||'').trim();
   const a=String(area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
-  if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(f))return false;
+  if(!ln||!/^\d{4}-\d{2}-\d{2}$/.test(f))return{ok:false,err:'Fecha o línea inválida para borrar en la nube'};
   try{
     const{error}=await _tbSb.from('armado_lineas').delete().eq('linea',ln).eq('turno',t).eq('fecha',f).eq('area',a);
-    if(error){console.warn('[sb delete armado_lineas]',error.message);return false;}
+    if(error){
+      console.warn('[sb delete armado_lineas]',error.message);
+      return{ok:false,err:error.message||'Error al borrar en la nube'};
+    }
     try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
-    return true;
-  }catch(e){console.warn('[sb delete armado_lineas]',e);return false;}
+    return{ok:true};
+  }catch(e){
+    const m=e&&e.message?String(e.message):String(e);
+    console.warn('[sb delete armado_lineas]',e);
+    return{ok:false,err:m};
+  }
 }
 
 const TBSync={

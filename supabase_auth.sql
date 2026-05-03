@@ -102,6 +102,9 @@ create policy pesajes_write     on pesajes      for all    using (can_write()) w
 create policy armado_read       on armado_linea for select using (auth.role()='authenticated');
 create policy armado_write      on armado_linea for all    using (can_write()) with check (can_write());
 
+-- La tablet usa public.armado_lineas (plural). RLS de esa tabla: ejecuta en SQL Editor
+-- supabase_rls_armado_lineas_policies.sql (no forma parte de este script legacy armado_linea).
+
 -- ─── Crear usuario admin inicial (opcional) ───────────────────────
 -- Después de crear el primer usuario vía Dashboard → Authentication → Users,
 -- ejecuta esto cambiando el email por el tuyo:
