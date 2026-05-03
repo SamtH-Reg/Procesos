@@ -8329,19 +8329,33 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
       return{ok:false,err:selErr.message};
     }
     const list=rows||[];
+    const rtNorm=r=>{const x=String(r.turno==null?'':r.turno).trim().toLowerCase();return x||'dia';};
     const sameTf=r=>{
       const rf=_tbFechaEqFromRow(r.fecha);
-      const rt=String(r.turno==null?'dia':r.turno).trim().toLowerCase();
-      return rf===fWant&&rt===tWant;
+      return rf===fWant&&rtNorm(r)===tWant;
     };
     let row=list.find(sameTf);
+    if(!row){
+      const byDate=list.filter(r=>_tbFechaEqFromRow(r.fecha)===fWant);
+      if(byDate.length===1)row=byDate[0];
+      else if(byDate.length>1){
+        row=byDate.find(r=>rtNorm(r)===tWant);
+        if(!row){
+          const turnos=[...new Set(byDate.map(r=>rtNorm(r)))].join(', ');
+          return{ok:false,err:'En la nube hay varias filas de '+ln+' el '+fWant+' (turnos: '+turnos+'). Elige arriba el mismo turno (Día/Noche) y borra de nuevo.'};
+        }
+      }
+    }
     if(!row&&list.length===1){
       const only=list[0];
       if((_tbFechaEqFromRow(only.fecha)||'')===fWant)row=only;
     }
     if(!row){
       try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
-      if(list.length>1)return{ok:false,err:'En la nube hay varias filas para '+ln+'/'+a+'; no coincide turno/fecha. Revisa selectores o datos en Supabase.'};
+      if(list.length>0){
+        const hint=list.slice(0,8).map(r=>rtNorm(r)+'@'+_tbFechaEqFromRow(r.fecha)).join(' · ');
+        return{ok:false,err:'No hay fila en la nube para '+ln+' con turno «'+tWant+'» y fecha '+fWant+'. En Supabase figura: '+hint+(list.length>8?'…':'')};
+      }
       return{ok:true};
     }
     const lineaEq=String(row.linea==null?ln:row.linea).trim().toUpperCase();
