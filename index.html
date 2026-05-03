@@ -3893,68 +3893,14 @@ function _pruneInvalidArmadoKeys(){
   }catch(e){console.warn('_pruneInvalidArmadoKeys',e);}
 }
 /**
- * Tras pull: para el turno/fecha que muestra la UI de armado moldes, quita del local las líneas
- * que ya no existen en la nube (evita que reaparezcan tras DELETE en Supabase).
- * No se ejecuta si la nube no trae ninguna fila de ese scope (no borrar armado offline recién creado).
+ * Sustituye RT.armadoMolde / RT.armadoPesaje por lo que devuelve Supabase (origen de verdad tras pull).
+ * Así F5 no revive líneas borradas en la nube ni deja mezclado con JSON viejo en localStorage.
  */
-function _reconcileArmadoMoldeWithRemote(armData){
-  try{
-    const tEl=document.getElementById('mArmScopeTurno');
-    const fEl=document.getElementById('mArmScopeFecha');
-    if(!tEl||!fEl||!RT.armadoMolde)return;
-    const turnoScope=_tbNormTurnoKey(tEl.value||'dia');
-    const fechaScope=_tbNormYmd(fEl.value)||String(fEl.value||'').trim().slice(0,10);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaScope))return;
-    const remote=new Set();
-    (armData||[]).forEach(row=>{
-      if(String(row.area||'moldes').toLowerCase().trim()==='pesaje')return;
-      const fn=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10);
-      if(fn!==fechaScope)return;
-      if(_tbNormTurnoKey(row.turno)!==turnoScope)return;
-      const ln=String(row.linea||'').trim().toUpperCase();
-      if(_armValidLineaCodigo(ln))remote.add(ln);
-    });
-    if(remote.size===0)return;
-    const rows=_armEntriesForScope(tEl.value||'dia',fEl.value||fechaScope);
-    rows.forEach(r=>{
-      const L=String(r.linea||'').trim().toUpperCase();
-      if(remote.has(L))return;
-      if(r.key&&Object.prototype.hasOwnProperty.call(RT.armadoMolde,r.key))delete RT.armadoMolde[r.key];
-    });
-  }catch(e){console.warn('_reconcileArmadoMoldeWithRemote',e);}
-}
-function _reconcileArmadoPesajeWithRemote(armData){
-  try{
-    const tEl=document.getElementById('pArmScopeTurno');
-    const fEl=document.getElementById('pArmScopeFecha');
-    if(!tEl||!fEl||!RT.armadoPesaje)return;
-    const turnoScope=_tbNormTurnoKey(tEl.value||'dia');
-    const fechaScope=_tbNormYmd(fEl.value)||String(fEl.value||'').trim().slice(0,10);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaScope))return;
-    const remote=new Set();
-    (armData||[]).forEach(row=>{
-      if(String(row.area||'moldes').toLowerCase().trim()!=='pesaje')return;
-      const fn=_tbNormYmd(row.fecha)||String(row.fecha||'').trim().slice(0,10);
-      if(fn!==fechaScope)return;
-      if(_tbNormTurnoKey(row.turno)!==turnoScope)return;
-      const ln=String(row.linea||'').trim().toUpperCase();
-      if(_armValidLineaCodigo(ln))remote.add(ln);
-    });
-    if(remote.size===0)return;
-    const rows=_pArmEntriesForScope(tEl.value||'dia',fEl.value||fechaScope);
-    rows.forEach(r=>{
-      const L=String(r.linea||'').trim().toUpperCase();
-      if(remote.has(L))return;
-      if(r.key&&Object.prototype.hasOwnProperty.call(RT.armadoPesaje,r.key))delete RT.armadoPesaje[r.key];
-    });
-  }catch(e){console.warn('_reconcileArmadoPesajeWithRemote',e);}
-}
-/** Aplica filas remotas de `armado_lineas` (moldes + pesaje); persiste RT y refresca UI. */
 function _applyRemoteArmadoLineasRows(armData){
-  if(!armData||!armData.length)return 0;
-  if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
-  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
-  armData.forEach(row=>{
+  const rows=Array.isArray(armData)?armData:[];
+  const newMolde={};
+  const newPesaje={};
+  rows.forEach(row=>{
     const lineaRaw=String(row.linea==null?'':row.linea).trim().toUpperCase();
     if(!_armValidLineaCodigo(lineaRaw)){
       console.warn('[armado_lineas] fila omitida: linea inválida',row.linea,row.turno,row.fecha,row.area);
@@ -3968,19 +3914,24 @@ function _applyRemoteArmadoLineasRows(armData){
     const turno=_tbNormTurnoKey(row.turno||'dia');
     const payload={
       planillero:row.planillero||null,
-      trabajadores:row.trabajadores||[],
+      trabajadores:Array.isArray(row.trabajadores)?row.trabajadores:[],
       especie:row.especie||'',
       turno,
       fecha:fechaRow
     };
-    const fecha=fechaRow;
     const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
-    if(area==='pesaje')_pArmSetEntry(lineaRaw,payload,turno,fecha);
-    else _armSetEntry(lineaRaw,payload,turno,fecha);
+    const k=_armScopeKey(lineaRaw,turno,fechaRow);
+    if(area==='pesaje')newPesaje[k]={...payload};
+    else newMolde[k]={...payload};
   });
+  if(!RT.armadoMolde)RT.armadoMolde={};
+  if(!RT.armadoPesaje)RT.armadoPesaje={};
+  RT.armadoMolde=newMolde;
+  RT.armadoPesaje=newPesaje;
+  if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   _pruneInvalidArmadoKeys();
-  _reconcileArmadoMoldeWithRemote(armData);
-  _reconcileArmadoPesajeWithRemote(armData);
+  try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
   _rtSaveOrig&&_rtSaveOrig();
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   if(typeof renderMArmado==='function')renderMArmado();
@@ -3991,7 +3942,7 @@ function _applyRemoteArmadoLineasRows(armData){
   if(typeof renderPRegTrab==='function')renderPRegTrab();
   if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
   if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
-  return armData.length;
+  return rows.length;
 }
 
 /** L1, L2, … L9, L10 (no orden léxico L1, L10, L2). */
@@ -8652,9 +8603,9 @@ const TBSync={
         if(armErr){
           console.warn('[sb pull armado_lineas]',armErr.message);
           if(typeof showToast==='function')showToast('No se pudo traer armado de línea desde la nube: '+armErr.message,'error');
+        }else if(typeof _applyRemoteArmadoLineasRows==='function'){
+          _applyRemoteArmadoLineasRows(Array.isArray(armData)?armData:[]);
         }
-        else if(armData&&armData.length)_applyRemoteArmadoLineasRows(armData);
-        else console.log('[sb] armado_lineas vacía en Supabase.');
       }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
