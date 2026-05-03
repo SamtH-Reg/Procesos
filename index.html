@@ -2154,6 +2154,10 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Guardar día
         </button>
+        <button class="btn ghost sm" type="button" onclick="syncPArmadoScopeDesdeMoldes()" title="Copia planillero, trabajadores y especie desde Moldes · Armado (mismo turno y fecha que arriba)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17L17 7"/></svg>
+          Desde Moldes
+        </button>
       </div>
       <div id="pArmadoList"></div>
     </div>
@@ -7447,6 +7451,64 @@ function _mArmPrefillPlanilleroDesdePesaje(ln){
   _editMArmado.planillero=JSON.parse(JSON.stringify(pp));
   if(_editMArmado.planillero&&typeof _editMArmado.planillero==='object')delete _editMArmado.planillero.fromPrevArmado;
 }
+/** Copia armado de moldes → pesaje (misma línea, turno, fecha). Enriquece fichas desde el maestro de trabajadores. */
+function syncPArmadoLineaDesdeMoldes(ln,turno,fecha){
+  if(!ln)return false;
+  _ensureArmadoMolde();
+  _ensureArmadoPesaje();
+  const tStr=String(turno||'dia').trim();
+  const fStr=String(fecha||'').trim();
+  if(!fStr)return false;
+  const src=_armGetEntry(ln,tStr,fStr);
+  if(!src)return false;
+  const hasP=src.planillero&&(src.planillero.trabId!=null||String(src.planillero.nombre||'').trim());
+  const nTrab=(src.trabajadores||[]).length;
+  if(!hasP&&nTrab===0)return false;
+  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  const trabs=(src.trabajadores||[]).map(t=>{
+    const tid=t.trabId!=null&&!isNaN(+t.trabId)?+t.trabId:null;
+    const db=tid?pool.find(x=>Number(x.id)===Number(tid)):null;
+    const nom=String(t.nombre||(db&&db.nombre)||'').trim().toUpperCase();
+    let fic=t.ficha!=null?String(t.ficha).trim():'';
+    if(!fic&&db&&db.ficha!=null)fic=String(db.ficha).trim();
+    return{trabId:tid,nombre:nom,ficha:fic};
+  });
+  let plan=null;
+  if(src.planillero){
+    const p=src.planillero;
+    const tid=p.trabId!=null&&!isNaN(+p.trabId)?+p.trabId:null;
+    const db=tid?pool.find(x=>Number(x.id)===Number(tid)):null;
+    const nom=String(p.nombre||(db&&db.nombre)||'').trim();
+    let fic=p.ficha!=null?String(p.ficha).trim():'';
+    if(!fic&&db&&db.ficha!=null)fic=String(db.ficha).trim();
+    plan={trabId:tid,nombre:nom};
+    if(fic)plan.ficha=fic;
+  }
+  const especie=String(src.especie||src.producto||'').trim();
+  _pArmSetEntry(ln,{planillero:plan,trabajadores:trabs,especie,turno:tStr,fecha:fStr},tStr,fStr);
+  return true;
+}
+/** Pesaje · Armado: aplica todo el armado de Moldes del mismo turno/fecha que muestran los selectores de arriba. */
+function syncPArmadoScopeDesdeMoldes(){
+  _ensureArmadoMolde();
+  _ensureArmadoPesaje();
+  _setPArmScopeDefaults();
+  const turno=_getPArmScopeTurno();
+  const fecha=_getPArmScopeFecha();
+  const rows=_armEntriesForScope(turno,fecha);
+  let n=0;
+  rows.forEach(row=>{
+    if(syncPArmadoLineaDesdeMoldes(row.linea,turno,fecha))n++;
+  });
+  rtSave();
+  renderPArmado();
+  if(typeof renderPRegLinea==='function')renderPRegLinea();
+  if(typeof renderPRegTrab==='function')renderPRegTrab();
+  if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
+  if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
+  if(n)showToast('Pesaje actualizado desde Moldes ('+n+' línea'+(n!==1?'s':'')+').','success');
+  else showToast('No hay armado de Moldes con planillero o trabajadores para este turno/fecha.','info');
+}
 function _mArmUpdatePresetHint(){
   const hint=document.getElementById('mArmPresetHint');if(!hint)return;
   const esp=_editMArmado.especie;
@@ -7577,8 +7639,9 @@ function saveMArmado(){
   // Compat: keep lineaProducto synced for old references
   if(!RT.lineaProducto)RT.lineaProducto={};
   RT.lineaProducto[_editMLn]=_editMArmado.especie||'';
-  rtSave();
   const ln=_editMLn;
+  try{syncPArmadoLineaDesdeMoldes(ln,turnoRaw,fecha);}catch(e){console.warn('syncPArmadoLineaDesdeMoldes',e);}
+  rtSave();
   try{
     const st=document.getElementById('mArmScopeTurno');
     const sf=document.getElementById('mArmScopeFecha');
@@ -7590,7 +7653,11 @@ function saveMArmado(){
   if(window.renderMRegLinea)renderMRegLinea();
   if(window.renderMRegPresets)renderMRegPresets();
   if(window.renderMRegTrab)renderMRegTrab();
-  showToast('Línea '+ln+' actualizada','success');
+  if(typeof renderPArmado==='function'){try{renderPArmado();}catch(_e){}}
+  if(typeof renderPRegLinea==='function'){try{renderPRegLinea();}catch(_e){}}
+  if(typeof renderPRegTrab==='function'){try{renderPRegTrab();}catch(_e){}}
+  if(typeof renderPRegPlanilleros==='function'){try{renderPRegPlanilleros();}catch(_e){}}
+  showToast('Línea '+ln+' actualizada (Pesaje sincronizado si aplica).','success');
 }
 window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;window.closeMArmado=closeMArmado;window.saveMArmado=saveMArmado;
 window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;
@@ -7598,6 +7665,7 @@ window.openMoverTrabArmadoMoldeFromChip=openMoverTrabArmadoMoldeFromChip;window.
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
+window.syncPArmadoLineaDesdeMoldes=syncPArmadoLineaDesdeMoldes;window.syncPArmadoScopeDesdeMoldes=syncPArmadoScopeDesdeMoldes;
 window.onMArmScopeChange=onMArmScopeChange;window.onMArmScopeTurnoPick=onMArmScopeTurnoPick;
 
 /* ═══ EMPAQUE — Registrar + lotes ══════════════════════════════ */

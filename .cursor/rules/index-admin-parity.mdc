@@ -35,6 +35,7 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 
 - Tabla `armado_lineas` con columna **`area`**: `moldes` ↔ `RT.armadoMolde`, `pesaje` ↔ `RT.armadoPesaje`. Misma `(linea, turno, fecha)` puede tener **dos** filas (una por área). Migración: `supabase_migrate_armado_lineas_area.sql` (tras `supabase_migrate_armado_lineas_scope.sql`).
 - Sin `area` en la base, el armado de **Pesaje** no se sincronizaba a la nube (solo `localStorage`) y parecía «borrado» al limpiar sitio o cambiar de dispositivo.
+- **Moldes → Pesaje:** al guardar una línea en Moldes · Armado (`saveMArmado`), se replica en Pesaje · Armado la misma línea/turno/fecha (`syncPArmadoLineaDesdeMoldes`). En Pesaje · Armado el botón **«Desde Moldes»** aplica todas las líneas del alcance actual. Moldes sigue pudiendo rellenar planillero desde pesaje (`_mArmPrefillPlanilleroDesdePesaje`).
 
 ## CSS compartido (modales)
 
