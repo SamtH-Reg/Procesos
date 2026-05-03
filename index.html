@@ -782,6 +782,19 @@ td.num,th.num{font-family:var(--mono);font-weight:600;text-align:center;}
 .line-sub{font-size:12px;color:var(--text-3);margin-top:2px;}
 
 .worker-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.worker-chips.worker-chips-scroll{
+  max-height:min(52vh,420px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:4px 6px 8px 2px;
+  align-content:flex-start;
+  border-radius:12px;
+  background:color-mix(in srgb,var(--surface-alt) 55%,transparent);
+  border:1px solid var(--border);
+}
+.worker-chips.worker-chips-scroll .worker-chip-hint{
+  width:100%;flex-basis:100%;font-size:11px;color:var(--text-3);padding:2px 4px 6px;
+}
 .worker-chip{
   display:inline-flex;align-items:center;gap:6px;
   padding:6px 12px 6px 6px;
@@ -791,6 +804,20 @@ td.num,th.num{font-family:var(--mono);font-weight:600;text-align:center;}
   font-size:12px;font-weight:500;
   color:var(--text);
 }
+button.worker-chip{
+  font:inherit;font-family:inherit;text-align:left;
+  cursor:pointer;
+  appearance:none;
+  -webkit-appearance:none;
+}
+button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+.worker-chip.wc-reasignado{
+  border-color:#0f766e;
+  background:color-mix(in srgb,#14b8a6 14%,var(--surface-alt));
+  box-shadow:0 0 0 1px rgba(15,118,110,0.25);
+}
+.worker-chip.wc-reasignado .wc-av{background:#0f766e;}
+.worker-chip.wc-reasignado .wc-move-ico{font-size:10px;margin-left:2px;opacity:.85;}
 .worker-chip .wc-av{
   width:24px;height:24px;border-radius:50%;
   background:var(--brand);color:white;
@@ -3794,6 +3821,16 @@ function _sortTrabajadoresArmadoChips(trabs,trabDbList){
   });
   return arr;
 }
+function _armFindTrabIdxInArr(arr,trabId,nombreFallback){
+  const a=Array.isArray(arr)?arr:[];
+  if(trabId!=null&&!isNaN(trabId)&&Number(trabId)>0){
+    const i=a.findIndex(x=>Number(x.trabId)===Number(trabId));
+    if(i>=0)return i;
+  }
+  const n=String(nombreFallback||'').trim();
+  if(n)return a.findIndex(x=>String(x.nombre||'').trim()===n);
+  return-1;
+}
 
 /* ═══ MOLDES — REGISTRAR ═══════════════════════════════════════ */
 function renderMRegLinea(){
@@ -6164,13 +6201,18 @@ function renderPArmado(){
         </button>
         <button class="btn ghost sm icon" type="button" title="Eliminar línea" onclick="removePLinea('${esc(ln)}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
       </div>
-      <div class="worker-chips">
-        ${trabs.length?trabs.slice(0,12).map(t=>{
+      <div class="worker-chips worker-chips-scroll">
+        ${trabs.length?`<div class="worker-chip-hint">Pulsa un trabajador para <strong>moverlo a otra línea</strong> del mismo turno/fecha.</div>`:''}
+        ${trabs.length?trabs.map(t=>{
           const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>(x&&x[0])||'').join('').toUpperCase();
           const prevCls=t.fromPrevArmado?' wc-from-prev':'';
-          return `<div class="worker-chip${prevCls}"><div class="wc-av">${esc(ini)}</div>${esc(t.nombre)} · <strong class="mono">F${esc(t.ficha||'—')}</strong></div>`;
+          const movCls=t.movidoDesdeLinea?' wc-reasignado':'';
+          const tidAttr=t.trabId!=null&&t.trabId!==''?String(t.trabId):'';
+          const nomEnc=encodeURIComponent(String(t.nombre||''));
+          const tip=t.movidoDesdeLinea?('Reasignado desde '+String(t.movidoDesdeLinea).toUpperCase()):('Mover a otra línea — '+String(t.nombre||'').slice(0,48));
+          const ico=t.movidoDesdeLinea?'<span class="wc-move-ico" aria-hidden="true">↷</span>':'';
+          return `<button type="button" class="worker-chip${prevCls}${movCls}" data-pmov-ln="${esc(ln)}" data-pmov-tid="${esc(tidAttr)}" data-pmov-nom="${nomEnc}" title="${esc(tip)}" onclick="openMoverTrabArmadoPesajeFromChip(this)"><div class="wc-av">${esc(ini)}</div>${esc(t.nombre)} · <strong class="mono">F${esc(t.ficha||'—')}</strong>${ico}</button>`;
         }).join(''):'<div style="color:var(--text-3);font-size:12px;padding:8px 0;">Sin trabajadores — pulsa <em>Editar</em> para agregar</div>'}
-        ${trabs.length>12?`<div class="worker-chip" style="background:var(--slate-100);font-weight:600;">+${trabs.length-12} más</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -6646,6 +6688,7 @@ window.onPArmScopeChange=onPArmScopeChange;window.onPArmScopeTurnoPick=onPArmSco
 window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
 window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
+window.openMoverTrabArmadoPesajeFromChip=openMoverTrabArmadoPesajeFromChip;window.openMoverTrabArmadoPesaje=openMoverTrabArmadoPesaje;window.closeMoverTrabArmadoPesaje=closeMoverTrabArmadoPesaje;window.confirmMoverTrabArmadoPesaje=confirmMoverTrabArmadoPesaje;
 window.copiarPArmadoModalDiaAnterior=copiarPArmadoModalDiaAnterior;
 window.copiarMArmadoModalDiaAnterior=copiarMArmadoModalDiaAnterior;
 
@@ -6805,15 +6848,20 @@ function renderMArmado(){
         </button>
         <button class="btn ghost sm icon" type="button" title="Eliminar línea" onclick="removeMLinea('${esc(ln)}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
       </div>
-      <div class="worker-chips">
-        ${trabs.length?trabs.slice(0,12).map(t=>{
+      <div class="worker-chips worker-chips-scroll">
+        ${trabs.length?`<div class="worker-chip-hint">Pulsa un trabajador para <strong>moverlo a otra línea</strong> del mismo turno/fecha.</div>`:''}
+        ${trabs.length?trabs.map(t=>{
           const ini=(t.nombre||'').split(/\s+/).slice(0,2).map(x=>(x&&x[0])||'').join('').toUpperCase();
           const tDb=trabDbList.find(x=>x.id===t.trabId);
           const codigo=tDb?tDb.codigo:null;
           const prevCls=t.fromPrevArmado?' wc-from-prev':'';
-          return `<div class="worker-chip${prevCls}"><div class="wc-av">${esc(ini)}</div><span>${esc(t.nombre)}</span>${codigo?`<span style="font-size:10px;color:var(--text-3);margin-left:2px;">(${esc(codigo)})</span>`:''}  </div>`;
+          const movCls=t.movidoDesdeLinea?' wc-reasignado':'';
+          const tidAttr=t.trabId!=null&&t.trabId!==''?String(t.trabId):'';
+          const nomEnc=encodeURIComponent(String(t.nombre||''));
+          const tip=t.movidoDesdeLinea?('Reasignado desde '+String(t.movidoDesdeLinea).toUpperCase()):('Mover a otra línea — '+String(t.nombre||'').slice(0,48));
+          const ico=t.movidoDesdeLinea?'<span class="wc-move-ico" aria-hidden="true">↷</span>':'';
+          return `<button type="button" class="worker-chip${prevCls}${movCls}" data-mmov-ln="${esc(ln)}" data-mmov-tid="${esc(tidAttr)}" data-mmov-nom="${nomEnc}" title="${esc(tip)}" onclick="openMoverTrabArmadoMoldeFromChip(this)"><div class="wc-av">${esc(ini)}</div><span>${esc(t.nombre)}</span>${codigo?`<span style="font-size:10px;color:var(--text-3);margin-left:2px;">(${esc(codigo)})</span>`:''}${ico}</button>`;
         }).join(''):'<div style="color:var(--text-3);font-size:12px;padding:8px 0;">Sin trabajadores — pulsa <em>Editar</em> para agregar</div>'}
-        ${trabs.length>12?`<div class="worker-chip" style="background:var(--slate-100);font-weight:600;">+${trabs.length-12} más</div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -6883,6 +6931,144 @@ function removeMLinea(ln){
   if(!confirm('¿Eliminar la línea '+ln+' del turno/fecha seleccionado?'))return;
   _armDeleteEntry(ln,turnoScope,fechaScope);
   rtSave();renderMArmado();showToast('Línea '+ln+' eliminada','success');
+}
+function openMoverTrabArmadoMoldeFromChip(btn){
+  if(!btn)return;
+  const ln=btn.getAttribute('data-mmov-ln')||'';
+  const tidS=btn.getAttribute('data-mmov-tid')||'';
+  let nom='';
+  try{nom=decodeURIComponent(btn.getAttribute('data-mmov-nom')||'');}catch(_){nom='';}
+  const tid=tidS?parseInt(tidS,10):NaN;
+  openMoverTrabArmadoMolde(ln,isNaN(tid)||tid<=0?null:tid,nom);
+}
+function openMoverTrabArmadoMolde(fromLinea,trabId,nombreFallback){
+  _ensureArmadoMolde();
+  const turno=_getMArmScopeTurno();
+  const fecha=_getMArmScopeFecha();
+  if(!fromLinea){showToast('Línea origen inválida','error');return;}
+  const src=_armGetEntry(fromLinea,turno,fecha);
+  if(!src||!Array.isArray(src.trabajadores)){showToast('Sin datos de línea','error');return;}
+  const idx=_armFindTrabIdxInArr(src.trabajadores,trabId,nombreFallback);
+  if(idx<0){showToast('No se encontró al trabajador en la línea','error');return;}
+  const trab=src.trabajadores[idx];
+  const rows=_armEntriesForScope(turno,fecha);
+  const targets=rows.map(r=>r.linea).filter(l=>String(l).toUpperCase()!==String(fromLinea).toUpperCase());
+  if(!targets.length){showToast('No hay otra línea de destino en este turno/fecha','error');return;}
+  window.__mMoveMolde={fromLinea,turno,fecha,trabId:trab.trabId||null,nombreFallback:String(trab.nombre||nombreFallback||'')};
+  const opts=targets.map(ln2=>`<option value="${esc(ln2)}">${esc(ln2)}</option>`).join('');
+  const m=document.createElement('div');m.className='modal-backdrop';m.id='mMoveTrabArmModal';
+  m.innerHTML=`<div class="modal" style="max-width:440px;">
+    <div class="modal-hdr"><div class="modal-title">Mover trabajador de línea</div><button type="button" class="modal-x" onclick="closeMoverTrabArmadoMolde()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-2);margin:0 0 12px;line-height:1.45;"><strong>${esc(trab.nombre||'—')}</strong> pasa de <strong>${esc(fromLinea)}</strong> a otra línea <span style="color:var(--text-3);">(${esc(turno)} · ${esc(fecha)})</span></p>
+      <div class="form-field"><label class="form-label">Línea destino</label>
+        <select class="select" id="mMoveTrabArmDest">${opts}</select></div>
+      <p style="font-size:11px;color:var(--text-3);margin-top:10px;">En la línea destino quedará <strong>resaltado en verde azulado</strong> hasta que lo vuelvas a mover.</p>
+    </div>
+    <div class="modal-ftr">
+      <button type="button" class="btn ghost" onclick="closeMoverTrabArmadoMolde()">Cancelar</button>
+      <button type="button" class="btn success" onclick="confirmMoverTrabArmadoMolde()">Mover</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+}
+function closeMoverTrabArmadoMolde(){const el=document.getElementById('mMoveTrabArmModal');if(el)el.remove();window.__mMoveMolde=null;}
+function confirmMoverTrabArmadoMolde(){
+  const st=window.__mMoveMolde;if(!st)return;
+  const destSel=document.getElementById('mMoveTrabArmDest');
+  const destLinea=(destSel&&destSel.value||'').trim().toUpperCase();
+  if(!destLinea){showToast('Elige línea destino','error');return;}
+  const{fromLinea,turno,fecha,trabId,nombreFallback}=st;
+  const src=_armGetEntry(fromLinea,turno,fecha);
+  const dst=_armGetEntry(destLinea,turno,fecha);
+  if(!src||!dst){showToast('Línea no disponible','error');return;}
+  const arr=src.trabajadores||[];
+  const idx=_armFindTrabIdxInArr(arr,trabId,nombreFallback);
+  if(idx<0){showToast('No se encontró al trabajador','error');return;}
+  const moved=JSON.parse(JSON.stringify(arr[idx]));
+  if(!dst.trabajadores)dst.trabajadores=[];
+  const dup=_armFindTrabIdxInArr(dst.trabajadores,moved.trabId,moved.nombre||nombreFallback);
+  if(dup>=0){showToast('Esa persona ya está en '+destLinea,'error');return;}
+  moved.movidoDesdeLinea=String(fromLinea).toUpperCase();
+  arr.splice(idx,1);
+  dst.trabajadores.push(moved);
+  _armSetEntry(fromLinea,src,turno,fecha);
+  _armSetEntry(destLinea,dst,turno,fecha);
+  rtSave();
+  closeMoverTrabArmadoMolde();
+  renderMArmado();
+  if(window.renderMRegLinea)renderMRegLinea();
+  if(window.renderMRegTrab)renderMRegTrab();
+  showToast((moved.nombre||'')+' → '+destLinea,'success');
+}
+function openMoverTrabArmadoPesajeFromChip(btn){
+  if(!btn)return;
+  const ln=btn.getAttribute('data-pmov-ln')||'';
+  const tidS=btn.getAttribute('data-pmov-tid')||'';
+  let nom='';
+  try{nom=decodeURIComponent(btn.getAttribute('data-pmov-nom')||'');}catch(_){nom='';}
+  const tid=tidS?parseInt(tidS,10):NaN;
+  openMoverTrabArmadoPesaje(ln,isNaN(tid)||tid<=0?null:tid,nom);
+}
+function openMoverTrabArmadoPesaje(fromLinea,trabId,nombreFallback){
+  _ensureArmadoPesaje();
+  const turno=_getPArmScopeTurno();
+  const fecha=_getPArmScopeFecha();
+  if(!fromLinea){showToast('Línea origen inválida','error');return;}
+  const src=_pArmGetEntry(fromLinea,turno,fecha);
+  if(!src||!Array.isArray(src.trabajadores)){showToast('Sin datos de línea','error');return;}
+  const idx=_armFindTrabIdxInArr(src.trabajadores,trabId,nombreFallback);
+  if(idx<0){showToast('No se encontró al trabajador en la línea','error');return;}
+  const trab=src.trabajadores[idx];
+  const rows=_pArmEntriesForScope(turno,fecha);
+  const targets=rows.map(r=>r.linea).filter(l=>String(l).toUpperCase()!==String(fromLinea).toUpperCase());
+  if(!targets.length){showToast('No hay otra línea de destino en este turno/fecha','error');return;}
+  window.__pMoveArmado={fromLinea,turno,fecha,trabId:trab.trabId||null,nombreFallback:String(trab.nombre||nombreFallback||'')};
+  const opts=targets.map(ln2=>`<option value="${esc(ln2)}">${esc(ln2)}</option>`).join('');
+  const m=document.createElement('div');m.className='modal-backdrop';m.id='pMoveTrabArmModal';
+  m.innerHTML=`<div class="modal" style="max-width:440px;">
+    <div class="modal-hdr"><div class="modal-title">Mover trabajador de línea (pesaje)</div><button type="button" class="modal-x" onclick="closeMoverTrabArmadoPesaje()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-2);margin:0 0 12px;line-height:1.45;"><strong>${esc(trab.nombre||'—')}</strong> pasa de <strong>${esc(fromLinea)}</strong> a otra línea <span style="color:var(--text-3);">(${esc(turno)} · ${esc(fecha)})</span></p>
+      <div class="form-field"><label class="form-label">Línea destino</label>
+        <select class="select" id="pMoveTrabArmDest">${opts}</select></div>
+      <p style="font-size:11px;color:var(--text-3);margin-top:10px;">En la línea destino quedará <strong>resaltado en verde azulado</strong> hasta que lo vuelvas a mover.</p>
+    </div>
+    <div class="modal-ftr">
+      <button type="button" class="btn ghost" onclick="closeMoverTrabArmadoPesaje()">Cancelar</button>
+      <button type="button" class="btn success" onclick="confirmMoverTrabArmadoPesaje()">Mover</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+}
+function closeMoverTrabArmadoPesaje(){const el=document.getElementById('pMoveTrabArmModal');if(el)el.remove();window.__pMoveArmado=null;}
+function confirmMoverTrabArmadoPesaje(){
+  const st=window.__pMoveArmado;if(!st)return;
+  const destSel=document.getElementById('pMoveTrabArmDest');
+  const destLinea=(destSel&&destSel.value||'').trim().toUpperCase();
+  if(!destLinea){showToast('Elige línea destino','error');return;}
+  const{fromLinea,turno,fecha,trabId,nombreFallback}=st;
+  const src=_pArmGetEntry(fromLinea,turno,fecha);
+  const dst=_pArmGetEntry(destLinea,turno,fecha);
+  if(!src||!dst){showToast('Línea no disponible','error');return;}
+  const arr=src.trabajadores||[];
+  const idx=_armFindTrabIdxInArr(arr,trabId,nombreFallback);
+  if(idx<0){showToast('No se encontró al trabajador','error');return;}
+  const moved=JSON.parse(JSON.stringify(arr[idx]));
+  if(!dst.trabajadores)dst.trabajadores=[];
+  const dup=_armFindTrabIdxInArr(dst.trabajadores,moved.trabId,moved.nombre||nombreFallback);
+  if(dup>=0){showToast('Esa persona ya está en '+destLinea,'error');return;}
+  moved.movidoDesdeLinea=String(fromLinea).toUpperCase();
+  arr.splice(idx,1);
+  dst.trabajadores.push(moved);
+  _pArmSetEntry(fromLinea,src,turno,fecha);
+  _pArmSetEntry(destLinea,dst,turno,fecha);
+  rtSave();
+  closeMoverTrabArmadoPesaje();
+  renderPArmado();
+  if(window.renderPRegLinea)renderPRegLinea();
+  if(window.renderPRegTrab)renderPRegTrab();
+  showToast((moved.nombre||'')+' → '+destLinea,'success');
 }
 
 /* ── Editor de línea moldes: especie + planillero + trabajadores ── */
@@ -7388,6 +7574,7 @@ function saveMArmado(){
 }
 window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;window.closeMArmado=closeMArmado;window.saveMArmado=saveMArmado;
 window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;
+window.openMoverTrabArmadoMoldeFromChip=openMoverTrabArmadoMoldeFromChip;window.openMoverTrabArmadoMolde=openMoverTrabArmadoMolde;window.closeMoverTrabArmadoMolde=closeMoverTrabArmadoMolde;window.confirmMoverTrabArmadoMolde=confirmMoverTrabArmadoMolde;
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
 window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
