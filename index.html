@@ -5011,11 +5011,55 @@ function _pRegClearCamposSinLineaArmado(){
   const e=document.getElementById('pRegEspecie');if(e)e.value='';
   const t=document.getElementById('pRegTipo');if(t)t.value='';
   const k=document.getElementById('pRegKg');if(k)k.value='';
+  try{window.__pRegLastArmadoScope='';}catch(_){}
   if(typeof clearRegPicker==='function'){
     clearRegPicker('pRegPlanillero',null);
     clearRegPicker('pRegTrab','onPRegTrabChange');
   }
   if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
+}
+/** Clave línea+turno+fecha de registro (para saber si cambió el armado aplicable). */
+function _pRegArmadoScopeKey(){
+  const ln=(document.getElementById('pRegLinea')||{}).value||'';
+  return String(ln||'').trim()+'\t'+String(_pArmRegTurno()||'dia').trim()+'\t'+String(_pArmRegFecha()||'').trim();
+}
+function _pRegNormEspCmp(s){
+  try{
+    return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  }catch(_){return String(s||'').trim().toLowerCase();}
+}
+/** Pone `pRegEspecie` según armado de la línea (especie/producto); true si hubo coincidencia con una opción del select. */
+function _pRegApplyEspecieDesdeArmado(){
+  const selL=document.getElementById('pRegLinea');
+  const esp=document.getElementById('pRegEspecie');
+  if(!selL||!esp||!_pRegHasLineaSeleccionada())return false;
+  const data=_pArmGetEntry(String(selL.value||'').trim(),_pArmRegTurno(),_pArmRegFecha());
+  const raw=String((data&&data.especie)||(data&&data.producto)||'').trim();
+  if(!raw)return false;
+  const want=_pRegNormEspCmp(raw);
+  const opts=[...esp.options].filter(o=>String(o.value||'').trim());
+  let hit=opts.find(o=>_pRegNormEspCmp(o.value)===want);
+  if(!hit)hit=opts.find(o=>_pRegNormEspCmp((o.textContent||'').replace(/\s+/g,' '))===want);
+  if(!hit)hit=opts.find(o=>{
+    const v=_pRegNormEspCmp(o.value);
+    return v&&(want.includes(v)||v.includes(want));
+  });
+  if(hit){esp.value=hit.value;return true;}
+  if(typeof _getEspecies==='function'){
+    const pool=_getEspecies();
+    const canon=pool.find(e=>_pRegNormEspCmp(e)===want);
+    if(canon){
+      if(![...esp.options].some(o=>String(o.value||'')===canon)){
+        const opt=document.createElement('option');
+        opt.value=canon;
+        opt.textContent=canon;
+        esp.appendChild(opt);
+      }
+      esp.value=canon;
+      return true;
+    }
+  }
+  return false;
 }
 function _pRegSetUiBloqueadaSinLinea(on){
   const lock=!!on;
@@ -5036,14 +5080,22 @@ function _pRegSetUiBloqueadaSinLinea(on){
   const tgl=document.getElementById('pRegKgPadToggleBtn');
   if(tgl)tgl.disabled=lock;
 }
-/** Con línea válida: valores por defecto de especie/tipo solo si aún están vacíos (p. ej. tras armar). */
+/** Con línea válida: especie predeterminada = armado de pesaje (si cambia línea/turno/fecha o especie vacía). */
 function _pRegFillDefaultsSiVacios(){
   if(!_pRegHasLineaSeleccionada())return;
   const esp=document.getElementById('pRegEspecie');
   const tip=document.getElementById('pRegTipo');
-  if(esp&&!String(esp.value||'').trim()){
-    const o=[...esp.options].find(x=>String(x.value||'').trim());
-    if(o)esp.value=o.value;
+  const key=_pRegArmadoScopeKey();
+  const prevKey=String(window.__pRegLastArmadoScope||'');
+  const scopeChanged=key!==prevKey;
+  if(scopeChanged)try{window.__pRegLastArmadoScope=key;}catch(_){}
+  const espEmpty=!esp||!String(esp.value||'').trim();
+  if(scopeChanged||espEmpty){
+    _pRegApplyEspecieDesdeArmado();
+    if(esp&&!String(esp.value||'').trim()){
+      const o=[...esp.options].find(x=>String(x.value||'').trim());
+      if(o)esp.value=o.value;
+    }
   }
   if(tip&&!String(tip.value||'').trim()){
     const o=[...tip.options].find(x=>String(x.value||'').trim());
