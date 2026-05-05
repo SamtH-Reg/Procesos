@@ -3824,6 +3824,29 @@ function _fechaArmadoOperativa(turnoCod){
   if(mins>=0&&mins<7*60)return _addDaysLocalYmd(ymd,-1);
   return ymd;
 }
+/**
+ * Fecha calendario guardada en cada fila (molde/pesaje/general):
+ * con turno que cruza medianoche (fin antes de inicio en el mismo día), en madrugada (00:00 hasta fin)
+ * usa el día calendario actual; en el tramo desde inicio hasta 23:59 coincide con la fecha de armado del formulario.
+ * Si el turno es «noche» pero no hay definición en Admin, se usa la misma ventana 00:00–07:00 que _fechaArmadoOperativa.
+ */
+function _fechaRegistroOperativo(turnoCod, fechaArmadoYmd){
+  const arm=_cycleDateNorm(fechaArmadoYmd)||todayLocalYmd();
+  const cod=String(turnoCod||'dia').trim();
+  const def=_turnoDefFromCodigo(cod);
+  const a=def?_parseHMToMinutes(def.inicio):null;
+  const b=def?_parseHMToMinutes(def.fin):null;
+  if(def&&a!=null&&b!=null&&b<a){
+    const mins=_minutesNowLocal();
+    if(mins>=0&&mins<b)return todayLocalYmd();
+    return arm;
+  }
+  if(_cycleTurnoNorm(cod)==='noche'){
+    const mins=_minutesNowLocal();
+    if(mins>=0&&mins<7*60)return todayLocalYmd();
+  }
+  return arm;
+}
 /** Elige código de turno según hora actual y horarios en Admin → Turnos (soporta cruce de medianoche). */
 function _inferTurnoCodigoPorHorario(){
   if(!DB||!DB.data)return'dia';
@@ -3888,19 +3911,12 @@ function _moldeTurnoNorm(r){
   const arm=_turnoArmadoMoldesForLinea((r&&r.linea)||'',(r&&r.fecha)||'');
   return arm==='noche'?'noche':'dia';
 }
-/** Timestamp local del molde: fecha = inicio turno noche; madrugada (antes del fin mañana) → día calendario +1. */
+/** Timestamp local del molde: fecha+hora en calendario local (la fecha ya refleja madrugada del turno noche cuando aplica). */
 function _registroTsMolde(r){
   if(!r)return null;
   const fe=_cycleDateNorm((r.fecha)||nowDate());
   const hm=_parseHMToMinutes(r.hora);
   if(hm==null)return _ymdToLocalMs(fe,12,0);
-  if(_moldeTurnoNorm(r)!=='noche')return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
-  const codTurno=String((r&&r.turno)||'').trim()||'noche';
-  const tu=_turnoDefFromCodigo(codTurno)||_turnoDefFromCodigo('noche');
-  if(!tu)return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
-  const a=_parseHMToMinutes(tu.inicio),b=_parseHMToMinutes(tu.fin);
-  if(a==null||b==null||b>a)return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
-  if(hm<b)return _ymdToLocalMs(_addDaysLocalYmd(fe,1),Math.floor(hm/60),hm%60);
   return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
 }
 function _registroTsPesaje(r){
@@ -4524,7 +4540,7 @@ function regMolde(){
   if(!guia){showToast('N° Guía es obligatorio','error');document.getElementById('mRegGuia').focus();return;}
   const kg=Math.round(cant*p.kgRef*10)/10;
   const rec={
-    id:nextId(RT.moldes),hora:nowHM(),fecha:fechaArm,
+    id:nextId(RT.moldes),hora:nowHM(),fecha:_fechaRegistroOperativo(turnoCode,fechaArm),
     turno:turnoCode,
     linea:document.getElementById('mRegLinea').value,
     codigo:codigoTrab,nombre:nombreTrab,ficha:fichaTrab,
@@ -4779,7 +4795,8 @@ function regGeneral(){
   const guia=document.getElementById('gRegGuia').value.trim();
   if(!guia){showToast('N° Guía obligatorio','error');document.getElementById('gRegGuia').focus();return;}
   const turnoCode=String((document.getElementById('gRegTurno')||{}).value||'').trim()||(_inferTurnoCodigoPorHorario&&_inferTurnoCodigoPorHorario())||'dia';
-  const fechaReg=_tbNormYmd((document.getElementById('gRegFecha')||{}).value)||todayLocalYmd();
+  const fechaArmInput=_tbNormYmd((document.getElementById('gRegFecha')||{}).value)||todayLocalYmd();
+  const fechaReg=_fechaRegistroOperativo(turnoCode,fechaArmInput);
   const kg=Math.round(cant*p.kgRef*10)/10;
   const rec={
     id:nextId(RT.generales),hora:nowHM(),fecha:fechaReg,
@@ -5847,7 +5864,7 @@ function regPesaje(){
   if(!especieVal){showToast('Selecciona especie','error');document.getElementById('pRegEspecie').focus();return;}
   if(!tipoVal){showToast('Selecciona tipo','error');document.getElementById('pRegTipo').focus();return;}
   const rec={
-    id:nextId(RT.pesajes),hora:nowHM(),fecha:_pArmRegFecha(),
+    id:nextId(RT.pesajes),hora:nowHM(),fecha:_fechaRegistroOperativo(_pArmRegTurno()||document.getElementById('pRegTurno').value||'dia',_pArmRegFecha()),
     turno:_pArmRegTurno()||document.getElementById('pRegTurno').value,
     linea:document.getElementById('pRegLinea').value,
     trabId:t.id,codigo:t.codigo,nombre:t.nombre,ficha,
