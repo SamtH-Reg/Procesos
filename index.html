@@ -3559,6 +3559,18 @@ function _tbParseSbPesaje(rec){
     fecha:rec.fecha||nowDate()
   };
 }
+/** Supabase → filas RT.generales (registro general, sin operario). */
+function _tbParseSbGeneral(rec){
+  if(!rec||rec.id==null)return null;
+  const pid=rec.presetId!=null?rec.presetId:rec.preset_id;
+  return{
+    id:rec.id,hora:rec.hora||null,turno:rec.turno||null,linea:rec.linea||null,
+    producto:rec.producto||null,presetId:pid!=null?pid:null,
+    destino:rec.destino||null,calibre:rec.calibre||null,especie:rec.especie||null,tipo:rec.tipo||null,
+    cant:rec.cant!=null?rec.cant:null,pendiente:rec.pendiente!=null?rec.pendiente:rec.cant,kg:rec.kg!=null?rec.kg:null,guia:rec.guia||null,
+    fecha:rec.fecha||nowDate()
+  };
+}
 function _tbMergeRtById(localArr,remoteRows,mapFn){
   const remote=(remoteRows||[]).map(mapFn).filter(Boolean);
   const local=Array.isArray(localArr)?localArr:[];
@@ -3587,22 +3599,24 @@ function idxRefreshMoldesKpis(){
   set('idxKpiOpVal',String(op));
   set('idxKpiOpSub','Con registros');
 }
-async function tbManualPullMoldesPesajes(){
-  if(!_tbSb){if(typeof showToast==='function')showToast('Sin conexión a Supabase','warn');return;}
-  if(!_tbUser){if(typeof showToast==='function')showToast('Inicia sesión para leer moldes y pesajes','warn');return;}
+async function tbManualPullMoldesPesajes(opts){
+  opts=opts||{};
+  const silent=!!opts.silent;
+  if(!_tbSb){if(!silent&&typeof showToast==='function')showToast('Sin conexión a Supabase','warn');return;}
+  if(!_tbUser){if(!silent&&typeof showToast==='function')showToast('Inicia sesión para leer moldes, pesajes y registros generales','warn');return;}
   try{
-    for(const t of['moldes','pesajes']){
+    const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
+    for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
       const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).limit(500);
-      if(error){console.warn('[tb pull]',t,error);if(typeof showToast==='function')showToast(t+': '+error.message,'error');continue;}
-      const map=t==='moldes'?_tbParseSbMolde:_tbParseSbPesaje;
-      RT[t]=_tbMergeRtById(localBefore,data||[],map);
+      if(error){console.warn('[tb pull]',t,error);if(!silent&&typeof showToast==='function')showToast(t+': '+error.message,'error');continue;}
+      RT[t]=_tbMergeRtById(localBefore,data||[],mapFor(t));
     }
     rtSave();
     if(typeof initRuntime==='function')initRuntime();
     idxRefreshMoldesKpis();
-    if(typeof showToast==='function')showToast('Moldes y pesajes actualizados desde Supabase','success');
-  }catch(e){if(typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
+    if(!silent&&typeof showToast==='function')showToast('Moldes, pesajes y registros generales actualizados desde Supabase','success');
+  }catch(e){if(!silent&&typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
 }
 window.idxRefreshMoldesKpis=idxRefreshMoldesKpis;
 window.tbManualPullMoldesPesajes=tbManualPullMoldesPesajes;
@@ -8793,8 +8807,8 @@ setInterval(()=>{renderEquipos();},60000);
    ──────────────────────────────────────────────────────────────
    - Conecta automáticamente al inicio
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
-   - Auto-push en modo ahorro (debounce + deduplicación) de moldes/pesajes/armado tras rtSave
-   - Realtime: escucha cambios remotos y actualiza UI
+   - Auto-push en modo ahorro (debounce + deduplicación) de moldes/pesajes/generales/armado tras rtSave
+   - Realtime: catálogos + moldes/pesajes (un canal) + armado_lineas; generales solo REST (sin fila en publication = menos mensajes)
    - Misma clave localStorage que admin (`friosur_sb`): URL/key por defecto embebidos; si el admin guardó otro proyecto, la tablet usa ese (mismo patrón que UCO admin_cfg + defaults).
    ══════════════════════════════════════════════════════════════ */
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
@@ -8823,7 +8837,7 @@ try{
   const _c=_tbResolveSupabaseCreds();
   if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key,_tbSbAuthOptions());
 }catch(e){console.warn('[sb] init',e);}
-/** Solo '1' = ahorro (no WS moldes/pesajes). Ausente u otro = vivo (cambios remotos al instante). */
+/** Solo '1' = ahorro (no WS moldes/pesajes; armado_lineas sigue en vivo). Ausente u otro = vivo (cambios remotos al instante). */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
 /** Valor `fecha` tal como lo espera .eq() contra Postgres (AAAA-MM-DD o prefijo ISO). */
 function _tbFechaEqFromRow(v){
@@ -8901,7 +8915,7 @@ const TBSync={
   _pushLastAt:0,
   _pushMinGapMs:4500,
   _pushDebounceMs:2500,
-  _lastSig:{moldes:'',pesajes:'',armado:''},
+  _lastSig:{moldes:'',pesajes:'',generales:'',armado:''},
   onlineBadge(){
     try{
       const tb=document.querySelector('.topbar,[data-topbar]')||document.body;
@@ -9021,6 +9035,23 @@ const TBSync={
           if(typeof showToast==='function')showToast('No se subieron pesajes a Supabase: '+error.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
         }else this._lastSig.pesajes=sigP;
       }
+      const generalesRows=(RT.generales||[]).map(r=>{
+        const pid=r.presetId!=null?r.presetId:r.preset_id;
+        return{
+        id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,
+        producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
+        destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,tipo:r.tipo||null,
+        cant:r.cant||null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
+        fecha:r.fecha||today
+      };});
+      const sigG=this._sigRows(generalesRows,'id');
+      if(generalesRows.length&&sigG!==this._lastSig.generales){
+        const{error:gErr}=await _tbSb.from('generales').upsert(generalesRows,{onConflict:'id'});
+        if(gErr){
+          console.warn('[sb push generales]',gErr.message);
+          if(typeof showToast==='function')showToast('No se subieron registros generales a Supabase: '+gErr.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
+        }else this._lastSig.generales=sigG;
+      }
       // ── Push armado de línea (moldes + pesaje; columna `area` en Supabase) ──
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
@@ -9097,9 +9128,12 @@ const TBSync={
       .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
       .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
       .subscribe();
-    /* moldes/pesajes por Realtime; desactivar con localStorage friosur_tb_msg_economy='1' (ahorro WS). */
+    /* moldes + pesajes: un solo canal Realtime (menos suscripciones WS que dos canales).
+       Registro general (generales) no usa Realtime: solo REST push/pull → ahorro de mensajes.
+       Modo ahorro: localStorage friosur_tb_msg_economy='1' (sin moldes/pesajes por WS). */
     if(!tbMsgEconomy()){
-      _tbSb.channel('tb-moldes').on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
+      _tbSb.channel('tb-ops')
+        .on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
         const rec=p.new||p.old;if(!rec)return;
         const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,producto:rec.producto,presetId:rec.preset_id,destino:rec.destino,calibre:rec.calibre,especie:rec.especie,cant:rec.cant,pendiente:rec.pendiente,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
         const i=RT.moldes.findIndex(r=>String(r.id)===String(rec.id));
@@ -9109,8 +9143,8 @@ const TBSync={
         if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
         if(typeof renderMoldesTable==='function')renderMoldesTable();
         if(typeof renderPorCargar==='function')renderPorCargar();
-      }).subscribe();
-      _tbSb.channel('tb-pesajes').on('postgres_changes',{event:'*',schema:'public',table:'pesajes'},(p)=>{
+      })
+        .on('postgres_changes',{event:'*',schema:'public',table:'pesajes'},(p)=>{
         const rec=p.new||p.old;if(!rec)return;
         const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,trabId:rec.trab_id,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,especie:rec.especie,tipo:rec.tipo,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
         const i=RT.pesajes.findIndex(r=>String(r.id)===String(rec.id));
@@ -9166,10 +9200,8 @@ const TBSync={
         if(area==='pesaje')_pArmSetEntry(lineaRt,payload,turno,fe);
         else _armSetEntry(lineaRt,payload,turno,fe);
       }
-      // Guardar local sin disparar re-push (evita loop infinito)
       _rtSaveOrig&&_rtSaveOrig();
       if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
-      // Refrescar UI
       if(typeof renderMArmado==='function')renderMArmado();
       if(typeof renderMRegLinea==='function')renderMRegLinea();
       if(typeof renderMRegTrab==='function')renderMRegTrab();
@@ -9199,6 +9231,7 @@ async function tbInitAuth(){
   try{
     await TBSync.pullCatalogs();
     TBSync.subscribe();
+    if(initialSess&&typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});
   }catch(e){console.warn('[tb] pull catálogo inicial',e);}
   _tbSb.auth.onAuthStateChange(async(event,sess)=>{
     if(event==='INITIAL_SESSION'){
@@ -9210,6 +9243,7 @@ async function tbInitAuth(){
     if(event==='SIGNED_IN'&&sess){
       await tbApplySession(sess);
       try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
+      try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos tras login',e2);}
     }
   });
 }

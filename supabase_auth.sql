@@ -54,6 +54,7 @@ alter table equipos        enable row level security;
 alter table roles          enable row level security;
 alter table moldes         enable row level security;
 alter table pesajes        enable row level security;
+alter table generales      enable row level security;
 alter table armado_linea   enable row level security;
 alter table user_profiles  enable row level security;
 
@@ -67,7 +68,7 @@ do $$ declare p record;
 begin
   for p in select policyname, tablename from pg_policies
            where schemaname='public' and tablename in
-           ('presets','trabajadores','turnos','equipos','roles','moldes','pesajes','armado_linea','user_profiles')
+           ('presets','trabajadores','turnos','equipos','roles','moldes','pesajes','generales','armado_linea','user_profiles')
   loop execute format('drop policy if exists %I on public.%I', p.policyname, p.tablename);
   end loop;
 end $$;
@@ -98,6 +99,9 @@ create policy moldes_write      on moldes       for all    using (can_write()) w
 
 create policy pesajes_read      on pesajes      for select using (auth.role()='authenticated');
 create policy pesajes_write     on pesajes      for all    using (can_write()) with check (can_write());
+
+create policy generales_read    on generales    for select using (auth.role()='authenticated');
+create policy generales_write   on generales    for all    using (can_write()) with check (can_write());
 
 create policy armado_read       on armado_linea for select using (auth.role()='authenticated');
 create policy armado_write      on armado_linea for all    using (can_write()) with check (can_write());

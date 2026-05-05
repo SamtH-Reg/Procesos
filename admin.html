@@ -3179,7 +3179,7 @@ function _doRender(dirty){
   try{
     const active=document.querySelector('.page.active');
     const id=active?active.id:'page-dashboard';
-    const dataChanged=!dirty||dirty.has('moldes')||dirty.has('pesajes')||dirty.has('armado');
+    const dataChanged=!dirty||dirty.has('moldes')||dirty.has('pesajes')||dirty.has('generales')||dirty.has('armado');
     // KPIs + Dashboard siempre (actualización silenciosa, sin reconstruir DOM)
     if(typeof renderKPIs==='function')renderKPIs();
     if(typeof renderDashGrid==='function')renderDashGrid();
@@ -3216,11 +3216,11 @@ function sbRerenderCurrent(tbl){
   },100);
 }
 /* ── Polling activo: consulta Supabase cada 5s y re-renderiza si hay datos nuevos ── */
-let _pollCounts={moldes:0,pesajes:0};
+let _pollCounts={moldes:0,pesajes:0,generales:0};
 async function _pollFresh(){
   if(!_sb||!_currentUser)return;
   let changed=false;
-  for(const t of['moldes','pesajes']){
+  for(const t of['moldes','pesajes','generales']){
     try{
       // Pedir count total de filas
       const{count,error}=await _sb.from(t).select('*',{count:'exact',head:true});
@@ -3243,20 +3243,20 @@ async function _pollFresh(){
   if(changed){
     RT.save();
     rtPulse('poll');
-    _doRender(new Set(['moldes','pesajes']));
+    _doRender(new Set(['moldes','pesajes','generales']));
   }
 }
 function sbStartPoll(){
   if(_pollInterval)clearInterval(_pollInterval);
   // Inicializar counts actuales para no disparar render al arrancar
   (async()=>{
-    for(const t of['moldes','pesajes']){
+    for(const t of['moldes','pesajes','generales']){
       try{
         const{count}=await _sb.from(t).select('*',{count:'exact',head:true});
         _pollCounts[t]=count||0;
       }catch(e){}
     }
-    sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes);
+    sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes+' generales='+_pollCounts.generales);
   })();
   _pollInterval=setInterval(_pollFresh,5000);
 }
@@ -3290,6 +3290,10 @@ const SB_MAP={
     out:r=>({id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,producto:r.producto||null,preset_id:r.presetId??r.preset_id??null,destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,cant:r.cant??null,pendiente:r.pendiente??null,kg:r.kg??null,guia:r.guia||null,fecha:r.fecha||_today()}),
     in:r=>({...r,presetId:r.preset_id})
   },
+  generales:{
+    out:r=>({id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,producto:r.producto||null,preset_id:r.presetId??r.preset_id??null,destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,tipo:r.tipo||null,cant:r.cant??null,pendiente:r.pendiente??null,kg:r.kg??null,guia:r.guia||null,fecha:r.fecha||_today()}),
+    in:r=>({...r,presetId:r.preset_id})
+  },
   pesajes:{
     out:r=>({id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,trab_id:r.trabId??r.trab_id??null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,especie:r.especie||null,tipo:r.tipo||null,kg:r.kg??null,guia:r.guia||null,fecha:r.fecha||_today()}),
     in:r=>({...r,trabId:r.trab_id})
@@ -3313,7 +3317,7 @@ async function sbDeletePresetRemote(id){
 async function pushAll(){
   if(!_sb){toast('Conecta primero','warn');return;}
   document.getElementById('sbDot').className='status-dot syncing';
-  const tables={presets:DB.data.presets,trabajadores:DB.data.trabajadores,turnos:DB.data.turnos,equipos:DB.data.equipos,roles:DB.data.roles,moldes:RT.data.moldes,pesajes:RT.data.pesajes};
+  const tables={presets:DB.data.presets,trabajadores:DB.data.trabajadores,turnos:DB.data.turnos,equipos:DB.data.equipos,roles:DB.data.roles,moldes:RT.data.moldes,pesajes:RT.data.pesajes,generales:RT.data.generales};
   // Sets de IDs válidos para limpiar foreign keys
   const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
   const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
@@ -3322,7 +3326,7 @@ async function pushAll(){
     try{if(!rows||!rows.length){sbLog(t+': (vacío)');continue;}
       let mapped=_sbRows(t,rows);
       // Limpieza de FK huérfanas
-      if(t==='moldes'){mapped=mapped.map(r=>({...r,preset_id:validPresetIds.has(r.preset_id)?r.preset_id:null}));}
+      if(t==='moldes'||t==='generales'){mapped=mapped.map(r=>({...r,preset_id:validPresetIds.has(r.preset_id)?r.preset_id:null}));}
       if(t==='pesajes'){mapped=mapped.map(r=>({...r,trab_id:validTrabIds.has(r.trab_id)?r.trab_id:null}));}
       const pkCol=(t==='turnos'||t==='equipos')?'codigo':'id';
       const{error}=await _sb.from(t).upsert(mapped,{onConflict:pkCol});
@@ -3342,7 +3346,7 @@ async function pullAll(){
       if(error)throw error;DB.data[t]=_sbParse(t,data);sbLog(t+': '+data.length+' filas ↓');
     }
     // Operacionales (fusionar: no borrar registros hechos en tablet y aún no en la nube)
-    for(const t of['moldes','pesajes']){
+    for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT.data&&RT.data[t])?[...RT.data[t]]:[];
       const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
       if(error)throw error;if(!RT.data)RT.data={};

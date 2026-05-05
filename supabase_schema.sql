@@ -107,6 +107,27 @@ create table if not exists pesajes(
   created_at timestamptz default now()
 );
 
+-- Registro general (pallet / carro / castillo) — sin operario; sync vía REST desde index/admin.
+-- No añadir a publication supabase_realtime si quieres ahorrar cuota de mensajes Realtime.
+create table if not exists generales(
+  id         bigint primary key,
+  hora       text,
+  turno      text,
+  linea      text,
+  producto   text,
+  preset_id  bigint references presets(id) on delete set null,
+  destino    text,
+  calibre    text,
+  especie    text,
+  tipo       text,
+  cant       int,
+  pendiente  int,
+  kg         numeric,
+  guia       text,
+  fecha      date default current_date,
+  created_at timestamptz default now()
+);
+
 -- Armado de línea (planillero + trabajadores por turno/línea/área)
 create table if not exists armado_linea(
   area         text  not null,   -- 'moldes' | 'pesaje'
@@ -129,6 +150,8 @@ create index if not exists idx_pesajes_fecha      on pesajes(fecha);
 create index if not exists idx_pesajes_linea_turno on pesajes(linea, turno);
 create index if not exists idx_pesajes_trab       on pesajes(trab_id);
 create index if not exists idx_pesajes_especie    on pesajes(especie);
+create index if not exists idx_generales_fecha    on generales(fecha);
+create index if not exists idx_generales_linea_turno on generales(linea, turno);
 create index if not exists idx_trab_area          on trabajadores(area);
 create index if not exists idx_trab_turno_linea   on trabajadores(turno, linea);
 
