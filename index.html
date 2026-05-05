@@ -992,7 +992,7 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 .p-reg-kg-stack .p-reg-save-pesaje{width:100%;margin:0;}
 /* Teclado: tarjeta más estrecha que el botón teal, sombra suave, teclas blancas */
 #pRegKgPadCard{
-  max-width:min(300px,100%);
+  max-width:min(352px,100%);
   width:100%;
   margin-inline:auto;
   box-shadow:0 8px 28px rgba(15,23,42,.08),0 1px 0 rgba(15,23,42,.04);
@@ -1036,35 +1036,55 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 }
 .p-reg-kg-pad{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:8px;
+  grid-template-columns:repeat(4,1fr);
+  gap:6px;
   width:100%;
-  max-width:300px;
+  max-width:min(336px,100%);
   margin-inline:auto;
   touch-action:manipulation;
   -webkit-user-select:none;user-select:none;
 }
+.p-reg-kg-pad .pk-spacer{
+  aspect-ratio:1/1.1;
+  min-height:44px;
+  visibility:hidden;
+  pointer-events:none;
+  margin:0;
+  padding:0;
+  border:none;
+  background:transparent;
+  box-shadow:none;
+}
 .p-reg-kg-pad .pk{
-  min-height:54px;
-  padding:0 2px;
-  font-size:clamp(26px,7vw,34px);
+  box-sizing:border-box;
+  min-height:44px;
+  aspect-ratio:1/1.1;
+  width:100%;
+  padding:0;
+  font-size:clamp(22px,5.5vw,30px);
   font-weight:800;
   font-family:var(--mono);
   color:var(--text);
   background:var(--surface);
   border:1.5px solid var(--border);
-  border-radius:12px;
+  border-radius:10px;
   box-shadow:0 1px 0 rgba(15,23,42,.04);
   cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
   transition:background .12s,border-color .12s,transform .08s,box-shadow .12s;
 }
 .p-reg-kg-pad .pk:active{transform:scale(0.97);}
 .p-reg-kg-pad .pk:hover{border-color:var(--border-strong);box-shadow:0 2px 6px rgba(15,23,42,.06);}
 .p-reg-kg-pad .pk:disabled{opacity:.38;cursor:not-allowed;transform:none;box-shadow:none;}
-.p-reg-kg-pad .pk-op{background:var(--surface-alt);font-size:clamp(18px,4.5vw,22px);font-weight:700;}
+.p-reg-kg-pad .pk-op{background:var(--surface-alt);font-size:clamp(17px,4.2vw,22px);font-weight:700;}
+.p-reg-kg-pad .pk-bs .pk-ico{width:22px;height:22px;stroke-width:2;}
 .p-reg-kg-pad .pk-wide{
   grid-column:1/-1;
+  aspect-ratio:auto;
   min-height:40px;
+  width:100%;
   font-size:12px;
   font-weight:700;
   color:var(--text-3);
@@ -1073,11 +1093,12 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 }
 .p-reg-kg-pad-hint{font-size:10px;color:var(--text-3);line-height:1.3;margin:0 0 6px;text-align:center;}
 @media (min-width:900px){
-  #pRegKgPadCard{max-width:min(318px,100%);}
-  .p-reg-kg-pad{max-width:318px;gap:9px;}
-  .p-reg-kg-pad .pk{min-height:60px;font-size:clamp(30px,3.4vw,36px);}
-  .p-reg-kg-pad .pk-op{font-size:22px;}
+  #pRegKgPadCard{max-width:min(352px,100%);}
+  .p-reg-kg-pad{max-width:352px;gap:7px;}
+  .p-reg-kg-pad .pk{min-height:50px;font-size:clamp(26px,3vw,32px);}
+  .p-reg-kg-pad .pk-op{font-size:20px;}
   .p-reg-kg-pad .pk-wide{min-height:44px;font-size:13px;}
+  .p-reg-kg-pad .pk-spacer{min-height:50px;}
 }
 body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--surface-alt);border-color:var(--border-strong);color:var(--text);}
 
@@ -2076,15 +2097,19 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                 <button type="button" class="pk" onclick="pRegKgPadKey('1')">1</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('2')">2</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('3')">3</button>
+                <button type="button" class="pk pk-op pk-bs" onclick="pRegKgPadKey('bs')" title="Borrar último" aria-label="Borrar último"><svg class="pk-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-7-7 7-7z"/><path d="M14 9l-4 4M10 9l4 4"/></svg></button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('4')">4</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('5')">5</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('6')">6</button>
+                <span class="pk-spacer" aria-hidden="true"></span>
                 <button type="button" class="pk" onclick="pRegKgPadKey('7')">7</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('8')">8</button>
                 <button type="button" class="pk" onclick="pRegKgPadKey('9')">9</button>
-                <button type="button" class="pk pk-op" onclick="pRegKgPadKey(',')">,</button>
+                <button type="button" class="pk pk-op" onclick="pRegKgPadKey('.')" title="Decimal (punto)">.</button>
+                <span class="pk-spacer" aria-hidden="true"></span>
                 <button type="button" class="pk" onclick="pRegKgPadKey('0')">0</button>
-                <button type="button" class="pk pk-op" onclick="pRegKgPadKey('bs')" title="Borrar último">⌫</button>
+                <span class="pk-spacer" aria-hidden="true"></span>
+                <button type="button" class="pk pk-op" onclick="pRegKgPadKey(',')" title="Decimal (coma)">,</button>
                 <button type="button" class="pk pk-op pk-wide" onclick="pRegKgPadKey('C')">Borrar todo</button>
               </div>
             </div>
@@ -5758,11 +5783,11 @@ function pRegKgPadKey(key){
   }
   const inp=document.getElementById('pRegKg');
   if(!inp)return;
-  let v=String(inp.value||'');
+  let v=String(inp.value||'').replace(/\./g,',');
   if(key==='C'){inp.value='';return;}
   if(key==='bs'){inp.value=v.slice(0,-1);return;}
-  if(key===','){
-    if(v.includes(','))return;
+  if(key===','||key==='.'){
+    if(v.includes(',')||v.includes('.'))return;
     if(!v.length)inp.value='0,';
     else inp.value=v+',';
     return;
@@ -5770,7 +5795,7 @@ function pRegKgPadKey(key){
   if(!/^\d$/.test(key))return;
   const parts=v.split(',');
   if(parts[1]!=null&&parts[1].length>=2)return;
-  if(v==='0'&&!v.includes(','))v='';
+  if(v==='0'&&parts.length===1)v='';
   inp.value=v+key;
 }
 function regPesaje(){
@@ -5811,7 +5836,7 @@ function regPesaje(){
       return;
     }
   }
-  const kgRaw=document.getElementById('pRegKg').value.trim().replace(',','.');
+  const kgRaw=document.getElementById('pRegKg').value.trim().replace(/\./g,',').replace(',','.');
   const kg=parseFloat(kgRaw);
   if(!kgRaw||isNaN(kg)||kg<=0){showToast('Ingresa kilos válidos','error');if(!pRegKgPadIsCustom())document.getElementById('pRegKg').focus();return;}
   if(kg<0.2||kg>20){showToast('Rango permitido: 0,2 – 20 kg','error');if(!pRegKgPadIsCustom())document.getElementById('pRegKg').focus();return;}
