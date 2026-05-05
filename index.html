@@ -982,78 +982,104 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 .mono{font-family:var(--mono);font-weight:600;}
 
 /* Chart mini */
-/* Teclado numérico kg — Pesaje: ancho medio (dialer), cabecera compacta */
+/* Pesaje registrar — columna derecha: Guardar (ancho completo) + teclado centrado (mock) */
+.p-reg-kg-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:12px;
+}
+.p-reg-kg-stack .p-reg-save-pesaje{width:100%;margin:0;}
+/* Teclado: tarjeta más estrecha que el botón teal, sombra suave, teclas blancas */
 #pRegKgPadCard{
-  max-width:min(336px,100%);
+  max-width:min(300px,100%);
   width:100%;
   margin-inline:auto;
+  box-shadow:0 8px 28px rgba(15,23,42,.08),0 1px 0 rgba(15,23,42,.04);
 }
 #pRegKgPadCard .p-reg-kg-pad-hdr{
   display:flex;
   flex-direction:column;
   align-items:stretch;
-  gap:6px;
-  padding:8px 12px;
+  gap:8px;
+  padding:10px 12px 10px;
   text-align:center;
+  background:var(--surface);
   border-bottom:1px solid var(--border);
 }
 #pRegKgPadCard .p-reg-kg-pad-hdr .card-title{
   justify-content:center;
   margin:0;
   font-size:13px;
-  line-height:1.2;
+  line-height:1.25;
+  font-weight:700;
+  color:var(--text);
 }
-#pRegKgPadCard .p-reg-kg-pad-hdr .card-title svg{width:17px;height:17px;}
+#pRegKgPadCard .p-reg-kg-pad-hdr .card-title svg{width:18px;height:18px;color:var(--text-3);}
 #pRegKgPadCard #pRegKgPadToggleBtn{
   width:100%;
-  padding:7px 10px;
+  padding:9px 12px;
   font-size:12px;
-  line-height:1.25;
+  line-height:1.3;
   font-weight:600;
+  background:var(--surface);
+  border:1.5px solid var(--border-strong);
+  color:var(--text);
 }
+#pRegKgPadCard #pRegKgPadToggleBtn:hover{background:var(--surface-alt);}
 #pRegKgPadCard .p-reg-kg-pad-card-body{
   display:flex;
   flex-direction:column;
   align-items:stretch;
-  padding:6px 12px 10px;
+  padding:8px 12px 12px;
+  background:var(--surface);
 }
 .p-reg-kg-pad{
   display:grid;
   grid-template-columns:repeat(3,1fr);
-  gap:7px;
+  gap:8px;
   width:100%;
-  max-width:336px;
+  max-width:300px;
   margin-inline:auto;
   touch-action:manipulation;
   -webkit-user-select:none;user-select:none;
 }
 .p-reg-kg-pad .pk{
-  min-height:52px;
+  min-height:54px;
   padding:0 2px;
-  font-size:clamp(24px,6.8vw,32px);
+  font-size:clamp(26px,7vw,34px);
   font-weight:800;
   font-family:var(--mono);
   color:var(--text);
-  background:var(--surface-alt);
-  border:1.5px solid var(--border-strong);
-  border-radius:10px;
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 1px 0 rgba(15,23,42,.04);
   cursor:pointer;
-  transition:background .12s,border-color .12s,transform .08s;
+  transition:background .12s,border-color .12s,transform .08s,box-shadow .12s;
 }
 .p-reg-kg-pad .pk:active{transform:scale(0.97);}
-.p-reg-kg-pad .pk:hover{border-color:var(--brand);}
-.p-reg-kg-pad .pk:disabled{opacity:.38;cursor:not-allowed;transform:none;}
-.p-reg-kg-pad .pk-op{background:color-mix(in srgb,var(--navy-700) 8%,var(--surface));font-size:clamp(16px,4.2vw,20px);font-weight:700;}
-.p-reg-kg-pad .pk-wide{grid-column:1/-1;min-height:38px;font-size:13px;font-weight:700;}
-.p-reg-kg-pad-hint{font-size:10px;color:var(--text-3);line-height:1.25;margin:0 0 5px;text-align:center;}
-@media (min-width:900px){
-  #pRegKgPadCard{max-width:min(368px,100%);}
-  .p-reg-kg-pad{max-width:368px;gap:8px;}
-  .p-reg-kg-pad .pk{min-height:58px;font-size:clamp(28px,3.2vw,34px);}
-  .p-reg-kg-pad .pk-op{font-size:20px;}
-  .p-reg-kg-pad .pk-wide{min-height:42px;font-size:14px;}
+.p-reg-kg-pad .pk:hover{border-color:var(--border-strong);box-shadow:0 2px 6px rgba(15,23,42,.06);}
+.p-reg-kg-pad .pk:disabled{opacity:.38;cursor:not-allowed;transform:none;box-shadow:none;}
+.p-reg-kg-pad .pk-op{background:var(--surface-alt);font-size:clamp(18px,4.5vw,22px);font-weight:700;}
+.p-reg-kg-pad .pk-wide{
+  grid-column:1/-1;
+  min-height:40px;
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-3);
+  background:var(--surface-alt);
+  border-color:var(--border);
 }
-body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--slate-100);border-color:var(--border-strong);color:var(--text);}
+.p-reg-kg-pad-hint{font-size:10px;color:var(--text-3);line-height:1.3;margin:0 0 6px;text-align:center;}
+@media (min-width:900px){
+  #pRegKgPadCard{max-width:min(318px,100%);}
+  .p-reg-kg-pad{max-width:318px;gap:9px;}
+  .p-reg-kg-pad .pk{min-height:60px;font-size:clamp(30px,3.4vw,36px);}
+  .p-reg-kg-pad .pk-op{font-size:22px;}
+  .p-reg-kg-pad .pk-wide{min-height:44px;font-size:13px;}
+}
+body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--surface-alt);border-color:var(--border-strong);color:var(--text);}
 
 /* ═══ RESPONSIVE ══════════════════════════════════════════════ */
 
@@ -2026,16 +2052,16 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                   <span class="suffix">kg</span>
                 </div>
               </div>
-              <button class="btn teal block lg" style="margin-top:16px;" onclick="regPesaje()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                Guardar pesaje
-              </button>
             </div>
           </div>
         </div>
 
-        <!-- Columna derecha: teclado numérico kg (tablet) -->
-        <div>
+        <!-- Columna derecha: guardar (ancho columna) + teclado centrado y más estrecho (mock) -->
+        <div class="p-reg-kg-stack">
+          <button type="button" class="btn teal block lg p-reg-save-pesaje" onclick="regPesaje()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+            Guardar pesaje
+          </button>
           <div class="card" id="pRegKgPadCard">
             <div class="card-hdr p-reg-kg-pad-hdr">
               <div class="card-title" style="display:flex;align-items:center;gap:6px;">
