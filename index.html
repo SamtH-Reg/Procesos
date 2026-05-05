@@ -982,24 +982,35 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 .mono{font-family:var(--mono);font-weight:600;}
 
 /* Chart mini */
-/* Teclado numérico kg — Pesaje registrar (compacto, orden 1…9) */
+/* Teclado numérico kg — Pesaje: ancho tipo dialer Samsung (no pantalla completa) */
+#pRegKgPadCard{
+  max-width:min(276px,100%);
+  width:100%;
+  margin-inline:auto;
+}
+#pRegKgPadCard .card-hdr{flex-wrap:wrap;justify-content:center;text-align:center;}
+#pRegKgPadCard .card-title{justify-content:center;}
+#pRegKgPadCard .card-body{display:flex;flex-direction:column;align-items:stretch;}
 .p-reg-kg-pad{
   display:grid;
   grid-template-columns:repeat(3,1fr);
-  gap:5px;
+  gap:6px;
+  width:100%;
+  max-width:276px;
+  margin-inline:auto;
   touch-action:manipulation;
   -webkit-user-select:none;user-select:none;
 }
 .p-reg-kg-pad .pk{
-  min-height:40px;
-  padding:0 4px;
-  font-size:clamp(17px,3.2vw,21px);
+  min-height:42px;
+  padding:0 2px;
+  font-size:clamp(19px,5.2vw,23px);
   font-weight:800;
   font-family:var(--mono);
   color:var(--text);
   background:var(--surface-alt);
   border:1.5px solid var(--border-strong);
-  border-radius:8px;
+  border-radius:10px;
   cursor:pointer;
   transition:background .12s,border-color .12s,transform .08s;
 }
@@ -1008,10 +1019,11 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 .p-reg-kg-pad .pk:disabled{opacity:.38;cursor:not-allowed;transform:none;}
 .p-reg-kg-pad .pk-op{background:color-mix(in srgb,var(--navy-700) 8%,var(--surface));font-size:13px;font-weight:700;}
 .p-reg-kg-pad .pk-wide{grid-column:1/-1;min-height:34px;font-size:12px;font-weight:700;}
-.p-reg-kg-pad-hint{font-size:11px;color:var(--text-3);line-height:1.4;margin:0 0 8px;}
+.p-reg-kg-pad-hint{font-size:11px;color:var(--text-3);line-height:1.4;margin:0 0 10px;text-align:center;}
 @media (min-width:900px){
-  .p-reg-kg-pad .pk{min-height:46px;font-size:22px;}
-  .p-reg-kg-pad{gap:7px;}
+  #pRegKgPadCard{max-width:min(296px,100%);}
+  .p-reg-kg-pad{max-width:296px;gap:8px;}
+  .p-reg-kg-pad .pk{min-height:48px;font-size:24px;}
 }
 body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--slate-100);border-color:var(--border-strong);color:var(--text);}
 
