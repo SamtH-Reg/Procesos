@@ -232,6 +232,22 @@ tbody tr:hover{background:var(--surface-alt);}
 
 pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius);overflow-x:auto;font:500 12px var(--mono);line-height:1.5;max-height:480px;}
 .kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
+
+/* Import/Export: explorador de datos */
+.ie-ex-root{display:flex;flex-direction:column;gap:8px;}
+.ie-ex-mod{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-alt);overflow:hidden;}
+.ie-ex-mod>summary,.ie-ex-mon>summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;user-select:none;}
+.ie-ex-mod>summary::-webkit-details-marker,.ie-ex-mon>summary::-webkit-details-marker{display:none;}
+.ie-ex-mod>summary:hover,.ie-ex-mon>summary:hover{background:rgba(59,111,184,.06);}
+.ie-ex-mod .ie-ex-chev,.ie-ex-mon .ie-ex-chev{font-size:10px;color:var(--text-3);transition:transform .15s;}
+details.ie-ex-mod[open]>summary .ie-ex-chev,details.ie-ex-mon[open]>summary .ie-ex-chev{transform:rotate(90deg);}
+.ie-ex-mod-body{padding:0 8px 8px 8px;}
+.ie-ex-mon{margin:0 0 6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden;}
+.ie-ex-mon:last-child{margin-bottom:0;}
+.ie-ex-rows{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px 10px;}
+.ie-ex-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-alt);font-size:12px;}
+.ie-ex-row .ie-ex-meta{flex:1;min-width:200px;color:var(--text-2);line-height:1.45;}
+.ie-ex-row .ie-ex-actions{display:flex;flex-wrap:wrap;gap:6px;}
 </style>
 </head>
 <body>
@@ -618,12 +634,23 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 
 <!-- ═══ IMPORT / EXPORT ═══ -->
 <div class="page" id="page-import">
-  <div class="page-hdr"><div><h1 class="page-title">Exportar / Importar Excel</h1><div class="page-sub">Exporta e importa por rango de fecha, turno y línea · horarios predefinidos según turnos</div></div></div>
+  <div class="page-hdr"><div><h1 class="page-title">Exportar / Importar Excel</h1><div class="page-sub">Lista por mes y día con datos (moldes, pesajes, túneles); abajo puedes afinar filtros e importar catálogos.</div></div></div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <div>
+        <div class="card-title">📂 Datos disponibles</div>
+        <div class="card-sub">Despliega <strong>Moldes</strong>, <strong>Pesajes</strong> o <strong>Túneles</strong> → mes → bloques con turno y fecha de referencia. <em>Aplicar filtros</em> rellena el panel de abajo; <em>Exportar Excel</em> exporta solo ese bloque.</div>
+      </div>
+      <button type="button" class="btn ghost sm" onclick="ieRenderExplorer()">↻ Actualizar lista</button>
+    </div>
+    <div id="ieExplorerMount" class="ie-ex-root" aria-live="polite"></div>
+  </div>
 
   <div class="card">
     <div class="card-hdr">
       <div class="card-title">🎯 Filtros</div>
-      <div class="card-sub">Selecciona qué quieres exportar o importar</div>
+      <div class="card-sub">Selecciona qué quieres exportar o importar (catálogos sin fechas)</div>
     </div>
     <div class="grid-2">
       <div>
@@ -667,7 +694,7 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
   <div class="card" style="margin-top:14px;background:var(--surface-alt);">
     <div style="padding:14px 16px;font-size:12px;color:var(--text-2);line-height:1.6;">
       <strong>📋 Formato del Excel:</strong><br>
-      · <strong>Moldes / Pesajes:</strong> una hoja con el nombre del módulo (<span class="kbd">moldes</span>, <span class="kbd">pesajes</span>). Filtros por <em>fecha + turno</em> usan la misma ventana horaria que en planta (turno que cruza medianoche).<br>
+      · <strong>Moldes / Pesajes:</strong> una hoja con el nombre del módulo (<span class="kbd">moldes</span>, <span class="kbd">pesajes</span>). Filtros por <em>fecha + turno</em> usan la misma ventana horaria que en planta (turno que cruza medianoche). La lista <strong>Datos disponibles</strong> aplica esos mismos rangos al elegir un bloque.<br>
       · <strong>Túneles:</strong> hoja principal <span class="kbd">tuneles</span> (filas ordenadas por fecha de cierre e id); opcional segunda hoja <span class="kbd">estado_actual</span> al importar (mismo layout que el export).<br>
       · <strong>Catálogos:</strong> <span class="kbd">trabajadores</span>, <span class="kbd">turnos</span>, etc. — sin filtro de fecha.<br>
       · Primera fila = encabezados del export (mejor exportar antes como plantilla).
@@ -3434,6 +3461,7 @@ function populateIEFilters(){
   }
   ieOnModuloChange();
   previewFiltered();
+  ieRenderExplorer();
 }
 function _adminAddDaysLocalYmd(ymd,deltaDays){
   const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -3481,18 +3509,12 @@ function _ieMoldeTurnoNorm(r){
   const d=String((r&&r.turno)||'').trim().toLowerCase();
   return d==='noche'?'noche':'dia';
 }
+/** Misma regla que en tablet: fecha + hora en calendario local (la fila ya trae la fecha correcta en madrugada de noche). */
 function _ieRegistroTsMolde(r){
   if(!r)return null;
   const fe=_ieCycleDateNorm(r.fecha||_adminTodayLocalYmd());
   const hm=_adminParseHMToMinutes(r.hora);
   if(hm==null)return _ieYmdToLocalMs(fe,12,0);
-  if(_ieMoldeTurnoNorm(r)!=='noche')return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
-  const codTurno=String(r.turno||'').trim()||'noche';
-  const tu=_ieTurnoDefFromCodigo(codTurno)||_ieTurnoDefFromCodigo('noche');
-  if(!tu)return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
-  const a=_adminParseHMToMinutes(tu.inicio),b=_adminParseHMToMinutes(tu.fin);
-  if(a==null||b==null||b>a)return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
-  if(hm<b)return _ieYmdToLocalMs(_adminAddDaysLocalYmd(fe,1),Math.floor(hm/60),hm%60);
   return _ieYmdToLocalMs(fe,Math.floor(hm/60),hm%60);
 }
 function _ieRegistroTsPesaje(r){
@@ -3528,6 +3550,253 @@ function _ieGetRecordTs(r,mod){
   const m=_recMs(r);
   return m==null?null:m;
 }
+/** Fecha «ancla» del filtro (inicio del turno en calendario) que contiene el instante ts. */
+function _ieAnchorDateForTsInTurno(ts,codTurno){
+  const c=String(codTurno||'dia').trim();
+  if(ts==null||!c)return null;
+  const base=_ieYmdFromMs(ts);
+  const def=_ieTurnoDefFromCodigo(c);
+  if(!def)return base;
+  const a=_adminParseHMToMinutes(def.inicio),b=_adminParseHMToMinutes(def.fin);
+  if(a==null||b==null||b>a)return base;
+  let cur=_adminAddDaysLocalYmd(base,-1);
+  for(let i=0;i<3;i++){
+    const w=_ieVentanaTurnoFechaRefMs(cur,c);
+    if(w&&ts>=w.start&&ts<w.end)return cur;
+    cur=_adminAddDaysLocalYmd(cur,1);
+  }
+  cur=_adminAddDaysLocalYmd(base,-10);
+  for(let j=0;j<25;j++){
+    const w=_ieVentanaTurnoFechaRefMs(cur,c);
+    if(w&&ts>=w.start&&ts<w.end)return cur;
+    cur=_adminAddDaysLocalYmd(cur,1);
+  }
+  return base;
+}
+function _ieLastDayOfMonthMov(yyyyMm){
+  const m=String(yyyyMm||'').match(/^(\d{4})-(\d{2})/);
+  if(!m)return _adminTodayLocalYmd();
+  const y=+m[1],mo=+m[2];
+  const last=new Date(y,mo,0).getDate();
+  const p=n=>String(n).padStart(2,'0');
+  return y+'-'+p(mo)+'-'+p(last);
+}
+function _ieFmtDdMmYyyyPlain(ymd){
+  const s=_ieCycleDateNorm(ymd||'');
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return String(s||'');
+  return m[3]+'-'+m[2]+'-'+m[1];
+}
+function _ieFmtDdMmYyyy(ymd){
+  const s=_ieCycleDateNorm(ymd||'');
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return esc(s);
+  return esc(m[3]+'-'+m[2]+'-'+m[1]);
+}
+function _ieMonthLabelEs(yyyyMm){
+  const p=String(yyyyMm||'').split('-');
+  if(p.length<2)return esc(yyyyMm||'');
+  const d=new Date(+p[0],+p[1]-1,1);
+  try{return esc(d.toLocaleDateString('es-CL',{month:'long',year:'numeric'}));}catch(_){return esc(yyyyMm);}
+}
+function _ieTurnoNombre(cod){
+  const c=String(cod||'').trim();
+  if(!c)return'—';
+  const t=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===c.toLowerCase());
+  return t?String(t.nombre||t.codigo)+' · '+String(t.codigo):c;
+}
+function _ieExplorerBucketsMolPes(mod){
+  const src=Array.isArray(_ieSrc(mod))?_ieSrc(mod):[];
+  const map=new Map();
+  src.forEach(r=>{
+    if(!r)return;
+    const turnoCod=String(r.turno||'dia').trim()||'dia';
+    const ts=_ieGetRecordTs(r,mod);
+    let anchor;
+    if(ts!=null)anchor=_ieAnchorDateForTsInTurno(ts,turnoCod);
+    else anchor=_ieCycleDateNorm(r.fecha||'');
+    if(!anchor||!/^\d{4}-\d{2}-\d{2}$/.test(anchor))return;
+    const k=turnoCod.toLowerCase()+'|'+anchor;
+    const o=map.get(k)||{turno:turnoCod,anchor,count:0,kg:0};
+    o.count++;
+    o.kg+=+r.kg||0;
+    map.set(k,o);
+  });
+  const byMonth=new Map();
+  map.forEach(o=>{
+    const mon=o.anchor.slice(0,7);
+    if(!byMonth.has(mon))byMonth.set(mon,[]);
+    byMonth.get(mon).push(o);
+  });
+  byMonth.forEach(arr=>arr.sort((a,b)=>b.anchor.localeCompare(a.anchor)||String(a.turno).localeCompare(String(b.turno))));
+  return byMonth;
+}
+function _ieExplorerBucketsTuneles(){
+  const hist=(_ieFlatTuneles().hist)||[];
+  const map=new Map();
+  hist.forEach(row=>{
+    if(!row)return;
+    const fc=String(row.fecha_cierre||'').trim();
+    if(!fc||!/^\d{4}-\d{2}-\d{2}$/.test(fc))return;
+    const tuRaw=String(row.turno||'').trim();
+    const tuKey=tuRaw?tuRaw.toLowerCase():'—';
+    const k=fc+'|'+tuKey;
+    const o=map.get(k)||{fecha:fc,turno:tuRaw||'—',count:0,cant:0};
+    o.count++;
+    o.cant+=+row.cantidad||0;
+    map.set(k,o);
+  });
+  const byMonth=new Map();
+  map.forEach(o=>{
+    const mon=o.fecha.slice(0,7);
+    if(!byMonth.has(mon))byMonth.set(mon,[]);
+    byMonth.get(mon).push(o);
+  });
+  byMonth.forEach(arr=>arr.sort((a,b)=>b.fecha.localeCompare(a.fecha)||String(a.turno).localeCompare(String(b.turno))));
+  return byMonth;
+}
+function _ieSetIeTurnoValue(codRaw){
+  const turEl=document.getElementById('ieTurno');
+  if(!turEl)return;
+  const c=String(codRaw||'').trim();
+  if(!c||c==='—'){turEl.value='';return;}
+  const opt=[...turEl.options].find(o=>String(o.value).toLowerCase()===c.toLowerCase());
+  turEl.value=opt?opt.value:c;
+}
+function ieExSetDateRangeForAnchor(turnoCod,anchorYmd){
+  const dEl=document.getElementById('ieDesde'),hEl=document.getElementById('ieHasta');
+  if(!dEl||!hEl)return;
+  const A=_ieCycleDateNorm(anchorYmd);
+  const code=String(turnoCod||'').trim();
+  if(code&&_dashTurnoCrossesMidnight(code)){
+    dEl.value=A;
+    hEl.value=_adminAddDaysLocalYmd(A,1);
+  }else{
+    dEl.value=A;
+    hEl.value=A;
+  }
+}
+function ieExApplyMolPes(mod,anchorYmd,turnoCod,alsoExport){
+  const modEl=document.getElementById('ieModulo');
+  const rh=document.getElementById('ieRangoHora');
+  if(!modEl)return;
+  modEl.value=mod;
+  ieOnModuloChange();
+  _ieSetIeTurnoValue(turnoCod);
+  ieExSetDateRangeForAnchor(turnoCod||'',anchorYmd);
+  if(rh)rh.value='';
+  previewFiltered();
+  if(alsoExport)exportFiltered();
+  else toast('Filtros aplicados: '+_ieTurnoNombre(turnoCod)+' · ref '+_ieFmtDdMmYyyyPlain(anchorYmd),'info');
+}
+function ieExApplyTuneles(fechaYmd,turnoCod,alsoExport){
+  const modEl=document.getElementById('ieModulo');
+  const rh=document.getElementById('ieRangoHora');
+  if(!modEl)return;
+  modEl.value='tuneles';
+  ieOnModuloChange();
+  const fe=_ieCycleDateNorm(fechaYmd);
+  const dEl=document.getElementById('ieDesde'),hEl=document.getElementById('ieHasta');
+  if(dEl&&hEl){dEl.value=fe;hEl.value=fe;}
+  _ieSetIeTurnoValue(turnoCod&&String(turnoCod)!=='—'?turnoCod:'');
+  if(rh)rh.value='';
+  previewFiltered();
+  if(alsoExport)exportFiltered();
+  else toast('Filtros aplicados: túneles · '+_ieFmtDdMmYyyyPlain(fechaYmd),'info');
+}
+function ieExApplyMonth(mod,yyyyMm){
+  const modEl=document.getElementById('ieModulo'),dEl=document.getElementById('ieDesde'),hEl=document.getElementById('ieHasta'),turEl=document.getElementById('ieTurno'),rh=document.getElementById('ieRangoHora');
+  if(!modEl||!dEl||!hEl)return;
+  modEl.value=mod;
+  ieOnModuloChange();
+  const first=yyyyMm+'-01';
+  const last=_ieLastDayOfMonthMov(yyyyMm);
+  dEl.value=first;hEl.value=last;
+  if(turEl)turEl.value='';
+  if(rh)rh.value='';
+  previewFiltered();
+  toast('Filtros: mes completo '+yyyyMm,'info');
+}
+function ieExplorerClickDelegate(ev){
+  const b=ev.target.closest('[data-ie-act]');
+  if(!b)return;
+  const act=b.getAttribute('data-ie-act');
+  if(act==='apply-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',false);return;}
+  if(act==='export-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',true);return;}
+  if(act==='apply-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',false);return;}
+  if(act==='export-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',true);return;}
+  if(act==='month-all'){ieExApplyMonth(b.dataset.mod,b.dataset.month);return;}
+}
+function ieExplorerInitDelegate(){
+  const root=document.getElementById('ieExplorerMount');
+  if(root&&!root.__ieDel){root.__ieDel=1;root.addEventListener('click',ieExplorerClickDelegate);}
+}
+function ieRenderExplorer(){
+  ieExplorerInitDelegate();
+  const mount=document.getElementById('ieExplorerMount');
+  if(!mount)return;
+  if(!RT||!RT.data||!DB||!DB.data){
+    mount.innerHTML='<div style="padding:12px;color:var(--text-3);font-size:13px;">Cargando datos…</div>';
+    return;
+  }
+  const parts=[];
+  function renderMolPes(mod,title,icon){
+    const byM=_ieExplorerBucketsMolPes(mod);
+    const total=(RT.data[mod==='moldes'?'moldes':'pesajes']||[]).length;
+    const months=[...byM.keys()].sort((a,b)=>b.localeCompare(a));
+    if(!months.length){
+      parts.push(`<details class="ie-ex-mod"><summary><span>${icon} ${esc(title)}</span><span style="font-weight:600;color:var(--text-3);">0</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body"><div style="padding:10px 14px;color:var(--text-3);font-size:12px;">Sin registros.</div></div></details>`);
+      return;
+    }
+    let html=`<details class="ie-ex-mod"><summary><span>${icon} ${esc(title)}</span><span style="font-weight:600;color:var(--text-3);">${total} reg.</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body">`;
+    months.forEach(ym=>{
+      const rows=byM.get(ym)||[];
+      const sub=rows.reduce((s,o)=>s+o.count,0);
+      html+=`<details class="ie-ex-mon"><summary><span>${_ieMonthLabelEs(ym)}</span><span style="font-weight:600;color:var(--text-3);">${sub} reg.</span><span class="ie-ex-chev">▸</span></summary>`;
+      html+=`<div style="padding:4px 8px 8px;"><button type="button" class="btn ghost sm" data-ie-act="month-all" data-mod="${esc(mod)}" data-month="${esc(ym)}">Mes completo en filtros</button></div>`;
+      html+=`<div class="ie-ex-rows">`;
+      rows.forEach(o=>{
+        const tn=esc(_ieTurnoNombre(o.turno));
+        const kg=o.kg?` · ${(Math.round(o.kg*10)/10).toLocaleString('es-CL')} kg`:'';
+        html+=`<div class="ie-ex-row"><div class="ie-ex-meta"><strong>${tn}</strong><br>Fecha referencia (filtro): <strong>${_ieFmtDdMmYyyy(o.anchor)}</strong> · ${o.count} reg.${kg}</div><div class="ie-ex-actions">`+
+          `<button type="button" class="btn ghost sm" data-ie-act="apply-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Aplicar filtros</button>`+
+          `<button type="button" class="btn sm" data-ie-act="export-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Exportar Excel</button></div></div>`;
+      });
+      html+=`</div></details>`;
+    });
+    html+='</div></details>';
+    parts.push(html);
+  }
+  renderMolPes('moldes','Moldes (conteo)','🧱');
+  renderMolPes('pesajes','Pesajes','⚖');
+  const byT=_ieExplorerBucketsTuneles();
+  const histN=(_ieFlatTuneles().hist||[]).length;
+  const tMonths=[...byT.keys()].sort((a,b)=>b.localeCompare(a));
+  if(!tMonths.length){
+    parts.push(`<details class="ie-ex-mod"><summary><span>🚇 Túneles y placas</span><span style="font-weight:600;color:var(--text-3);">0</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body"><div style="padding:10px 14px;color:var(--text-3);font-size:12px;">Sin cierres en histórico.</div></div></details>`);
+  }else{
+    let html=`<details class="ie-ex-mod"><summary><span>🚇 Túneles y placas</span><span style="font-weight:600;color:var(--text-3);">${histN} ciclos</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body">`;
+    tMonths.forEach(ym=>{
+      const rows=byT.get(ym)||[];
+      const sub=rows.reduce((s,o)=>s+o.count,0);
+      html+=`<details class="ie-ex-mon"><summary><span>${_ieMonthLabelEs(ym)}</span><span style="font-weight:600;color:var(--text-3);">${sub} ciclos</span><span class="ie-ex-chev">▸</span></summary>`;
+      html+=`<div style="padding:4px 8px 8px;"><button type="button" class="btn ghost sm" data-ie-act="month-all" data-mod="tuneles" data-month="${esc(ym)}">Mes completo en filtros</button></div>`;
+      html+=`<div class="ie-ex-rows">`;
+      rows.forEach(o=>{
+        const tlab=o.turno&&o.turno!=='—'?esc(_ieTurnoNombre(o.turno)):'<span style="color:var(--text-3);">Turno (inferido / —)</span>';
+        html+=`<div class="ie-ex-row"><div class="ie-ex-meta">${tlab}<br>Fecha cierre: <strong>${_ieFmtDdMmYyyy(o.fecha)}</strong> · ${o.count} ciclo(s) · ${o.cant} u.</div><div class="ie-ex-actions">`+
+          `<button type="button" class="btn ghost sm" data-ie-act="apply-tun" data-fecha="${esc(o.fecha)}" data-turno="${esc(o.turno==='—'?'':o.turno)}">Aplicar filtros</button>`+
+          `<button type="button" class="btn sm" data-ie-act="export-tun" data-fecha="${esc(o.fecha)}" data-turno="${esc(o.turno==='—'?'':o.turno)}">Exportar Excel</button></div></div>`;
+      });
+      html+=`</div></details>`;
+    });
+    html+='</div></details>';
+    parts.push(html);
+  }
+  mount.innerHTML=parts.join('');
+}
+window.ieRenderExplorer=ieRenderExplorer;
+
 function _ieFlatTuneles(){
   const equipos=(DB.data.equipos||[]).filter(e=>e.activo);
   const byCod=new Map(equipos.map(e=>[String(e.codigo),e]));
@@ -3799,6 +4068,7 @@ function importFiltered(ev){
       if(mod==='tuneles'){
         importTunelesWorkbook(wb);
         previewFiltered();
+        ieRenderExplorer();
         ev.target.value='';
         return;
       }
@@ -3809,6 +4079,7 @@ function importFiltered(ev){
       _ieWrite(mod,arr,reemplazar);
       toast(arr.length+' registros importados en '+mod,'success');
       previewFiltered();
+      ieRenderExplorer();
     }catch(err){console.error(err);toast('Error leyendo Excel','err');}
     ev.target.value='';
   };
