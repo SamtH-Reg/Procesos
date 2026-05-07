@@ -4132,7 +4132,7 @@ function _applyRemoteArmadoLineasRows(armData){
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   _pruneInvalidArmadoKeys();
-  try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
+  try{if(typeof TBSync!=='undefined'&&typeof TBSync.refreshArmadoSigFromLocal==='function')TBSync.refreshArmadoSigFromLocal();}catch(_){}
   _rtSaveOrig&&_rtSaveOrig();
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   if(typeof renderMArmado==='function')renderMArmado();
@@ -6893,7 +6893,6 @@ async function removePLinea(ln){
       return;
     }
     rtSave();
-    try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'pesaje');
     let pushErr=null;
     try{
@@ -7648,7 +7647,6 @@ async function removeMLinea(ln){
       return;
     }
     rtSave();
-    try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     const rem=await tbDeleteArmadoLineaRemote(Ln,turnoDel,fechaDel,'moldes');
     let pushErr=null;
     try{
@@ -8916,8 +8914,8 @@ setInterval(()=>{renderEquipos();},60000);
    ──────────────────────────────────────────────────────────────
    - Conecta automáticamente al inicio
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
-   - Push a Supabase: upsert incremental (solo filas nuevas/cambiadas + DELETE de borrados) para moldes/pesajes/generales — evita tormentas Realtime al re-subir toda la tabla en cada rtSave
-   - Tras «Traer» moldes/pesajes se alinean firmas locales para no re-tocar la nube al siguiente guardado
+   - Push a Supabase: upsert incremental (solo filas nuevas/cambiadas + DELETE de borrados) para moldes/pesajes/generales y armado_lineas (clave compuesta) — evita tormentas Realtime al re-subir todo en cada rtSave
+   - Tras «Traer» o aplicar armado remoto se alinean firmas locales (refresh / refreshArmadoSigFromLocal) para no re-tocar la nube al siguiente guardado
    - Realtime: catálogos + moldes/pesajes (un canal) + armado_lineas; generales solo REST si no están en publication
    - Misma clave localStorage que admin (`friosur_sb`): URL/key por defecto embebidos; si el admin guardó otro proyecto, la tablet usa ese (mismo patrón que UCO admin_cfg + defaults).
    ══════════════════════════════════════════════════════════════ */
@@ -8991,7 +8989,6 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
       }
     }
     if(!row){
-      try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
       const hayAlgunaConEsaFecha=list.some(r=>_tbFechaEqFromRow(r.fecha)===fWant);
       if(list.length>0&&!hayAlgunaConEsaFecha)return{ok:true};
       if(list.length>0){
@@ -9012,7 +9009,6 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
         return{ok:false,err:del2.message||'Error al borrar en la nube'};
       }
     }
-    try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.armado='';}catch(_){}
     return{ok:true};
   }catch(e){
     const m=e&&e.message?String(e.message):String(e);
@@ -9059,6 +9055,98 @@ function _tbDeltaForPush(prevSig,nextRows,pk){
   const delIds=[];
   prevMap.forEach((_,id)=>{if(!nextIds.has(id))delIds.push(id);});
   return{useFull:false,upsert,delIds};
+}
+
+function _tbSortArmadoRows(rows){
+  return(Array.isArray(rows)?rows:[]).slice().sort((a,b)=>{
+    const ka=[a.linea,a.turno,a.fecha,a.area].map(x=>String(x||'')).join('\0');
+    const kb=[b.linea,b.turno,b.fecha,b.area].map(x=>String(x||'')).join('\0');
+    return ka.localeCompare(kb);
+  });
+}
+function _tbArmadoSigFromRows(rows){
+  return JSON.stringify(_tbSortArmadoRows(rows));
+}
+/** Clave estable (linea+turno+fecha+area) alineada con upsert en Supabase. */
+function _tbArmadoRowKey(r){
+  const linea=String(r.linea||'').trim().toUpperCase();
+  const turno=_tbNormTurnoKey(r.turno||'dia');
+  const fe=String(r.fecha||'').trim();
+  const fecha=_tbNormYmd(fe)||fe.slice(0,10);
+  const areaRaw=String(r.area||'moldes').toLowerCase().trim();
+  const area=areaRaw==='pesaje'?'pesaje':'moldes';
+  return linea+'\0'+turno+'\0'+fecha+'\0'+area;
+}
+function _tbArmadoRowsFromRt(){
+  const todayArm=todayLocalYmd();
+  if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+  if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+  const armadoByKey=new Map();
+  const pushArmadoFrom=(src,areaLabel)=>{
+    Object.entries(src||{}).filter(([,d])=>d).forEach(([key,d])=>{
+      const meta=_armParseKey(key);
+      const linea=String(meta.linea||'').trim().toUpperCase();
+      if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(linea))return;
+      const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
+      const fechaRaw=String(d.fecha||meta.fecha||todayArm).trim();
+      const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
+      const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
+      armadoByKey.set(k,{
+        linea,
+        planillero:d.planillero||null,
+        trabajadores:d.trabajadores||[],
+        especie:d.especie||'',
+        turno,
+        fecha,
+        area:areaLabel
+      });
+    });
+  };
+  pushArmadoFrom(RT.armadoMolde,'moldes');
+  pushArmadoFrom(RT.armadoPesaje,'pesaje');
+  return _tbSortArmadoRows([...armadoByKey.values()]);
+}
+function _tbDeltaArmadoForPush(prevSig,nextRows){
+  const rows=_tbSortArmadoRows(nextRows);
+  if(prevSig==null||String(prevSig).trim()===''){
+    return{useFull:true,upsert:rows,delRows:[]};
+  }
+  let prevList;
+  try{prevList=JSON.parse(prevSig);}catch(e){
+    return{useFull:true,upsert:rows,delRows:[]};
+  }
+  if(!Array.isArray(prevList)){
+    return{useFull:true,upsert:rows,delRows:[]};
+  }
+  const prevSorted=_tbSortArmadoRows(prevList);
+  const prevMap=new Map(prevSorted.map(r=>[_tbArmadoRowKey(r),r]));
+  const nextMap=new Map(rows.map(r=>[_tbArmadoRowKey(r),r]));
+  const upsert=[];
+  rows.forEach(r=>{
+    const k=_tbArmadoRowKey(r);
+    const old=prevMap.get(k);
+    if(!old||JSON.stringify(old)!==JSON.stringify(r))upsert.push(r);
+  });
+  const delRows=[];
+  prevMap.forEach((r,k)=>{if(!nextMap.has(k))delRows.push(r);});
+  return{useFull:false,upsert,delRows};
+}
+/** DELETE por fila (clave compuesta). Pocos registros típicamente. */
+async function _tbSbDeleteArmadoLineas(sb,delRows){
+  if(!sb||!delRows||!delRows.length)return null;
+  for(const r of delRows){
+    const linea=String(r.linea||'').trim().toUpperCase();
+    if(!linea)continue;
+    const turno=r.turno;
+    const fecha=_tbFechaEqFromRow(r.fecha)||_tbNormYmd(r.fecha)||String(r.fecha||'').trim().slice(0,10);
+    const area=String(r.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
+    let{error}=await sb.from('armado_lineas').delete().eq('linea',linea).eq('turno',turno).eq('fecha',fecha).eq('area',area);
+    if(error){
+      const{error:e2}=await sb.from('armado_lineas').delete().eq('linea',linea).eq('turno',turno).eq('fecha',r.fecha).eq('area',area);
+      if(e2)return e2;
+    }
+  }
+  return null;
 }
 
 const TBSync={
@@ -9185,31 +9273,13 @@ const TBSync={
       this._lastSig.moldes=this._sigRows(moldesRows,'id');
       this._lastSig.pesajes=this._sigRows(pesajesRows,'id');
       this._lastSig.generales=this._sigRows(generalesRows,'id');
-      if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
-      if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
-      const today=todayLocalYmd();
-      const armadoByKey=new Map();
-      const pushArmadoFrom=(src,areaLabel)=>{
-        Object.entries(src||{}).filter(([,d])=>d).forEach(([key,d])=>{
-          const meta=_armParseKey(key);
-          const linea=String(meta.linea||'').trim().toUpperCase();
-          if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(linea))return;
-          const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
-          const fechaRaw=String(d.fecha||meta.fecha||today).trim();
-          const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
-          const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
-          armadoByKey.set(k,{linea,planillero:d.planillero||null,trabajadores:d.trabajadores||[],especie:d.especie||'',turno,fecha,area:areaLabel});
-        });
-      };
-      pushArmadoFrom(RT.armadoMolde,'moldes');
-      pushArmadoFrom(RT.armadoPesaje,'pesaje');
-      const armadoRows=[...armadoByKey.values()];
-      this._lastSig.armado=JSON.stringify(armadoRows.slice().sort((a,b)=>{
-        const ka=[a.linea,a.turno,a.fecha,a.area].map(x=>String(x||'')).join('\0');
-        const kb=[b.linea,b.turno,b.fecha,b.area].map(x=>String(x||'')).join('\0');
-        return ka.localeCompare(kb);
-      }));
+      this.refreshArmadoSigFromLocal();
     }catch(e){console.warn('[TBSync.refreshPushSignaturesFromLocal]',e);}
+  },
+  refreshArmadoSigFromLocal(){
+    try{
+      this._lastSig.armado=_tbArmadoSigFromRows(_tbArmadoRowsFromRt());
+    }catch(e){console.warn('[TBSync.refreshArmadoSigFromLocal]',e);}
   },
   async pushAll(){
     if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
@@ -9273,42 +9343,21 @@ const TBSync={
           }else this._lastSig.generales=sigG;
         }
       }
-      // ── Push armado de línea (moldes + pesaje; columna `area` en Supabase) ──
-      const todayArm=todayLocalYmd();
-      if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
-      if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
-      const armadoByKey=new Map();
-      const pushArmadoFrom=(src,areaLabel)=>{
-        Object.entries(src||{}).filter(([,d])=>d).forEach(([key,d])=>{
-          const meta=_armParseKey(key);
-          const linea=String(meta.linea||'').trim().toUpperCase();
-          if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(linea))return;
-          const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
-          const fechaRaw=String(d.fecha||meta.fecha||todayArm).trim();
-          const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
-          const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
-          armadoByKey.set(k,{
-            linea,
-            planillero:d.planillero||null,
-            trabajadores:d.trabajadores||[],
-            especie:d.especie||'',
-            turno,
-            fecha,
-            area:areaLabel
-          });
-        });
-      };
-      pushArmadoFrom(RT.armadoMolde,'moldes');
-      pushArmadoFrom(RT.armadoPesaje,'pesaje');
-      const armadoRows=[...armadoByKey.values()];
-      const sigA=JSON.stringify(armadoRows.slice().sort((a,b)=>{
-        const ka=[a.linea,a.turno,a.fecha,a.area].map(x=>String(x||'')).join('\0');
-        const kb=[b.linea,b.turno,b.fecha,b.area].map(x=>String(x||'')).join('\0');
-        return ka.localeCompare(kb);
-      }));
+      // ── Push armado de línea (incremental; clave linea+turno+fecha+area) ──
+      const armadoRows=_tbArmadoRowsFromRt();
+      const sigA=_tbArmadoSigFromRows(armadoRows);
       if(sigA!==this._lastSig.armado){
-        if(armadoRows.length){
-          const{error:armErr}=await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea,turno,fecha,area'});
+        if(!armadoRows.length&&!this._lastSig.armado){
+          this._lastSig.armado=sigA;
+        }else{
+          const d=_tbDeltaArmadoForPush(this._lastSig.armado,armadoRows);
+          let armErr=null;
+          if(d.useFull){
+            if(armadoRows.length)armErr=(await _tbSb.from('armado_lineas').upsert(armadoRows,{onConflict:'linea,turno,fecha,area'})).error;
+          }else{
+            if(d.delRows.length)armErr=await _tbSbDeleteArmadoLineas(_tbSb,d.delRows);
+            if(!armErr&&d.upsert.length)armErr=(await _tbSb.from('armado_lineas').upsert(d.upsert,{onConflict:'linea,turno,fecha,area'})).error;
+          }
           if(armErr){
             console.warn('[sb push armado_lineas]',armErr.message);
             if(typeof showToast==='function'){
@@ -9321,8 +9370,6 @@ const TBSync={
               showToast('Armado línea: '+armErr.message+hint,'error');
             }
           }else this._lastSig.armado=sigA;
-        }else{
-          this._lastSig.armado=sigA;
         }
       }
       this._pushLastAt=Date.now();
