@@ -3706,6 +3706,7 @@ async function tbManualPullMoldesPesajes(opts){
     rtSave();
     if(typeof initRuntime==='function')initRuntime();
     idxRefreshMoldesKpis();
+    if(typeof TBSync!=='undefined'&&typeof TBSync.refreshPushSignaturesFromLocal==='function')TBSync.refreshPushSignaturesFromLocal();
     if(!silent&&typeof showToast==='function')showToast('Moldes, pesajes y registros generales actualizados desde Supabase','success');
   }catch(e){if(!silent&&typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
 }
@@ -8915,8 +8916,9 @@ setInterval(()=>{renderEquipos();},60000);
    ──────────────────────────────────────────────────────────────
    - Conecta automáticamente al inicio
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
-   - Auto-push en modo ahorro (debounce + deduplicación) de moldes/pesajes/generales/armado tras rtSave
-   - Realtime: catálogos + moldes/pesajes (un canal) + armado_lineas; generales solo REST (sin fila en publication = menos mensajes)
+   - Push a Supabase: upsert incremental (solo filas nuevas/cambiadas + DELETE de borrados) para moldes/pesajes/generales — evita tormentas Realtime al re-subir toda la tabla en cada rtSave
+   - Tras «Traer» moldes/pesajes se alinean firmas locales para no re-tocar la nube al siguiente guardado
+   - Realtime: catálogos + moldes/pesajes (un canal) + armado_lineas; generales solo REST si no están en publication
    - Misma clave localStorage que admin (`friosur_sb`): URL/key por defecto embebidos; si el admin guardó otro proyecto, la tablet usa ese (mismo patrón que UCO admin_cfg + defaults).
    ══════════════════════════════════════════════════════════════ */
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
@@ -9019,10 +9021,50 @@ async function tbDeleteArmadoLineaRemote(linea,turno,fecha,area){
   }
 }
 
+/** DELETE por lotes (evita URLs enormes). Cada DELETE emite Realtime: mejor muchos deletes puntuales que re-upsert de toda la tabla. */
+async function _tbSbDeleteIdsByPk(sb,table,ids){
+  if(!sb||!table||!ids||!ids.length)return null;
+  const chunk=120;
+  for(let i=0;i<ids.length;i+=chunk){
+    const part=ids.slice(i,i+chunk);
+    const{error}=await sb.from(table).delete().in('id',part);
+    if(error)return error;
+  }
+  return null;
+}
+/**
+ * Comparación con la firma anterior del push: solo filas nuevas/cambiadas y borrados.
+ * Evita upsert masivo (cientos de filas) en cada rtSave → baja fuerte el consumo de mensajes Realtime.
+ */
+function _tbDeltaForPush(prevSig,nextRows,pk){
+  const rows=Array.isArray(nextRows)?nextRows:[];
+  if(prevSig==null||String(prevSig).trim()===''){
+    return{useFull:true,upsert:rows,delIds:[]};
+  }
+  let prevList;
+  try{prevList=JSON.parse(prevSig);}catch(e){
+    return{useFull:true,upsert:rows,delIds:[]};
+  }
+  if(!Array.isArray(prevList)){
+    return{useFull:true,upsert:rows,delIds:[]};
+  }
+  const prevMap=new Map(prevList.map(r=>[String(r[pk]),r]));
+  const nextIds=new Set(rows.map(r=>String(r[pk])));
+  const upsert=[];
+  for(const r of rows){
+    const id=String(r[pk]);
+    const old=prevMap.get(id);
+    if(!old||JSON.stringify(old)!==JSON.stringify(r))upsert.push(r);
+  }
+  const delIds=[];
+  prevMap.forEach((_,id)=>{if(!nextIds.has(id))delIds.push(id);});
+  return{useFull:false,upsert,delIds};
+}
+
 const TBSync={
   _pushLastAt:0,
-  _pushMinGapMs:4500,
-  _pushDebounceMs:2500,
+  _pushMinGapMs:6000,
+  _pushDebounceMs:3500,
   _lastSig:{moldes:'',pesajes:'',generales:'',armado:''},
   onlineBadge(){
     try{
@@ -9100,67 +9142,139 @@ const TBSync={
     const list=(rows||[]).slice().sort((a,b)=>String(a[pk]||'').localeCompare(String(b[pk]||'')));
     return JSON.stringify(list);
   },
-  async pushAll(){
-    if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
-    this.setStatus('☁ …','#f59e0b');
-    try{
-      const today=todayLocalYmd();
-      const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
-      const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
-      // Presets no se suben desde tablet — origen de verdad: Admin + Supabase
-      // moldes (dejar pendiente + unificar con generales marcándolos esGeneral)
-      const moldesRows=(RT.moldes||[]).map(r=>{
-        const pid=r.presetId!=null?r.presetId:r.preset_id;
-        return{
+  _rowsForCloudPush(){
+    const today=todayLocalYmd();
+    const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
+    const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
+    const moldesRows=(RT.moldes||[]).map(r=>{
+      const pid=r.presetId!=null?r.presetId:r.preset_id;
+      return{
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
         codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
         producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
         destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,
         cant:r.cant||null,pendiente:r.pendiente||null,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
         fecha:r.fecha||today
-      };});
-      const sigM=this._sigRows(moldesRows,'id');
-      if(moldesRows.length&&sigM!==this._lastSig.moldes){
-        const{error}=await _tbSb.from('moldes').upsert(moldesRows,{onConflict:'id'});
-        if(error){
-          console.warn('[sb push moldes]',error.message);
-          if(typeof showToast==='function')showToast('No se subieron moldes a Supabase: '+error.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
-        }else this._lastSig.moldes=sigM;
-      }
-      const pesajesRows=(RT.pesajes||[]).map(r=>{
-        const tid=r.trabId!=null?r.trabId:r.trab_id;
-        return{
+      };
+    });
+    const pesajesRows=(RT.pesajes||[]).map(r=>{
+      const tid=r.trabId!=null?r.trabId:r.trab_id;
+      return{
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
         trab_id:validTrabIds.has(tid)?tid:null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
         especie:r.especie||null,tipo:r.tipo||null,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
         fecha:r.fecha||today
-      };});
-      const sigP=this._sigRows(pesajesRows,'id');
-      if(pesajesRows.length&&sigP!==this._lastSig.pesajes){
-        const{error}=await _tbSb.from('pesajes').upsert(pesajesRows,{onConflict:'id'});
-        if(error){
-          console.warn('[sb push pesajes]',error.message);
-          if(typeof showToast==='function')showToast('No se subieron pesajes a Supabase: '+error.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
-        }else this._lastSig.pesajes=sigP;
-      }
-      const generalesRows=(RT.generales||[]).map(r=>{
-        const pid=r.presetId!=null?r.presetId:r.preset_id;
-        return{
+      };
+    });
+    const generalesRows=(RT.generales||[]).map(r=>{
+      const pid=r.presetId!=null?r.presetId:r.preset_id;
+      return{
         id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,
         producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
         destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,tipo:r.tipo||null,
         cant:r.cant||null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
         fecha:r.fecha||today
-      };});
+      };
+    });
+    return{moldesRows,pesajesRows,generalesRows};
+  },
+  /** Tras pull desde Supabase: alinea firmas para que el próximo push no re-toque todas las filas. */
+  refreshPushSignaturesFromLocal(){
+    try{
+      const{moldesRows,pesajesRows,generalesRows}=this._rowsForCloudPush();
+      this._lastSig.moldes=this._sigRows(moldesRows,'id');
+      this._lastSig.pesajes=this._sigRows(pesajesRows,'id');
+      this._lastSig.generales=this._sigRows(generalesRows,'id');
+      if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+      if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+      const today=todayLocalYmd();
+      const armadoByKey=new Map();
+      const pushArmadoFrom=(src,areaLabel)=>{
+        Object.entries(src||{}).filter(([,d])=>d).forEach(([key,d])=>{
+          const meta=_armParseKey(key);
+          const linea=String(meta.linea||'').trim().toUpperCase();
+          if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(linea))return;
+          const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
+          const fechaRaw=String(d.fecha||meta.fecha||today).trim();
+          const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
+          const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
+          armadoByKey.set(k,{linea,planillero:d.planillero||null,trabajadores:d.trabajadores||[],especie:d.especie||'',turno,fecha,area:areaLabel});
+        });
+      };
+      pushArmadoFrom(RT.armadoMolde,'moldes');
+      pushArmadoFrom(RT.armadoPesaje,'pesaje');
+      const armadoRows=[...armadoByKey.values()];
+      this._lastSig.armado=JSON.stringify(armadoRows.slice().sort((a,b)=>{
+        const ka=[a.linea,a.turno,a.fecha,a.area].map(x=>String(x||'')).join('\0');
+        const kb=[b.linea,b.turno,b.fecha,b.area].map(x=>String(x||'')).join('\0');
+        return ka.localeCompare(kb);
+      }));
+    }catch(e){console.warn('[TBSync.refreshPushSignaturesFromLocal]',e);}
+  },
+  async pushAll(){
+    if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
+    this.setStatus('☁ …','#f59e0b');
+    try{
+      const{moldesRows,pesajesRows,generalesRows}=this._rowsForCloudPush();
+      const sigM=this._sigRows(moldesRows,'id');
+      if(sigM!==this._lastSig.moldes){
+        if(!moldesRows.length&&!this._lastSig.moldes){
+          this._lastSig.moldes=sigM;
+        }else{
+          const d=_tbDeltaForPush(this._lastSig.moldes,moldesRows,'id');
+          let err=null;
+          if(d.useFull){
+            if(moldesRows.length)err=(await _tbSb.from('moldes').upsert(moldesRows,{onConflict:'id'})).error;
+          }else{
+            if(d.delIds.length)err=await _tbSbDeleteIdsByPk(_tbSb,'moldes',d.delIds);
+            if(!err&&d.upsert.length)err=(await _tbSb.from('moldes').upsert(d.upsert,{onConflict:'id'})).error;
+          }
+          if(err){
+            console.warn('[sb push moldes]',err.message||err);
+            if(typeof showToast==='function')showToast('No se subieron moldes a Supabase: '+err.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
+          }else this._lastSig.moldes=sigM;
+        }
+      }
+      const sigP=this._sigRows(pesajesRows,'id');
+      if(sigP!==this._lastSig.pesajes){
+        if(!pesajesRows.length&&!this._lastSig.pesajes){
+          this._lastSig.pesajes=sigP;
+        }else{
+          const d=_tbDeltaForPush(this._lastSig.pesajes,pesajesRows,'id');
+          let err=null;
+          if(d.useFull){
+            if(pesajesRows.length)err=(await _tbSb.from('pesajes').upsert(pesajesRows,{onConflict:'id'})).error;
+          }else{
+            if(d.delIds.length)err=await _tbSbDeleteIdsByPk(_tbSb,'pesajes',d.delIds);
+            if(!err&&d.upsert.length)err=(await _tbSb.from('pesajes').upsert(d.upsert,{onConflict:'id'})).error;
+          }
+          if(err){
+            console.warn('[sb push pesajes]',err.message||err);
+            if(typeof showToast==='function')showToast('No se subieron pesajes a Supabase: '+err.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
+          }else this._lastSig.pesajes=sigP;
+        }
+      }
       const sigG=this._sigRows(generalesRows,'id');
-      if(generalesRows.length&&sigG!==this._lastSig.generales){
-        const{error:gErr}=await _tbSb.from('generales').upsert(generalesRows,{onConflict:'id'});
-        if(gErr){
-          console.warn('[sb push generales]',gErr.message);
-          if(typeof showToast==='function')showToast('No se subieron registros generales a Supabase: '+gErr.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
-        }else this._lastSig.generales=sigG;
+      if(sigG!==this._lastSig.generales){
+        if(!generalesRows.length&&!this._lastSig.generales){
+          this._lastSig.generales=sigG;
+        }else{
+          const d=_tbDeltaForPush(this._lastSig.generales,generalesRows,'id');
+          let gErr=null;
+          if(d.useFull){
+            if(generalesRows.length)gErr=(await _tbSb.from('generales').upsert(generalesRows,{onConflict:'id'})).error;
+          }else{
+            if(d.delIds.length)gErr=await _tbSbDeleteIdsByPk(_tbSb,'generales',d.delIds);
+            if(!gErr&&d.upsert.length)gErr=(await _tbSb.from('generales').upsert(d.upsert,{onConflict:'id'})).error;
+          }
+          if(gErr){
+            console.warn('[sb push generales]',gErr.message||gErr);
+            if(typeof showToast==='function')showToast('No se subieron registros generales a Supabase: '+gErr.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
+          }else this._lastSig.generales=sigG;
+        }
       }
       // ── Push armado de línea (moldes + pesaje; columna `area` en Supabase) ──
+      const todayArm=todayLocalYmd();
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
       const armadoByKey=new Map();
@@ -9170,7 +9284,7 @@ const TBSync={
           const linea=String(meta.linea||'').trim().toUpperCase();
           if(typeof _armValidLineaCodigo==='function'&&!_armValidLineaCodigo(linea))return;
           const turno=_tbNormTurnoKey(d.turno||meta.turno||'dia');
-          const fechaRaw=String(d.fecha||meta.fecha||today).trim();
+          const fechaRaw=String(d.fecha||meta.fecha||todayArm).trim();
           const fecha=_tbNormYmd(fechaRaw)||fechaRaw.slice(0,10);
           const k=linea+'\t'+turno+'\t'+fecha+'\t'+areaLabel;
           armadoByKey.set(k,{

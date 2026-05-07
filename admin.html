@@ -712,7 +712,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
 
 <!-- ═══ SUPABASE ═══ -->
 <div class="page" id="page-supabase">
-  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos. Por defecto el admin está en <strong>modo vivo</strong>: moldes, pesajes y armado de línea se actualizan desde la tablet (Realtime + comprobación cada 5s). Activa <strong>modo ahorro</strong> solo si quieres reducir mensajes Supabase y traer moldes/pesajes a mano.</div></div></div>
+  <div class="page-hdr"><div><h1 class="page-title">Supabase</h1><div class="page-sub">Conecta y <strong>sube</strong> catálogos. Por defecto el admin está en <strong>modo vivo</strong>: moldes, pesajes y armado de línea vía Realtime; respaldo HTTP cada <strong>30s</strong> (antes 5s) para no duplicar trabajo. La tablet sincroniza con la nube <strong>solo filas cambiadas</strong>, no toda la tabla, para ahorrar mensajes Realtime. Activa <strong>modo ahorro</strong> si quieres casi cero WS en moldes/pesajes.</div></div></div>
   <div class="grid-2">
     <div class="card">
       <div class="card-hdr"><div class="card-title">🔌 Conexión</div><span class="badge info" id="sbBadge">No conectado</span></div>
@@ -3250,7 +3250,7 @@ function sbRerenderCurrent(tbl){
     _doRender(dirty);
   },100);
 }
-/* ── Polling activo: consulta Supabase cada 5s y re-renderiza si hay datos nuevos ── */
+/* ── Polling respaldo: consulta Supabase cada 30s (menos carga; Realtime ya avisa de cambios) ── */
 let _pollCounts={moldes:0,pesajes:0,generales:0};
 async function _pollFresh(){
   if(!_sb||!_currentUser)return;
@@ -3293,7 +3293,7 @@ function sbStartPoll(){
     }
     sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes+' generales='+_pollCounts.generales);
   })();
-  _pollInterval=setInterval(_pollFresh,5000);
+  _pollInterval=setInterval(_pollFresh,30000);
 }
 function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
