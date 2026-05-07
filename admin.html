@@ -73,6 +73,8 @@ button,input,select,textarea{font-family:inherit;color:inherit;}
 .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-2);}
 .btn.ghost:hover{background:var(--surface-alt);color:var(--text);}
 .btn.success{background:var(--ok);}.btn.warn{background:var(--warn);}.btn.danger{background:var(--err);}
+.btn.ghost.danger{background:transparent;border-color:var(--err);color:var(--err);}
+.btn.ghost.danger:hover{background:rgba(220,38,38,.12);color:var(--err);}
 .btn.sm{padding:6px 12px;font-size:12px;}
 .btn svg{width:16px;height:16px;}
 
@@ -3723,6 +3725,40 @@ function ieExSetDateRangeForAnchor(turnoCod,anchorYmd){
     hEl.value=A;
   }
 }
+/** Misma regla que `_ieExplorerBucketsMolPes`: registro pertenece al bloque (turno + fecha ancla). */
+function _ieRecordInMolPesBucket(r,mod,bucketAnchor,bucketTurno){
+  if(!r)return false;
+  const turnoCod=String(r.turno||'dia').trim()||'dia';
+  if(turnoCod.toLowerCase()!==String(bucketTurno||'dia').trim().toLowerCase())return false;
+  const ts=_ieGetRecordTs(r,mod);
+  let anchor;
+  if(ts!=null)anchor=_ieAnchorDateForTsInTurno(ts,turnoCod);
+  else anchor=_ieCycleDateNorm(r.fecha||'');
+  if(!anchor||!/^\d{4}-\d{2}-\d{2}$/.test(anchor))return false;
+  return anchor===_ieCycleDateNorm(bucketAnchor);
+}
+function ieExDeleteMolPesBucket(mod,anchorYmd,turnoCod){
+  if(mod!=='moldes'&&mod!=='pesajes')return;
+  const key=mod==='moldes'?'moldes':'pesajes';
+  const arr=RT.data[key]||[];
+  const toRemove=arr.filter(r=>_ieRecordInMolPesBucket(r,mod,anchorYmd,turnoCod));
+  if(!toRemove.length){toast('No hay registros que coincidan con ese bloque.','warn');return;}
+  const kg=toRemove.reduce((s,r)=>s+(+r.kg||0),0);
+  const turnoLab=_ieTurnoNombre(turnoCod);
+  const fechaLab=_ieFmtDdMmYyyyPlain(anchorYmd);
+  const modLab=mod==='moldes'?'MOLDES':'PESAJES';
+  const msg='¿Eliminar de forma permanente '+toRemove.length+' registro(s) de '+modLab+'?\n\n'+
+    'Turno: '+turnoLab+'\nFecha referencia (inicio turno): '+fechaLab+'\nTotal en este bloque: '+kg.toFixed(1)+' kg\n\n'+
+    'Esta acción no se puede deshacer.\n\nPulse Aceptar solo si está seguro.';
+  if(!confirm(msg))return;
+  RT.data[key]=arr.filter(r=>!_ieRecordInMolPesBucket(r,mod,anchorYmd,turnoCod));
+  RT._ensureShape();
+  RT.save();
+  if(typeof _doRender==='function')_doRender(new Set([key]));
+  previewFiltered();
+  ieRenderExplorer();
+  toast(toRemove.length+' registro(s) eliminado(s)','success');
+}
 function ieExApplyMolPes(mod,anchorYmd,turnoCod,alsoExport){
   const modEl=document.getElementById('ieModulo');
   const rh=document.getElementById('ieRangoHora');
@@ -3767,6 +3803,7 @@ function ieExplorerClickDelegate(ev){
   if(!b)return;
   const act=b.getAttribute('data-ie-act');
   if(act==='export-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',true);return;}
+  if(act==='delete-molpes'){ieExDeleteMolPesBucket(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'');return;}
   if(act==='export-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',true);return;}
   if(act==='month-all'){ieExApplyMonth(b.dataset.mod,b.dataset.month);return;}
 }
@@ -3804,7 +3841,8 @@ function ieRenderExplorer(){
         const ventana=_ieFmtVentanaTurnoHtml(o.anchor,o.turno);
         const refLine='Fecha referencia (inicio turno en calendario): <span class="ie-ex-dt">'+_ieFmtDdMmYyyy(o.anchor)+'</span>';
         html+=`<div class="ie-ex-row"><div class="ie-ex-meta"><strong>${tn}</strong><br>${refLine} · ${o.count} reg.${kg}${ventana?'<br>'+ventana:''}</div><div class="ie-ex-actions">`+
-          `<button type="button" class="btn sm" data-ie-act="export-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Exportar Excel</button></div></div>`;
+          `<button type="button" class="btn sm" data-ie-act="export-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Exportar Excel</button>`+
+          `<button type="button" class="btn ghost sm danger" data-ie-act="delete-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" title="Quita del sistema los registros de este turno y fecha">Eliminar…</button></div></div>`;
       });
       html+=`</div></details>`;
     });
