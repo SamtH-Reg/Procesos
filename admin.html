@@ -2921,13 +2921,18 @@ function importJSON(e){
 }
 function exportExcel(which){
   const wb=XLSX.utils.book_new();
-  const addSheet=(name,rows)=>{if(!rows.length)return;const ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,name);};
+  const addSheet=(name,rows,map)=>{
+    if(!rows||!rows.length)return;
+    const data=typeof map==='function'?map(rows):rows;
+    const ws=XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb,ws,name);
+  };
   if(which==='all'||which==='presets')addSheet('presets',DB.data.presets);
   if(which==='all'||which==='trabajadores')addSheet('trabajadores',DB.data.trabajadores);
   if(which==='all'||which==='turnos')addSheet('turnos',DB.data.turnos);
   if(which==='all'||which==='equipos')addSheet('equipos',DB.data.equipos);
   if(which==='all'||which==='moldes')addSheet('moldes',RT.data.moldes);
-  if(which==='all'||which==='pesajes')addSheet('pesajes',RT.data.pesajes);
+  if(which==='all'||which==='pesajes')addSheet('pesajes',RT.data.pesajes,_adminPesajesSheetRowsForExport);
   XLSX.writeFile(wb,'friosur_'+which+'_'+Date.now()+'.xlsx');toast('Excel generado','success');
 }
 function importExcel(e){
@@ -4075,6 +4080,52 @@ function previewFiltered(){
     el.innerHTML=`📊 <strong>${f.length}</strong> de ${src.length} registros filtrados<br>Total: <strong>${kg.toFixed(1)} kg</strong>`;
   }
 }
+/** Exportación pesajes: orden de columnas alineado con planilla operativa (Turno → Kilos). */
+function _adminTurnoLabelPesajeExport(t){
+  return _adminCycleTurnoNorm(t)==='noche'?'Noche':'Día';
+}
+function _adminFechaDdMmYyyyExport(ymd){
+  const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return String(ymd||'').trim();
+  return m[3]+'-'+m[2]+'-'+m[1];
+}
+function _adminHoraEnteraFromHm(hmStr){
+  const m=String(hmStr||'').match(/^(\d{1,2})[:\.](\d{2})/);
+  if(!m)return'0:00';
+  const h=Math.min(23,Math.max(0,parseInt(m[1],10)));
+  return h+':00';
+}
+function _adminPlanilleroForPesajeRow(r){
+  try{
+    const ap=(RT.data&&RT.data.armadoPesaje)||{};
+    const linea=String(r.linea||'').trim().toUpperCase();
+    if(!linea)return'';
+    const turno=_adminCycleTurnoNorm(r.turno||'dia');
+    const fecha=_adminCycleDateNorm(r.fecha);
+    const ent=_adminArmGetEntry(ap,linea,turno,fecha);
+    return ent&&ent.planillero!=null&&ent.planillero!==''?String(ent.planillero):'';
+  }catch(e){return'';}
+}
+function _adminPesajesSheetRowsForExport(rows){
+  return(Array.isArray(rows)?rows:[]).map(r=>{
+    const kg=r.kg!=null&&r.kg!==''?Number(r.kg):'';
+    return{
+      'Turno':_adminTurnoLabelPesajeExport(r.turno),
+      'Planillero':_adminPlanilleroForPesajeRow(r),
+      'Fecha':_adminFechaDdMmYyyyExport(r.fecha),
+      'Hora':String(r.hora||'').trim().slice(0,8),
+      'Hora Entera':_adminHoraEnteraFromHm(r.hora),
+      'Guía':String(r.guia!=null?r.guia:''),
+      'Especie':String(r.especie!=null?r.especie:''),
+      'Tipo Corte':String(r.tipo!=null?r.tipo:''),
+      'Codigo':String(r.codigo!=null?r.codigo:''),
+      'Nombre':String(r.nombre!=null?r.nombre:''),
+      'Ficha':String(r.ficha!=null?r.ficha:''),
+      'Linea':String(r.linea!=null?r.linea:''),
+      'Kilos':kg
+    };
+  });
+}
 function exportFiltered(){
   const mod=document.getElementById('ieModulo').value;
   if(mod==='tuneles'){
@@ -4094,7 +4145,12 @@ function exportFiltered(){
   if(mod==='moldes'||mod==='pesajes')f.sort((a,b)=>_ieSortMolPes(mod,a,b));
   if(!f.length){toast('Sin registros para exportar','warn');return;}
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
+  if(mod==='pesajes'){
+    const sheet=_adminPesajesSheetRowsForExport(f);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheet),mod);
+  }else{
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
+  }
   const tag=catalog?'':'_filtrado';
   XLSX.writeFile(wb,mod+tag+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
   toast(f.length+' registros exportados','success');
