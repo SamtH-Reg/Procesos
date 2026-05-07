@@ -234,20 +234,38 @@ pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius
 .kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
 
 /* Import/Export: explorador de datos */
-.ie-ex-root{display:flex;flex-direction:column;gap:8px;}
-.ie-ex-mod{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-alt);overflow:hidden;}
-.ie-ex-mod>summary,.ie-ex-mon>summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;user-select:none;}
+.ie-ex-root{display:flex;flex-direction:column;gap:10px;}
+.ie-ex-mod{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;border-left-width:4px;}
+.ie-ex-mod--moldes{border-left-color:#b45309;background:linear-gradient(90deg,rgba(180,83,9,.08) 0%,var(--surface-alt) 12%);}
+.ie-ex-mod--pesajes{border-left-color:#047857;background:linear-gradient(90deg,rgba(4,120,87,.09) 0%,var(--surface-alt) 12%);}
+.ie-ex-mod--tuneles{border-left-color:#6d28d9;background:linear-gradient(90deg,rgba(109,40,217,.09) 0%,var(--surface-alt) 12%);}
+.ie-ex-mod>summary,.ie-ex-mon>summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;user-select:none;background:var(--surface-alt);}
 .ie-ex-mod>summary::-webkit-details-marker,.ie-ex-mon>summary::-webkit-details-marker{display:none;}
-.ie-ex-mod>summary:hover,.ie-ex-mon>summary:hover{background:rgba(59,111,184,.06);}
+.ie-ex-mod>summary:hover,.ie-ex-mon>summary:hover{filter:brightness(0.97);}
+body[data-theme="dark"] .ie-ex-mod>summary:hover,body[data-theme="dark"] .ie-ex-mon>summary:hover{filter:brightness(1.08);}
 .ie-ex-mod .ie-ex-chev,.ie-ex-mon .ie-ex-chev{font-size:10px;color:var(--text-3);transition:transform .15s;}
 details.ie-ex-mod[open]>summary .ie-ex-chev,details.ie-ex-mon[open]>summary .ie-ex-chev{transform:rotate(90deg);}
-.ie-ex-mod-body{padding:0 8px 8px 8px;}
-.ie-ex-mon{margin:0 0 6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden;}
+.ie-ex-mod-body{padding:0 8px 8px 8px;background:var(--surface-alt);}
+.ie-ex-mod--moldes .ie-ex-mod-body{background:rgba(180,83,9,.04);}
+.ie-ex-mod--pesajes .ie-ex-mod-body{background:rgba(4,120,87,.05);}
+.ie-ex-mod--tuneles .ie-ex-mod-body{background:rgba(109,40,217,.06);}
+.ie-ex-mon{margin:0 0 6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden;}
 .ie-ex-mon:last-child{margin-bottom:0;}
-.ie-ex-rows{display:flex;flex-direction:column;gap:6px;padding:8px 10px 10px 10px;}
-.ie-ex-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-alt);font-size:12px;}
-.ie-ex-row .ie-ex-meta{flex:1;min-width:200px;color:var(--text-2);line-height:1.45;}
-.ie-ex-row .ie-ex-actions{display:flex;flex-wrap:wrap;gap:6px;}
+.ie-ex-rows{display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px 10px;}
+.ie-ex-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 14px;border-radius:8px;border:1px solid var(--border);font-size:12px;}
+.ie-ex-mod--moldes .ie-ex-row{background:rgba(255,255,255,.75);border-color:rgba(180,83,9,.22);}
+.ie-ex-mod--pesajes .ie-ex-row{background:rgba(255,255,255,.75);border-color:rgba(4,120,87,.22);}
+.ie-ex-mod--tuneles .ie-ex-row{background:rgba(255,255,255,.75);border-color:rgba(109,40,217,.22);}
+body[data-theme="dark"] .ie-ex-mod--moldes .ie-ex-row{background:rgba(30,41,59,.65);}
+body[data-theme="dark"] .ie-ex-mod--pesajes .ie-ex-row{background:rgba(30,41,59,.65);}
+body[data-theme="dark"] .ie-ex-mod--tuneles .ie-ex-row{background:rgba(30,41,59,.65);}
+.ie-ex-row:nth-child(even){filter:brightness(0.985);}
+body[data-theme="dark"] .ie-ex-row:nth-child(even){filter:brightness(1.04);}
+.ie-ex-row .ie-ex-meta{flex:1;min-width:200px;color:var(--text-2);line-height:1.5;}
+.ie-ex-row .ie-ex-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.ie-ex-range{display:block;margin-top:8px;font-size:12px;color:var(--text-2);line-height:1.55;}
+.ie-ex-range .ie-ex-dt{color:var(--brand);font-weight:800;font-family:var(--mono);font-size:12px;}
+body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
 </style>
 </head>
 <body>
@@ -640,7 +658,7 @@ details.ie-ex-mod[open]>summary .ie-ex-chev,details.ie-ex-mon[open]>summary .ie-
     <div class="card-hdr">
       <div>
         <div class="card-title">📂 Datos disponibles</div>
-        <div class="card-sub">Despliega <strong>Moldes</strong>, <strong>Pesajes</strong> o <strong>Túneles</strong> → mes → bloques con turno y fecha de referencia. <em>Aplicar filtros</em> rellena el panel de abajo; <em>Exportar Excel</em> exporta solo ese bloque.</div>
+        <div class="card-sub">Orden: <strong>Moldes</strong> · <strong>Pesajes</strong> · <strong>Túneles</strong>. Despliega cada módulo → mes → bloque (turno y ventana horaria). <strong>Exportar Excel</strong> en cada bloque aplica ese criterio y descarga solo ese conjunto.</div>
       </div>
       <button type="button" class="btn ghost sm" onclick="ieRenderExplorer()">↻ Actualizar lista</button>
     </div>
@@ -3595,6 +3613,40 @@ function _ieTurnoNombre(cod){
   const t=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===c.toLowerCase());
   return t?String(t.nombre||t.codigo)+' · '+String(t.codigo):c;
 }
+function _ieTurnoCruzaMedianocheCodigo(cod){
+  const def=_ieTurnoDefFromCodigo(cod);
+  if(!def)return false;
+  const a=_adminParseHMToMinutes(def.inicio),b=_adminParseHMToMinutes(def.fin);
+  return a!=null&&b!=null&&b<a;
+}
+/** Ancla de ventana para fila túneles (cierre en día `fechaYmd`, turno del ciclo). */
+function _ieExplorerTunnelVentanaAnchor(fechaYmd,turnoCod){
+  const f=_ieCycleDateNorm(fechaYmd);
+  const tc=String(turnoCod||'').trim();
+  if(!tc||tc==='—')return null;
+  if(_ieTurnoCruzaMedianocheCodigo(tc))return _adminAddDaysLocalYmd(f,-1);
+  return f;
+}
+function _ieFmtLocalDdMmYyyyHhMm(ms){
+  const d=new Date(ms);
+  if(isNaN(d.getTime()))return{dmy:'—',hm:'—'};
+  const p=n=>String(n).padStart(2,'0');
+  return{dmy:p(d.getDate())+'-'+p(d.getMonth()+1)+'-'+d.getFullYear(),hm:p(d.getHours())+':'+p(d.getMinutes())};
+}
+/** Texto HTML: ventana local [start, end) del turno anclada en anchorYmd (misma lógica que filtros de planta). */
+function _ieFmtVentanaTurnoHtml(anchorYmd,turnoCod){
+  const A=_ieCycleDateNorm(anchorYmd);
+  const cod=String(turnoCod||'dia').trim()||'dia';
+  const win=_ieVentanaTurnoFechaRefMs(A,cod);
+  if(!win){
+    const def=_ieTurnoDefFromCodigo(cod);
+    if(!def)return'';
+    return'<span class="ie-ex-range">Horario del turno: <span class="ie-ex-dt">'+esc(def.inicio)+'</span> – <span class="ie-ex-dt">'+esc(def.fin)+'</span></span>';
+  }
+  const a=_ieFmtLocalDdMmYyyyHhMm(win.start);
+  const b=_ieFmtLocalDdMmYyyyHhMm(win.end);
+  return'<span class="ie-ex-range">Registros del turno · desde el <span class="ie-ex-dt">'+esc(a.dmy)+'</span> hora <span class="ie-ex-dt">'+esc(a.hm)+'</span> hasta el <span class="ie-ex-dt">'+esc(b.dmy)+'</span> hora <span class="ie-ex-dt">'+esc(b.hm)+'</span></span>';
+}
 function _ieExplorerBucketsMolPes(mod){
   const src=Array.isArray(_ieSrc(mod))?_ieSrc(mod):[];
   const map=new Map();
@@ -3677,7 +3729,6 @@ function ieExApplyMolPes(mod,anchorYmd,turnoCod,alsoExport){
   if(rh)rh.value='';
   previewFiltered();
   if(alsoExport)exportFiltered();
-  else toast('Filtros aplicados: '+_ieTurnoNombre(turnoCod)+' · ref '+_ieFmtDdMmYyyyPlain(anchorYmd),'info');
 }
 function ieExApplyTuneles(fechaYmd,turnoCod,alsoExport){
   const modEl=document.getElementById('ieModulo');
@@ -3692,7 +3743,6 @@ function ieExApplyTuneles(fechaYmd,turnoCod,alsoExport){
   if(rh)rh.value='';
   previewFiltered();
   if(alsoExport)exportFiltered();
-  else toast('Filtros aplicados: túneles · '+_ieFmtDdMmYyyyPlain(fechaYmd),'info');
 }
 function ieExApplyMonth(mod,yyyyMm){
   const modEl=document.getElementById('ieModulo'),dEl=document.getElementById('ieDesde'),hEl=document.getElementById('ieHasta'),turEl=document.getElementById('ieTurno'),rh=document.getElementById('ieRangoHora');
@@ -3711,9 +3761,7 @@ function ieExplorerClickDelegate(ev){
   const b=ev.target.closest('[data-ie-act]');
   if(!b)return;
   const act=b.getAttribute('data-ie-act');
-  if(act==='apply-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',false);return;}
   if(act==='export-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',true);return;}
-  if(act==='apply-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',false);return;}
   if(act==='export-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',true);return;}
   if(act==='month-all'){ieExApplyMonth(b.dataset.mod,b.dataset.month);return;}
 }
@@ -3730,15 +3778,15 @@ function ieRenderExplorer(){
     return;
   }
   const parts=[];
-  function renderMolPes(mod,title,icon){
+  function renderMolPes(mod,title,icon,cssMod){
     const byM=_ieExplorerBucketsMolPes(mod);
     const total=(RT.data[mod==='moldes'?'moldes':'pesajes']||[]).length;
     const months=[...byM.keys()].sort((a,b)=>b.localeCompare(a));
     if(!months.length){
-      parts.push(`<details class="ie-ex-mod"><summary><span>${icon} ${esc(title)}</span><span style="font-weight:600;color:var(--text-3);">0</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body"><div style="padding:10px 14px;color:var(--text-3);font-size:12px;">Sin registros.</div></div></details>`);
+      parts.push(`<details class="ie-ex-mod ${cssMod}"><summary><span>${icon} ${esc(title)}</span><span style="font-weight:600;color:var(--text-3);">0</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body"><div style="padding:10px 14px;color:var(--text-3);font-size:12px;">Sin registros.</div></div></details>`);
       return;
     }
-    let html=`<details class="ie-ex-mod"><summary><span>${icon} ${esc(title)}</span><span style="font-weight:600;color:var(--text-3);">${total} reg.</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body">`;
+    let html=`<details class="ie-ex-mod ${cssMod}"><summary><span>${icon} ${esc(title)}</span><span style="font-weight:600;color:var(--text-3);">${total} reg.</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body">`;
     months.forEach(ym=>{
       const rows=byM.get(ym)||[];
       const sub=rows.reduce((s,o)=>s+o.count,0);
@@ -3747,9 +3795,10 @@ function ieRenderExplorer(){
       html+=`<div class="ie-ex-rows">`;
       rows.forEach(o=>{
         const tn=esc(_ieTurnoNombre(o.turno));
-        const kg=o.kg?` · ${(Math.round(o.kg*10)/10).toLocaleString('es-CL')} kg`:'';
-        html+=`<div class="ie-ex-row"><div class="ie-ex-meta"><strong>${tn}</strong><br>Fecha referencia (filtro): <strong>${_ieFmtDdMmYyyy(o.anchor)}</strong> · ${o.count} reg.${kg}</div><div class="ie-ex-actions">`+
-          `<button type="button" class="btn ghost sm" data-ie-act="apply-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Aplicar filtros</button>`+
+        const kg=o.kg?` · <strong>${(Math.round(o.kg*10)/10).toLocaleString('es-CL')} kg</strong>`:'';
+        const ventana=_ieFmtVentanaTurnoHtml(o.anchor,o.turno);
+        const refLine='Fecha referencia (inicio turno en calendario): <span class="ie-ex-dt">'+_ieFmtDdMmYyyy(o.anchor)+'</span>';
+        html+=`<div class="ie-ex-row"><div class="ie-ex-meta"><strong>${tn}</strong><br>${refLine} · ${o.count} reg.${kg}${ventana?'<br>'+ventana:''}</div><div class="ie-ex-actions">`+
           `<button type="button" class="btn sm" data-ie-act="export-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Exportar Excel</button></div></div>`;
       });
       html+=`</div></details>`;
@@ -3757,15 +3806,15 @@ function ieRenderExplorer(){
     html+='</div></details>';
     parts.push(html);
   }
-  renderMolPes('moldes','Moldes (conteo)','🧱');
-  renderMolPes('pesajes','Pesajes','⚖');
+  renderMolPes('moldes','Moldes (conteo)','🧱','ie-ex-mod--moldes');
+  renderMolPes('pesajes','Pesajes','⚖','ie-ex-mod--pesajes');
   const byT=_ieExplorerBucketsTuneles();
   const histN=(_ieFlatTuneles().hist||[]).length;
   const tMonths=[...byT.keys()].sort((a,b)=>b.localeCompare(a));
   if(!tMonths.length){
-    parts.push(`<details class="ie-ex-mod"><summary><span>🚇 Túneles y placas</span><span style="font-weight:600;color:var(--text-3);">0</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body"><div style="padding:10px 14px;color:var(--text-3);font-size:12px;">Sin cierres en histórico.</div></div></details>`);
+    parts.push(`<details class="ie-ex-mod ie-ex-mod--tuneles"><summary><span>🚇 Túneles y placas</span><span style="font-weight:600;color:var(--text-3);">0</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body"><div style="padding:10px 14px;color:var(--text-3);font-size:12px;">Sin cierres en histórico.</div></div></details>`);
   }else{
-    let html=`<details class="ie-ex-mod"><summary><span>🚇 Túneles y placas</span><span style="font-weight:600;color:var(--text-3);">${histN} ciclos</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body">`;
+    let html=`<details class="ie-ex-mod ie-ex-mod--tuneles"><summary><span>🚇 Túneles y placas</span><span style="font-weight:600;color:var(--text-3);">${histN} ciclos</span><span class="ie-ex-chev">▸</span></summary><div class="ie-ex-mod-body">`;
     tMonths.forEach(ym=>{
       const rows=byT.get(ym)||[];
       const sub=rows.reduce((s,o)=>s+o.count,0);
@@ -3774,8 +3823,10 @@ function ieRenderExplorer(){
       html+=`<div class="ie-ex-rows">`;
       rows.forEach(o=>{
         const tlab=o.turno&&o.turno!=='—'?esc(_ieTurnoNombre(o.turno)):'<span style="color:var(--text-3);">Turno (inferido / —)</span>';
-        html+=`<div class="ie-ex-row"><div class="ie-ex-meta">${tlab}<br>Fecha cierre: <strong>${_ieFmtDdMmYyyy(o.fecha)}</strong> · ${o.count} ciclo(s) · ${o.cant} u.</div><div class="ie-ex-actions">`+
-          `<button type="button" class="btn ghost sm" data-ie-act="apply-tun" data-fecha="${esc(o.fecha)}" data-turno="${esc(o.turno==='—'?'':o.turno)}">Aplicar filtros</button>`+
+        const tunAnch=o.turno&&o.turno!=='—'?_ieExplorerTunnelVentanaAnchor(o.fecha,o.turno):null;
+        const ventana=tunAnch?_ieFmtVentanaTurnoHtml(tunAnch,o.turno):'';
+        const cierreLine='Día de cierre (calendario): <span class="ie-ex-dt">'+_ieFmtDdMmYyyy(o.fecha)+'</span>';
+        html+=`<div class="ie-ex-row"><div class="ie-ex-meta">${tlab}<br>${cierreLine} · ${o.count} ciclo(s) · <strong>${o.cant} u.</strong>${ventana?'<br>'+ventana:''}</div><div class="ie-ex-actions">`+
           `<button type="button" class="btn sm" data-ie-act="export-tun" data-fecha="${esc(o.fecha)}" data-turno="${esc(o.turno==='—'?'':o.turno)}">Exportar Excel</button></div></div>`;
       });
       html+=`</div></details>`;
