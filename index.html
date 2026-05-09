@@ -5317,6 +5317,19 @@ function _eqDiffMinutosHoraIniFin(horaInicio,horaFin){
   if(diff<0)diff+=1440;
   return diff;
 }
+/** Guías únicas del ciclo: `items[].guia` y, si existe, `h.guia` (legacy / sync). */
+function _eqHistGuiasFromItems(h){
+  const set=new Set();
+  const addStr=g=>{
+    const s=String(g==null?'':g).trim();
+    if(!s||s==='—')return;
+    s.split(/\s*,\s*/).forEach(x=>{const t=String(x||'').trim();if(t)set.add(t);});
+  };
+  (Array.isArray(h&&h.items)?h.items:[]).forEach(it=>addStr(it&&it.guia));
+  addStr(h&&h.guia);
+  if(!set.size)return'—';
+  return[...set].join(', ');
+}
 /** Listado de últimas descargas (`RT.eqHist`) en el modal de equipo: inicio, fin, duración real, anticipado + causal. */
 function _eqModalHistorialDescargasHtml(codigo){
   const list=(RT.eqHist&&RT.eqHist[codigo])?RT.eqHist[codigo].slice(0,10):[];
@@ -5328,6 +5341,7 @@ function _eqModalHistorialDescargasHtml(codigo){
   }
   const rows=list.map(h=>{
     const prod=Array.isArray(h.productos)?h.productos.join(', '):String(h.productos||'—');
+    const guias=_eqHistGuiasFromItems(h);
     const hi=esc(h.horaInicio||'—');
     const hf=esc(h.horaDescarga||'—');
     const durMin=_eqDiffMinutosHoraIniFin(h.horaInicio,h.horaDescarga);
@@ -5360,7 +5374,8 @@ function _eqModalHistorialDescargasHtml(codigo){
         <span style="color:var(--text-3);">·</span>
         <span style="font-weight:800;color:var(--text);">${h.cant||0} u</span>${ant}
       </div>
-      <div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-top:6px;font-weight:500;">${esc(prod)}</div>
+      <div style="font-size:11px;color:var(--text-3);line-height:1.4;margin-top:6px;"><span style="font-weight:700;color:var(--text-2);text-transform:uppercase;font-size:10px;letter-spacing:.03em;">Guía(s)</span> · ${esc(guias)}</div>
+      <div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-top:4px;font-weight:500;">${esc(prod)}</div>
       ${anticipoBlock}
     </div>`;
   }).join('');

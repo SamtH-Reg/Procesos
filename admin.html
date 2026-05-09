@@ -2341,6 +2341,19 @@ function _tunInferTurno(hm){
   }
   return '';
 }
+/** Misma lógica que index: guías en `items` + opcional `h.guia`. */
+function _tunHistGuiasFromItems(h){
+  const set=new Set();
+  const addStr=g=>{
+    const s=String(g==null?'':g).trim();
+    if(!s||s==='—')return;
+    s.split(/\s*,\s*/).forEach(x=>{const t=String(x||'').trim();if(t)set.add(t);});
+  };
+  (Array.isArray(h&&h.items)?h.items:[]).forEach(it=>addStr(it&&it.guia));
+  addStr(h&&h.guia);
+  if(!set.size)return'—';
+  return[...set].join(', ');
+}
 function renderTunReport(){
   const equipos=(DB.data.equipos||[]).filter(e=>e.activo);
   const fTipo=document.getElementById('tunTipo').value;
@@ -2437,9 +2450,10 @@ function renderTunReport(){
     rows.sort((a,b)=>(b.h.id||0)-(a.h.id||0));
     if(!rows.length){histWrap.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3);">Sin ciclos en histórico</div>';histSub.textContent='0 ciclos';}
     else{
-      histWrap.innerHTML='<table><thead><tr><th>Equipo</th><th>Tipo</th><th>Hora inicio</th><th>Hora término</th><th class="num">Duración (h)</th><th>Turno</th><th class="num">Cant.</th><th>Productos</th><th>Cierre anticipado</th></tr></thead><tbody>'+
+      histWrap.innerHTML='<table><thead><tr><th>Equipo</th><th>Tipo</th><th>Hora inicio</th><th>Hora término</th><th class="num">Duración (h)</th><th>Turno</th><th class="num">Cant.</th><th>Productos</th><th>Guía(s)</th><th>Cierre anticipado</th></tr></thead><tbody>'+
         rows.map(r=>{
           const prodTxt=Array.isArray(r.h.productos)?r.h.productos.join(', '):String(r.h.productos||'');
+          const guias=_tunHistGuiasFromItems(r.h);
           const cierreEarly=r.h.cierreAnticipado?((r.h.cierreCausal||'').trim()+(r.h.cierreMinRestantes!=null?' · faltaban ~'+r.h.cierreMinRestantes+' min':'')):'';
           return`<tr>
           <td><strong>${esc(r.eq.codigo)}</strong> — ${esc(r.eq.nombre)}</td>
@@ -2450,6 +2464,7 @@ function renderTunReport(){
           <td>${esc(r.turno||'—')}</td>
           <td class="num">${r.h.cant||0}</td>
           <td style="font-size:11px;">${esc(prodTxt||'—')}</td>
+          <td style="font-size:11px;">${esc(guias)}</td>
           <td style="font-size:11px;max-width:220px;">${r.h.cierreAnticipado?esc(cierreEarly):'—'}</td>
         </tr>`;
         }).join('')+'</tbody></table>';
@@ -2483,6 +2498,7 @@ function exportTunReport(){
       turno:_tunInferTurno(h.horaInicio||''),
       cantidad:h.cant||0,
       productos:Array.isArray(h.productos)?h.productos.join(' | '):String(h.productos||''),
+      guias:_tunHistGuiasFromItems(h),
       cierre_anticipado:h.cierreAnticipado?'si':'no',
       cierre_causal:h.cierreCausal||'',
       min_restantes_al_cierre:h.cierreMinRestantes!=null?h.cierreMinRestantes:''
@@ -2597,7 +2613,7 @@ function renderAnalisis(){
   document.getElementById('anTblEsp').innerHTML='<thead><tr><th>Especie</th><th class="num">Reg</th><th class="num">Kg</th></tr></thead><tbody>'+arrE.map(x=>`<tr><td>${esc(x[0])}</td><td class="num">${x[1].n}</td><td class="num">${x[1].kg.toFixed(1)}</td></tr>`).join('')+'</tbody>';
   // Histórico equipos
   const rows=[];Object.entries(RT.data.eqHist||{}).forEach(([cod,arr])=>{arr.forEach(h=>{rows.push({cod,...h});});});
-  document.getElementById('anTblHist').innerHTML='<thead><tr><th>Equipo</th><th>Inicio</th><th>Fin</th><th class="num">Horas</th><th class="num">Cant</th><th>Productos</th></tr></thead><tbody>'+(rows.length?rows.map(r=>`<tr><td>${esc(r.cod)}</td><td>${esc(r.horaInicio||'—')}</td><td>${esc(r.horaDescarga||'—')}</td><td class="num">${(r.horasTotal||0).toFixed(1)}</td><td class="num">${r.cant||0}</td><td>${esc(r.productos||'')}</td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3);">Sin histórico</td></tr>')+'</tbody>';
+  document.getElementById('anTblHist').innerHTML='<thead><tr><th>Equipo</th><th>Inicio</th><th>Fin</th><th class="num">Horas</th><th class="num">Cant</th><th>Productos</th><th>Guía(s)</th></tr></thead><tbody>'+(rows.length?rows.map(r=>`<tr><td>${esc(r.cod)}</td><td>${esc(r.horaInicio||'—')}</td><td>${esc(r.horaDescarga||'—')}</td><td class="num">${(r.horasTotal||0).toFixed(1)}</td><td class="num">${r.cant||0}</td><td>${esc(r.productos||'')}</td><td style="font-size:11px;">${esc(_tunHistGuiasFromItems(r))}</td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-3);">Sin histórico</td></tr>')+'</tbody>';
 }
 
 /* ════════════ PRESETS CRUD ════════════ */
@@ -3982,6 +3998,7 @@ function _ieFlatTuneles(){
         turno:String(_tunInferTurno((h&&h.horaInicio)||'')||''),
         cantidad:+(h&&h.cant)||0,
         productos:Array.isArray(h&&h.productos)?h.productos.join(' | '):String((h&&h.productos)||''),
+        guias:_tunHistGuiasFromItems(h),
       });
     });
   });
