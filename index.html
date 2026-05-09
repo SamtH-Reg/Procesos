@@ -5302,6 +5302,30 @@ function updateEqStats(){
 }
 
 /* Equipo modal (cargar / iniciar / finalizar / descargar) */
+/** Listado compacto de últimas descargas (histórico `RT.eqHist`) para el modal de equipo. */
+function _eqModalHistorialDescargasHtml(codigo){
+  const list=(RT.eqHist&&RT.eqHist[codigo])?RT.eqHist[codigo].slice(0,10):[];
+  if(!list.length){
+    return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
+      <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimas descargas</div>
+      <div style="font-size:12px;color:var(--text-3);padding:10px 12px;background:var(--surface-alt);border-radius:8px;border:1px dashed var(--border);">Sin descargas registradas en este equipo.</div>
+    </div>`;
+  }
+  const rows=list.map(h=>{
+    const prod=Array.isArray(h.productos)?h.productos.join(', '):String(h.productos||'—');
+    const ant=h.cierreAnticipado?'<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--safety-red-bg);color:var(--safety-red-dark);margin-left:4px;vertical-align:middle;">Anticipado</span>':'';
+    return`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 10px;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;font-size:12px;">
+      <span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text);">${esc(h.horaDescarga||'—')}</span>
+      <span style="color:var(--text-3);font-size:11px;">← inicio ${esc(h.horaInicio||'—')} · ${Number(h.horasTotal||0)} h</span>
+      <span style="font-weight:700;color:var(--text);">${h.cant||0} u</span>${ant}
+      <div style="width:100%;font-size:11px;color:var(--text-2);line-height:1.35;margin-top:2px;">${esc(prod)}</div>
+    </div>`;
+  }).join('');
+  return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
+    <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimas ${list.length} descarga(s)</div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:2px;">${rows}</div>
+  </div>`;
+}
 let _eqModalCode=null;
 function openEqModal(codigo){
   _eqModalCode=codigo;
@@ -5398,7 +5422,8 @@ function openEqModal(codigo){
     ${rt.estado==='listo'&&rt.cierreAnticipado?`<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:12px;padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">Frío finalizado <strong>antes de tiempo</strong>${rt.cierreMinRestantes!=null?' (faltaban ~'+esc(_eqFmtMinutosHM(rt.cierreMinRestantes))+')':''}.<br><span style="color:var(--text-2);font-weight:600;">Causal:</span> ${esc(rt.cierreCausal||'—')}</div>`:''}
     <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Productos cargados</label>
     ${itemsHtml}
-    ${actions.join('')}`;
+    ${actions.join('')}
+    ${_eqModalHistorialDescargasHtml(eq.codigo)}`;
   document.getElementById('modalFtr').innerHTML=footer;
   document.getElementById('modalOverlay').classList.add('show');
   _modalOnSave=null;
