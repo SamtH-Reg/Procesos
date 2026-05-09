@@ -6518,7 +6518,7 @@ function renderMResumen(){
   const cellKg=kg=>{const n=+kg||0;if(!n)return'<span style="color:var(--text-3);">—</span>';return`<span style="font-weight:700;">${fmtKg(n)}</span>`;};
   const fs='background:#0f172a;color:#fff;font-weight:700;padding:10px 12px;';
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">PRODUCTO</th>'+
-    hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}<div style="font-size:10px;font-weight:600;color:var(--text-3);text-transform:none;letter-spacing:0;">kg</div></th>`).join('')+
+    hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:88px;">MOLDES</th><th class="num" style="min-width:100px;">KG</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>

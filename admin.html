@@ -2201,7 +2201,7 @@ function drawTableWidget(w,moldes,pesajes){
       html=`<table>
       <thead><tr>
         <th>Operario</th><th>Producto</th>
-        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}<div style="font-size:10px;font-weight:600;color:var(--text-3);">kg</div></th>`).join('')}
+        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}
         <th class="num">Moldes</th><th class="num">KG</th>
       </tr></thead>
       <tbody>`+
