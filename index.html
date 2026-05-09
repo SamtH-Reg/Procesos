@@ -2231,6 +2231,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
             <option value="L1">L1 — Línea 1</option>
             <option value="L2" selected>L2 — Línea 2</option>
             <option value="L3">L3 — Línea 3</option>
+            <option value="L4">L4 — Línea 4</option>
+            <option value="L5">L5 — Línea 5</option>
             <option value="—">— Sin línea</option>
           </select>
         </div>
@@ -3569,6 +3571,8 @@ function rtLoad(){
       {id:906,hora:'14:10',linea:'L3',codigo:'D-07',nombre:'JUAN SEPÚLVEDA',ficha:'203',producto:'Porción Reineta',presetId:9,cant:30,pendiente:30,kg:150,guia:'G-2026-046'},
       {id:907,hora:'14:05',linea:'L2',codigo:'D-08',nombre:'PAULINA VARGAS',ficha:'301',producto:'Filete Reineta Bloque',presetId:6,cant:24,pendiente:24,kg:180,guia:'G-2026-045'},
       {id:908,hora:'14:01',linea:'L1',codigo:'D-06',nombre:'LUISA TORRES',ficha:'202',producto:'Filete Merluza Austral Bloque',presetId:4,cant:22,pendiente:22,kg:165,guia:'G-2026-044'},
+      {id:909,hora:'13:55',linea:'L4',codigo:'D-05',nombre:'ROXANA MUÑOZ',ficha:'201',producto:'Filete Reineta Bloque',presetId:6,cant:12,pendiente:12,kg:90,guia:'G-2026-047'},
+      {id:910,hora:'13:50',linea:'L5',codigo:'D-03',nombre:'ANA TAPIA',ficha:'103',producto:'Filete Merluza Austral Bloque',presetId:4,cant:10,pendiente:10,kg:75,guia:'G-2026-048'},
     ];
   }
   // Healing: agregar pendiente a moldes que no lo tienen
@@ -3581,6 +3585,8 @@ function rtLoad(){
       {id:804,hora:'14:15',linea:'L2',nombre:'MARÍA ARAYA',especie:'Reineta',tipo:'Filete',kg:2.7,guia:'G-2026-045'},
       {id:805,hora:'14:10',linea:'L1',nombre:'ROXANA MUÑOZ',especie:'Merluza Austral',tipo:'Porción',kg:3.4,guia:'G-2026-044'},
       {id:806,hora:'14:05',linea:'L1',nombre:'LUISA TORRES',especie:'Merluza Austral',tipo:'Porción',kg:2.9,guia:'G-2026-044'},
+      {id:807,hora:'13:58',linea:'L4',nombre:'JUAN SEPÚLVEDA',especie:'Reineta',tipo:'Filete',kg:1.5,guia:'G-2026-047'},
+      {id:808,hora:'13:52',linea:'L5',nombre:'PAULINA VARGAS',especie:'Merluza Austral',tipo:'Porción',kg:2.2,guia:'G-2026-048'},
     ];
   }
   if(Array.isArray(RT.pesajes)){
@@ -4093,6 +4099,14 @@ function _pArmEntriesForScope(turno,fecha){
 function _armValidLineaCodigo(ln){
   return/^L\d{1,3}$/i.test(String(ln||'').trim());
 }
+/** Líneas de planta estándar (Moldes, Pesaje, análisis, filtros): L1…L5. */
+const FR_PLANT_LINEAS=['L1','L2','L3','L4','L5'];
+function _lineaPlantaEtiqueta(ln){
+  const L=String(ln||'').trim().toUpperCase();
+  if(!_armValidLineaCodigo(L))return L||'—';
+  const m=L.match(/^L(\d+)$/i);
+  return m?L+' — Línea '+parseInt(m[1],10):L;
+}
 /** Quita claves locales con línea inválida (basura tras migraciones o JSON roto). */
 function _pruneInvalidArmadoKeys(){
   try{
@@ -4222,10 +4236,9 @@ function renderMRegLinea(){
     const d=row.data;
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
   }).map(row=>row.linea).sort((a,b)=>_lineCodigoSortKey(a)-_lineCodigoSortKey(b)||String(a).localeCompare(String(b)));
-  const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3'};
   const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
-    ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(mapa[ln]||ln)}</option>`).join('')
+    ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(_lineaPlantaEtiqueta(ln))}</option>`).join('')
     :'<option value="">— Sin líneas armadas —</option>';
   // Mantener selección si sigue disponible; si no, elegir la primera
   if(lineasActivas.includes(prevVal))sel.value=prevVal;
@@ -5519,10 +5532,9 @@ function renderPRegLinea(){
     const d=row.data;
     return d&&(d.planillero||(d.trabajadores&&d.trabajadores.length>0));
   }).map(row=>row.linea).sort((a,b)=>_lineCodigoSortKey(a)-_lineCodigoSortKey(b)||String(a).localeCompare(String(b)));
-  const mapa={L1:'L1 — Línea 1',L2:'L2 — Línea 2',L3:'L3 — Línea 3',L4:'L4 — Línea 4',L5:'L5 — Línea 5',L6:'L6 — Línea 6'};
   const prevVal=sel.value;
   sel.innerHTML=lineasActivas.length
-    ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(mapa[ln]||ln)}</option>`).join('')
+    ?lineasActivas.map(ln=>`<option value="${esc(ln)}">${esc(_lineaPlantaEtiqueta(ln))}</option>`).join('')
     :'<option value="">— Sin líneas armadas —</option>';
   if(lineasActivas.includes(prevVal))sel.value=prevVal;
   else if(lineasActivas.length)sel.value=lineasActivas[0];
@@ -6404,7 +6416,7 @@ function _resumenFiltroTurnoSub(turnoSel){
 }
 function _resumenLineaOptionsHtml(selected){
   const set=new Set();
-  ['L1','L2','L3'].forEach(l=>set.add(l));
+  FR_PLANT_LINEAS.forEach(l=>set.add(l));
   try{
     (DB&&DB.data&&DB.data.equipos||[]).forEach(e=>{
       if(e&&e.activo!==false&&e.codigo)set.add(String(e.codigo).trim().toUpperCase());
