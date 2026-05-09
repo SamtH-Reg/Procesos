@@ -3184,13 +3184,13 @@ function openModal(title,bodyHTML,onSave,saveLabel){
   document.getElementById('modalOverlay').classList.add('show');
   // highlight filled inputs
   setTimeout(()=>{
-    document.querySelectorAll('#modalBody input,#modalBody select').forEach(el=>{
+    document.querySelectorAll('#modalBody input,#modalBody select,#modalBody textarea').forEach(el=>{
       const toggle=()=>el.classList.toggle('filled',!!(el.value&&String(el.value).trim()));
       toggle();
       el.addEventListener('input',toggle);
       el.addEventListener('change',toggle);
     });
-    const first=document.querySelector('#modalBody input:not([type=hidden]),#modalBody select');
+    const first=document.querySelector('#modalBody input:not([type=hidden]),#modalBody select,#modalBody textarea');
     if(first)first.focus();
   },50);
 }
@@ -5101,6 +5101,31 @@ function _eqPlacaCapRestante(eq,rt){
   const cap=Math.max(0,parseInt(eq.capacidad,10)||0);
   return Math.max(0,cap-_eqUnitsOnPlate(rt));
 }
+/** Minutos transcurridos desde horaInicio (mismo criterio que la barra de progreso). */
+function _eqElapsedMinCongelacion(rt){
+  if(!rt||rt.estado!=='congelando'||!rt.horaInicio)return 0;
+  const parts=String(rt.horaInicio).trim().split(':');
+  const h=parseInt(parts[0],10),m=parseInt(parts[1],10);
+  if(isNaN(h)||isNaN(m))return 0;
+  const start=h*60+m;
+  const d=new Date();
+  const now=d.getHours()*60+d.getMinutes();
+  let diff=now-start;
+  if(diff<0)diff+=1440;
+  return diff;
+}
+/** Minutos que faltan para cumplir horasTotal de congelación; 0 si ya cumplió o no aplica. */
+function _eqMinutosRestantesCongelacion(rt){
+  const totalMin=Math.max(0,(rt.horasTotal||0)*60);
+  if(!totalMin)return 0;
+  return Math.max(0,Math.round(totalMin-_eqElapsedMinCongelacion(rt)));
+}
+function _eqFmtMinutosHM(min){
+  const n=Math.max(0,Math.round(min));
+  if(n<=0)return'0 min';
+  const h=Math.floor(n/60),m=n%60;
+  return h?(m?`${h} h ${m} min`:`${h} h`):`${m} min`;
+}
 function calcEqProgreso(eq,rt){
   if(rt.estado==='listo')return 100;
   if(rt.estado==='libre')return 0;
@@ -5302,12 +5327,15 @@ function openEqModal(codigo){
   }
 
   document.getElementById('modalTitle').textContent=eq.nombre+' · '+eq.codigo;
+  const restCong=rt.estado==='congelando'?_eqMinutosRestantesCongelacion(rt):0;
   document.getElementById('modalBody').innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
       <span class="badge ${b.c}" style="font-size:12px;"><span class="badge-dot"></span>${b.t}</span>
       <span style="font-size:12px;color:var(--text-3);">${eq.tipo==='tunel'?'Túnel':'Placa'} · Capacidad ${eq.capacidad} ${esc(eq.unidad)}${eq.tipo==='placa'?' · En placa: <strong>'+_eqUnitsOnPlate(rt)+'</strong> / '+eq.capacidad:''}</span>
       ${rt.horaInicio?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Inicio: <strong>${esc(rt.horaInicio)}</strong></span>`:''}
     </div>
+    ${rt.estado==='congelando'&&restCong>0?`<div style="font-size:12px;color:var(--text-2);margin:-6px 0 12px;padding:8px 10px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">Tiempo de frío: <strong>${esc(String(rt.horasTotal||0))} h</strong> · Resta aprox.: <strong>${esc(_eqFmtMinutosHM(restCong))}</strong></div>`:''}
+    ${rt.estado==='listo'&&rt.cierreAnticipado?`<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:12px;padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">Frío finalizado <strong>antes de tiempo</strong>${rt.cierreMinRestantes!=null?' (faltaban ~'+esc(_eqFmtMinutosHM(rt.cierreMinRestantes))+')':''}.<br><span style="color:var(--text-2);font-weight:600;">Causal:</span> ${esc(rt.cierreCausal||'—')}</div>`:''}
     <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Productos cargados</label>
     ${itemsHtml}
     ${actions.join('')}`;
@@ -5411,17 +5439,57 @@ function removeEqItem(idx){
 function iniciarCongelacion(){
   const rt=getEqRT(_eqModalCode);
   if(!rt.items||!rt.items.length){showToast('Carga productos primero','error');return;}
+  delete rt.cierreAnticipado;
+  delete rt.cierreCausal;
+  delete rt.cierreMinRestantes;
   rt.estado='congelando';rt.congelando=true;rt.horaInicio=nowHM();
   rt.horasTotal=rt.items.reduce((m,i)=>Math.max(m,i.horasTotal||0),0);
   rt.progreso=0;
   rtSave();closeEqModal();renderEquipos();
   showToast('Congelación iniciada','success');
 }
+function _finalizarCongelacionAplicar(cod,meta){
+  const rt=getEqRT(cod);
+  rt.estado='listo';
+  rt.congelando=false;
+  rt.progreso=100;
+  if(meta&&meta.anticipado){
+    rt.cierreAnticipado=true;
+    rt.cierreCausal=String(meta.causal||'').trim();
+    rt.cierreMinRestantes=meta.minRestantes!=null?meta.minRestantes:null;
+  }else{
+    delete rt.cierreAnticipado;
+    delete rt.cierreCausal;
+    delete rt.cierreMinRestantes;
+  }
+  rtSave();
+  closeEqModal();
+  renderEquipos();
+  showToast(meta&&meta.anticipado?'Frío finalizado (cierre anticipado registrado)':'Frío finalizado','success');
+}
 function finalizarCongelacion(){
-  const rt=getEqRT(_eqModalCode);
-  rt.estado='listo';rt.congelando=false;rt.progreso=100;
-  rtSave();closeEqModal();renderEquipos();
-  showToast('Frío finalizado','success');
+  const cod=_eqModalCode;
+  if(!cod){showToast('Abre de nuevo el equipo','error');return;}
+  const rt=getEqRT(cod);
+  if(rt.estado!=='congelando'){showToast('No hay congelación en curso','error');return;}
+  const restMin=_eqMinutosRestantesCongelacion(rt);
+  if(restMin>0){
+    const human=_eqFmtMinutosHM(restMin);
+    openModal('Finalizar frío antes de tiempo',`
+      <p style="margin:0 0 12px;font-size:14px;line-height:1.55;">El tiempo de congelación configurado <strong>aún no se ha cumplido</strong>. Tiempo restante aproximado: <strong>${esc(human)}</strong> (objetivo: <strong>${esc(String(rt.horasTotal||0))} h</strong> desde inicio <strong>${esc(rt.horaInicio||'—')}</strong>).</p>
+      <p style="margin:0 0 10px;font-size:13px;color:var(--text-3);">Si debes detener el frío igualmente, escribe la causal. Es obligatoria para guardar el cierre anticipado.</p>
+      <label class="form-label" for="eqEarlyCausal">Causal del cierre anticipado</label>
+      <textarea id="eqEarlyCausal" class="input filled" rows="3" placeholder="Ej.: falla de equipo, indicación de supervisor, cambio de programa…" style="width:100%;resize:vertical;min-height:76px;box-sizing:border-box;"></textarea>
+    `,()=>{
+      const ta=document.getElementById('eqEarlyCausal');
+      const causal=(ta&&ta.value||'').trim();
+      if(!causal){showToast('Indica la causal para finalizar antes de tiempo','error');return false;}
+      _finalizarCongelacionAplicar(cod,{anticipado:true,causal,minRestantes:restMin});
+      return true;
+    },'Confirmar finalización');
+    return;
+  }
+  _finalizarCongelacionAplicar(cod,null);
 }
 function descargarEq(){
   const rt=getEqRT(_eqModalCode);
@@ -5431,12 +5499,24 @@ function descargarEq(){
   if(!RT.eqHist[eq.codigo])RT.eqHist[eq.codigo]=[];
   const cicloCant=(rt.items||[]).reduce((s,i)=>s+(i.cant||0),0);
   const cicloProds=[...new Set((rt.items||[]).map(i=>i.producto))].join(', ');
-  RT.eqHist[eq.codigo].unshift({id:Date.now(),horaDescarga:nowHM(),horaInicio:rt.horaInicio,horasTotal:rt.horasTotal||0,cant:cicloCant,productos:cicloProds,items:JSON.parse(JSON.stringify(rt.items||[]))});
+  RT.eqHist[eq.codigo].unshift({
+    id:Date.now(),
+    horaDescarga:nowHM(),
+    horaInicio:rt.horaInicio,
+    horasTotal:rt.horasTotal||0,
+    cant:cicloCant,
+    productos:cicloProds,
+    items:JSON.parse(JSON.stringify(rt.items||[])),
+    cierreAnticipado:!!rt.cierreAnticipado,
+    cierreCausal:rt.cierreAnticipado?String(rt.cierreCausal||'').trim():null,
+    cierreMinRestantes:rt.cierreAnticipado&&rt.cierreMinRestantes!=null?rt.cierreMinRestantes:null
+  });
   RT.eqHist[eq.codigo]=RT.eqHist[eq.codigo].slice(0,20); // mantener últimos 20
   (rt.items||[]).forEach(it=>{
     RT.empacados.unshift({id:nextId(RT.empacados),hora:nowHM(),equipo:eq.nombre,producto:it.producto,cant:it.cant,guia:it.guia,estado:'Descargado'});
   });
   rt.items=[];rt.estado='libre';rt.congelando=false;rt.horaInicio=null;rt.horasTotal=0;rt.progreso=0;
+  delete rt.cierreAnticipado;delete rt.cierreCausal;delete rt.cierreMinRestantes;
   rtSave();closeEqModal();renderEquipos();renderEmpaqueTable&&renderEmpaqueTable();
   showToast(eq.nombre+' descargado','success');
 }
