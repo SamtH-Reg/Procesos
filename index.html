@@ -5302,7 +5302,22 @@ function updateEqStats(){
 }
 
 /* Equipo modal (cargar / iniciar / finalizar / descargar) */
-/** Listado compacto de últimas descargas (histórico `RT.eqHist`) para el modal de equipo. */
+function _eqParseHMToMin(s){
+  const parts=String(s||'').trim().split(':');
+  const h=parseInt(parts[0],10),m=parseInt(parts[1],10);
+  if(isNaN(h)||isNaN(m))return null;
+  return h*60+m;
+}
+/** Minutos entre dos HH:MM (si la hora de fin es menor que la de inicio, se asume fin al día siguiente). */
+function _eqDiffMinutosHoraIniFin(horaInicio,horaFin){
+  const a=_eqParseHMToMin(horaInicio);
+  const b=_eqParseHMToMin(horaFin);
+  if(a==null||b==null)return null;
+  let diff=b-a;
+  if(diff<0)diff+=1440;
+  return diff;
+}
+/** Listado de últimas descargas (`RT.eqHist`) en el modal de equipo: inicio, fin, duración real, anticipado + causal. */
 function _eqModalHistorialDescargasHtml(codigo){
   const list=(RT.eqHist&&RT.eqHist[codigo])?RT.eqHist[codigo].slice(0,10):[];
   if(!list.length){
@@ -5313,17 +5328,45 @@ function _eqModalHistorialDescargasHtml(codigo){
   }
   const rows=list.map(h=>{
     const prod=Array.isArray(h.productos)?h.productos.join(', '):String(h.productos||'—');
-    const ant=h.cierreAnticipado?'<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--safety-red-bg);color:var(--safety-red-dark);margin-left:4px;vertical-align:middle;">Anticipado</span>':'';
-    return`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 10px;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;font-size:12px;">
-      <span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text);">${esc(h.horaDescarga||'—')}</span>
-      <span style="color:var(--text-3);font-size:11px;">← inicio ${esc(h.horaInicio||'—')} · ${Number(h.horasTotal||0)} h</span>
-      <span style="font-weight:700;color:var(--text);">${h.cant||0} u</span>${ant}
-      <div style="width:100%;font-size:11px;color:var(--text-2);line-height:1.35;margin-top:2px;">${esc(prod)}</div>
+    const hi=esc(h.horaInicio||'—');
+    const hf=esc(h.horaDescarga||'—');
+    const durMin=_eqDiffMinutosHoraIniFin(h.horaInicio,h.horaDescarga);
+    const durTxt=durMin==null?'—':_eqFmtMinutosHM(durMin);
+    const objH=Number(h.horasTotal||0);
+    const ant=h.cierreAnticipado?'<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--safety-red-bg);color:var(--safety-red-dark);margin-left:6px;vertical-align:middle;">Anticipado</span>':'';
+    const causal=String(h.cierreCausal||'').trim();
+    const tieneFalt=h.cierreMinRestantes!=null&&!isNaN(Number(h.cierreMinRestantes));
+    const faltTxt=tieneFalt?_eqFmtMinutosHM(Number(h.cierreMinRestantes)):'';
+    const anticipoBlock=h.cierreAnticipado
+      ?`<div style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;font-size:11px;line-height:1.45;color:#7f1d1d;">
+          <div style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10px;margin-bottom:4px;color:#991b1b;">Cierre anticipado</div>
+          <div><span style="font-weight:700;">Causal:</span> ${esc(causal||'—')}</div>
+          ${tieneFalt?`<div style="margin-top:4px;"><span style="font-weight:700;">Faltaba congelar (aprox.):</span> ${esc(faltTxt)}</div>`:''}
+        </div>`
+      :'';
+    return`<div style="padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;font-size:12px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.45;">
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Inicio</span>
+        <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hi}</span>
+        <span style="color:var(--text-3);">·</span>
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Término</span>
+        <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hf}</span>
+        <span style="color:var(--text-3);">·</span>
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">En congelación</span>
+        <span style="font-weight:700;color:var(--text);">${esc(durTxt)}</span>
+        <span style="color:var(--text-3);">·</span>
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Objetivo</span>
+        <span style="font-weight:700;color:var(--text);">${objH} h</span>
+        <span style="color:var(--text-3);">·</span>
+        <span style="font-weight:800;color:var(--text);">${h.cant||0} u</span>${ant}
+      </div>
+      <div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-top:6px;font-weight:500;">${esc(prod)}</div>
+      ${anticipoBlock}
     </div>`;
   }).join('');
   return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
     <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimas ${list.length} descarga(s)</div>
-    <div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:2px;">${rows}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:2px;">${rows}</div>
   </div>`;
 }
 let _eqModalCode=null;
