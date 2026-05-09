@@ -2166,9 +2166,12 @@ function drawTableWidget(w,moldes,pesajes){
         const prod=String(r.producto||r.preset||'—').trim()||'—';
         const tid=String(r.trabId||nom);
         const k=tid+'\u0001'+prod;
-        if(!map[k])map[k]={nom, prod, byH:{},totCant:0,totKg:0};
+        if(!map[k])map[k]={nom, prod, byH:{},byHKg:{},totCant:0,totKg:0};
         const cant=+r.cant||0,kg=+r.kg||0;
-        if(hh!=null)map[k].byH[hh]=(map[k].byH[hh]||0)+cant;
+        if(hh!=null){
+          map[k].byH[hh]=(map[k].byH[hh]||0)+cant;
+          map[k].byHKg[hh]=(map[k].byHKg[hh]||0)+kg;
+        }
         map[k].totCant+=cant;
         map[k].totKg+=kg;
       }else{
@@ -2186,26 +2189,40 @@ function drawTableWidget(w,moldes,pesajes){
     });
     const totCol={};
     if(isMol){
+      const totColKg={};
       let totGrandCant=0,totGrandKg=0;
-      rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byH[h]||0);});totGrandCant+=r.totCant;totGrandKg+=r.totKg;});
+      rows.forEach(r=>{
+        hours.forEach(h=>{
+          totCol[h]=(totCol[h]||0)+(r.byH[h]||0);
+          totColKg[h]=(totColKg[h]||0)+(r.byHKg[h]||0);
+        });
+        totGrandCant+=r.totCant;totGrandKg+=r.totKg;
+      });
+      const cellMolKg=(nM,kgH)=>{
+        if(!nM&&!kgH)return'—';
+        const top=nM?_fmtInt(nM):'0';
+        const sub=kgH?_fmt(kgH):'';
+        if(!kgH)return top;
+        return`<div style="line-height:1.25;"><strong>${top}</strong><div style="font-size:11px;color:var(--text-3);">${sub} kg</div></div>`;
+      };
       html=`<table>
       <thead><tr>
         <th>Operario</th><th>Producto</th>
-        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}
+        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}<div style="font-size:10px;font-weight:600;color:var(--text-3);">mol · kg</div></th>`).join('')}
         <th class="num">Moldes</th><th class="num">KG</th>
       </tr></thead>
       <tbody>`+
       rows.map(r=>`<tr>
         <td><strong>${esc(r.nom)}</strong></td>
         <td style="color:var(--text-2);">${esc(r.prod)}</td>
-        ${hours.map(h=>`<td class="num">${r.byH[h]?_fmtInt(r.byH[h]):'—'}</td>`).join('')}
+        ${hours.map(h=>`<td class="num">${cellMolKg(r.byH[h],r.byHKg[h])}</td>`).join('')}
         <td class="num"><strong>${_fmtInt(r.totCant)}</strong></td>
         <td class="num"><strong>${_fmt(r.totKg)}</strong></td>
       </tr>`).join('')+
       `</tbody>
       <tfoot><tr>
         <td colspan="2">TOTAL</td>
-        ${hours.map(h=>`<td class="num">${totCol[h]?_fmtInt(totCol[h]):'—'}</td>`).join('')}
+        ${hours.map(h=>`<td class="num">${cellMolKg(totCol[h],totColKg[h])}</td>`).join('')}
         <td class="num"><strong>${_fmtInt(totGrandCant)}</strong></td>
         <td class="num"><strong>${_fmt(totGrandKg)}</strong></td>
       </tr></tfoot></table>`;
