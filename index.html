@@ -1277,6 +1277,12 @@ body[data-theme="dark"] .modal-body .fr-stop-alert__ribbon{color:#fef2f2;backgro
 body[data-theme="dark"] .modal-body .fr-stop-alert__lead{color:#fecaca;}
 .modal-body .fr-stop-alert__lead strong{color:#7f1d1d;font-weight:800;}
 body[data-theme="dark"] .modal-body .fr-stop-alert__lead strong{color:#fff;}
+.modal-body .fr-stop-alert__fin{margin:14px 0 0;padding:10px 12px;background:rgba(255,255,255,.55);border:1px solid rgba(185,28,28,.28);border-radius:10px;font-size:14px;font-weight:600;color:#7f1d1d;line-height:1.45;}
+body[data-theme="dark"] .modal-body .fr-stop-alert__fin{background:rgba(0,0,0,.2);border-color:rgba(254,202,202,.25);color:#fecaca;}
+.modal-body .fr-stop-alert__fin-lbl{font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.04em;display:block;margin-bottom:4px;color:#991b1b;}
+body[data-theme="dark"] .modal-body .fr-stop-alert__fin-lbl{color:#fca5a5;}
+.modal-body .fr-stop-alert__fin-note{font-weight:600;font-size:12px;color:#b91c1c;}
+body[data-theme="dark"] .modal-body .fr-stop-alert__fin-note{color:#fdba74;}
 .modal-body .fr-stop-alert__sub{margin:12px 0 0;font-size:13px;font-weight:500;color:#9f1239;line-height:1.45;}
 body[data-theme="dark"] .modal-body .fr-stop-alert__sub{color:#fca5a5;}
 .modal-body .fr-stop-causal-wrap{margin-top:14px;padding-top:14px;border-top:1px dashed rgba(185,28,28,.35);}
@@ -5164,6 +5170,20 @@ function _eqFmtMinutosHM(min){
   const h=Math.floor(n/60),m=n%60;
   return h?(m?`${h} h ${m} min`:`${h} h`):`${m} min`;
 }
+/** Hora del reloj en que termina el ciclo (inicio + horasTotal). Cruce de medianoche → bandera día siguiente. */
+function _eqHoraFinCongelacion(horaInicio,horasTotal){
+  const parts=String(horaInicio||'').trim().split(':');
+  const h=parseInt(parts[0],10),m=parseInt(parts[1],10);
+  if(isNaN(h)||isNaN(m))return{hhmm:'—',siguienteDia:false};
+  const start=h*60+m;
+  const add=Math.round((Number(horasTotal)||0)*60);
+  const endRaw=start+add;
+  const siguienteDia=endRaw>=1440;
+  const end=((endRaw%1440)+1440)%1440;
+  const eh=Math.floor(end/60),em=end%60;
+  const hhmm=String(eh).padStart(2,'0')+':'+String(em).padStart(2,'0');
+  return{hhmm,siguienteDia};
+}
 function calcEqProgreso(eq,rt){
   if(rt.estado==='listo')return 100;
   if(rt.estado==='libre')return 0;
@@ -5513,11 +5533,14 @@ function finalizarCongelacion(){
   const restMin=_eqMinutosRestantesCongelacion(rt);
   if(restMin>0){
     const human=_eqFmtMinutosHM(restMin);
+    const fin=_eqHoraFinCongelacion(rt.horaInicio,rt.horasTotal);
+    const finExtra=fin.siguienteDia?' <span class="fr-stop-alert__fin-note">(día siguiente)</span>':'';
     openModal('Finalizar frío antes de tiempo',`
       <div class="fr-stop-alert" role="alert">
         <div class="fr-stop-alert__inner">
           <div class="fr-stop-alert__ribbon" aria-hidden="true">Atención — frío incompleto</div>
           <p class="fr-stop-alert__lead">El tiempo de congelación configurado <strong>aún no se ha cumplido</strong>. Tiempo restante aproximado: <strong>${esc(human)}</strong> (objetivo <strong>${esc(String(rt.horasTotal||0))} h</strong> desde inicio <strong>${esc(rt.horaInicio||'—')}</strong>).</p>
+          <p class="fr-stop-alert__fin"><span class="fr-stop-alert__fin-lbl">Hora prevista de fin de congelación</span><strong style="font-size:18px;font-family:var(--mono,monospace);letter-spacing:.02em;">${esc(fin.hhmm)}</strong>${finExtra}</p>
           <p class="fr-stop-alert__sub">Si debes detener el frío igualmente, indica la <strong>causal</strong> abajo. Es obligatoria para registrar un cierre anticipado.</p>
         </div>
       </div>
