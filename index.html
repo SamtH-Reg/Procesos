@@ -3669,6 +3669,23 @@ function _tbMergeRtById(localArr,remoteRows,mapFn){
   const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id)));
   return remote.concat(extra);
 }
+/** Union por `id` al recibir RT desde otra pestaña (admin/index): evita que un snapshot parcial borre filas y luego el push marque esos ids como DELETE en Supabase. */
+function _tbMergeRtRowsPeer(beforeArr, incomingArr){
+  const byId=new Map();
+  const noId=[];
+  const take=r=>{
+    if(!r||typeof r!=='object')return;
+    if(r.id!=null){
+      const k=String(r.id);
+      const ex=byId.get(k);
+      byId.set(k,ex?{...ex,...r}:{...r});
+    }else noId.push({...r});
+  };
+  (beforeArr||[]).forEach(take);
+  (incomingArr||[]).forEach(take);
+  const out=[...byId.values()].sort((a,b)=>(+b.id||0)-(+a.id||0));
+  return out.concat(noId);
+}
 /** KPIs del panel Moldes (tablet). */
 function idxRefreshMoldesKpis(){
   const m=Array.isArray(RT.moldes)?RT.moldes:[];
@@ -3699,7 +3716,7 @@ async function tbManualPullMoldesPesajes(opts){
     const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
     for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
-      const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).limit(500);
+      const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).limit(4000);
       if(error){console.warn('[tb pull]',t,error);if(!silent&&typeof showToast==='function')showToast(t+': '+error.message,'error');continue;}
       RT[t]=_tbMergeRtById(localBefore,data||[],mapFor(t));
     }
@@ -8884,7 +8901,13 @@ function applyRtFromPeerJson(jsonStr){
   try{
     const incoming=JSON.parse(jsonStr);
     if(!incoming||typeof incoming!=='object')return;
+    const prevMol=[...(Array.isArray(RT.moldes)?RT.moldes:[])];
+    const prevPes=[...(Array.isArray(RT.pesajes)?RT.pesajes:[])];
+    const prevGen=[...(Array.isArray(RT.generales)?RT.generales:[])];
     Object.assign(RT,incoming);
+    RT.moldes=_tbMergeRtRowsPeer(prevMol,Array.isArray(incoming.moldes)?incoming.moldes:RT.moldes);
+    RT.pesajes=_tbMergeRtRowsPeer(prevPes,Array.isArray(incoming.pesajes)?incoming.pesajes:RT.pesajes);
+    RT.generales=_tbMergeRtRowsPeer(prevGen,Array.isArray(incoming.generales)?incoming.generales:RT.generales);
     if(!Array.isArray(RT.moldes))RT.moldes=[];
     if(!Array.isArray(RT.pesajes))RT.pesajes=[];
     if(!Array.isArray(RT.generales))RT.generales=[];
@@ -8898,6 +8921,8 @@ function applyRtFromPeerJson(jsonStr){
         if(!RT.eqState[eq.codigo])RT.eqState[eq.codigo]={estado:'libre',items:[],congelando:false,horaInicio:null,horaFinEst:null,horasTotal:0};
       });
     }
+    try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}
+    if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();
     initRuntime();
     updateBadges();
     if(typeof showToast==='function'){
