@@ -4125,11 +4125,80 @@ function _pruneInvalidArmadoKeys(){
   }catch(e){console.warn('_pruneInvalidArmadoKeys',e);}
 }
 /**
- * Sustituye RT.armadoMolde / RT.armadoPesaje por lo que devuelve Supabase (origen de verdad tras pull).
- * Así F5 no revive líneas borradas en la nube ni deja mezclado con JSON viejo en localStorage.
+ * Respaldo local inmediato antes de aplicar armado desde la nube (pull).
+ * Si un pull incompleto o vacío borró líneas, en consola: `restoreArmadoEmergencyBackup()`.
+ */
+function _tbTryStoreArmadoEmergencyBackup(){
+  try{
+    const m=RT.armadoMolde||{},p=RT.armadoPesaje||{};
+    if(!Object.keys(m).length&&!Object.keys(p).length)return;
+    const payload=JSON.stringify({savedAt:Date.now(),armadoMolde:m,armadoPesaje:p});
+    if(payload.length>4.5e6)return;
+    localStorage.setItem('friosur_armado_emergency_backup_v1',payload);
+  }catch(e){console.warn('_tbTryStoreArmadoEmergencyBackup',e);}
+}
+/** Restaura armado desde el último respaldo previo a un pull (mismo dispositivo). */
+function restoreArmadoEmergencyBackup(){
+  try{
+    const raw=localStorage.getItem('friosur_armado_emergency_backup_v1');
+    if(!raw){if(typeof showToast==='function')showToast('No hay respaldo de armado en este dispositivo.','warn');return false;}
+    const o=JSON.parse(raw);
+    if(!o||typeof o!=='object')return false;
+    RT.armadoMolde=o.armadoMolde&&typeof o.armadoMolde==='object'?{...o.armadoMolde}:{};
+    RT.armadoPesaje=o.armadoPesaje&&typeof o.armadoPesaje==='object'?{...o.armadoPesaje}:{};
+    if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
+    if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
+    _pruneInvalidArmadoKeys();
+    if(typeof _rtSaveOrig==='function')_rtSaveOrig();
+    if(typeof TBSync!=='undefined'&&typeof TBSync.refreshArmadoSigFromLocal==='function')TBSync.refreshArmadoSigFromLocal();
+    if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
+    if(typeof renderMArmado==='function')renderMArmado();
+    if(typeof renderMRegLinea==='function')renderMRegLinea();
+    if(typeof renderMRegTrab==='function')renderMRegTrab();
+    if(typeof renderPArmado==='function')renderPArmado();
+    if(typeof renderPRegLinea==='function')renderPRegLinea();
+    if(typeof renderPRegTrab==='function')renderPRegTrab();
+    if(typeof renderPRegPlanilleros==='function')renderPRegPlanilleros();
+    if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
+    if(typeof showToast==='function')showToast('Armado restaurado desde respaldo local. Pulsa Sync o espera para subir a la nube.','success');
+    if(typeof TBSync!=='undefined'&&typeof TBSync.pushImmediate==='function')TBSync.pushImmediate();
+    return true;
+  }catch(e){
+    console.warn('restoreArmadoEmergencyBackup',e);
+    if(typeof showToast==='function')showToast('No se pudo restaurar el respaldo.','error');
+    return false;
+  }
+}
+window.restoreArmadoEmergencyBackup=restoreArmadoEmergencyBackup;
+
+let _armadoBackupRtThrottle=0;
+/** Copia de seguridad periódica del armado al guardar RT (no sustituye el snapshot justo antes del pull). */
+function _tbMaybeStoreArmadoBackupOnRtSave(){
+  const now=Date.now();
+  if(now-_armadoBackupRtThrottle<90000)return;
+  const m=RT.armadoMolde||{},p=RT.armadoPesaje||{};
+  if(!Object.keys(m).length&&!Object.keys(p).length)return;
+  _armadoBackupRtThrottle=now;
+  _tbTryStoreArmadoEmergencyBackup();
+}
+
+/**
+ * Aplica filas de Supabase `armado_lineas` sobre RT.armadoMolde / RT.armadoPesaje.
+ * Fusiona con lo local: el remoto gana en claves que trae; no se borran claves locales
+ * que el servidor no devolvió (evita pérdida por pull incompleto, RLS o retraso de push).
+ * Si el servidor devuelve 0 filas y ya había armado local, no se toca nada (evita borrado total).
  */
 function _applyRemoteArmadoLineasRows(armData){
   const rows=Array.isArray(armData)?armData:[];
+  const prevMolde=RT.armadoMolde&&typeof RT.armadoMolde==='object'?{...RT.armadoMolde}:{};
+  const prevPesaje=RT.armadoPesaje&&typeof RT.armadoPesaje==='object'?{...RT.armadoPesaje}:{};
+  const prevKeyCount=Object.keys(prevMolde).length+Object.keys(prevPesaje).length;
+  if(rows.length===0&&prevKeyCount>0){
+    console.warn('[armado_lineas] pull devolvió 0 filas; se conserva armado local para evitar pérdida de datos.');
+    if(typeof showToast==='function')showToast('Sync: la nube no devolvió armado de línea; se mantiene lo local. Revisa conexión o RLS. Si perdiste líneas antes, prueba en consola: restoreArmadoEmergencyBackup()','warn');
+    return 0;
+  }
+  _tbTryStoreArmadoEmergencyBackup();
   const newMolde={};
   const newPesaje={};
   rows.forEach(row=>{
@@ -4158,8 +4227,8 @@ function _applyRemoteArmadoLineasRows(armData){
   });
   if(!RT.armadoMolde)RT.armadoMolde={};
   if(!RT.armadoPesaje)RT.armadoPesaje={};
-  RT.armadoMolde=newMolde;
-  RT.armadoPesaje=newPesaje;
+  RT.armadoMolde={...prevMolde,...newMolde};
+  RT.armadoPesaje={...prevPesaje,...newPesaje};
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   _pruneInvalidArmadoKeys();
@@ -9546,7 +9615,7 @@ const TBSync={
 
 // Monkey-patch rtSave para auto-push
 const _rtSaveOrig=rtSave;
-rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();TBSync.schedulePush();};
+rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();_tbMaybeStoreArmadoBackupOnRtSave();TBSync.schedulePush();};
 
 /* ── AUTH TABLET ── */
 let _tbUser=null;

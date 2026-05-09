@@ -1396,6 +1396,33 @@ function _adminArmDeleteCloudRow(row){
   const k=_adminArmScopedKey(linea,turno,fecha);
   if(k in store)delete store[k];
 }
+function _adminTryStoreArmadoEmergencyBackup(){
+  try{
+    const m=(RT.data&&RT.data.armadoMolde)||{},p=(RT.data&&RT.data.armadoPesaje)||{};
+    if(!Object.keys(m).length&&!Object.keys(p).length)return;
+    const payload=JSON.stringify({savedAt:Date.now(),armadoMolde:m,armadoPesaje:p});
+    if(payload.length>4.5e6)return;
+    localStorage.setItem('friosur_admin_armado_emergency_backup_v1',payload);
+  }catch(e){console.warn('_adminTryStoreArmadoEmergencyBackup',e);}
+}
+/** Misma lógica que index: restaurar armado desde respaldo admin (consola). */
+function restoreAdminArmadoEmergencyBackup(){
+  try{
+    const raw=localStorage.getItem('friosur_admin_armado_emergency_backup_v1');
+    if(!raw){sbLog('No hay respaldo armado admin en este navegador.',false);return false;}
+    const o=JSON.parse(raw);
+    if(!o||typeof o!=='object')return false;
+    if(!RT.data)RT.data={};
+    RT.data.armadoMolde=o.armadoMolde&&typeof o.armadoMolde==='object'?{...o.armadoMolde}:{};
+    RT.data.armadoPesaje=o.armadoPesaje&&typeof o.armadoPesaje==='object'?{...o.armadoPesaje}:{};
+    RT._ensureShape&&RT._ensureShape();
+    try{RT.save();}catch(e){}
+    sbLog('Armado restaurado desde respaldo local (admin).',true);
+    return true;
+  }catch(e){sbLog('restoreAdminArmadoEmergencyBackup: '+(e&&e.message?e.message:String(e)),false);return false;}
+}
+window.restoreAdminArmadoEmergencyBackup=restoreAdminArmadoEmergencyBackup;
+
 async function _adminPullArmadoLineasFromCloud(){
   if(!_sb)return false;
   try{
@@ -1403,6 +1430,14 @@ async function _adminPullArmadoLineasFromCloud(){
     if(armErr){sbLog('pull armado_lineas: '+armErr.message,false);return false;}
     if(!RT.data)RT.data={};
     const rows=Array.isArray(armData)?armData:[];
+    const prevMolde=RT.data.armadoMolde&&typeof RT.data.armadoMolde==='object'?{...RT.data.armadoMolde}:{};
+    const prevPesaje=RT.data.armadoPesaje&&typeof RT.data.armadoPesaje==='object'?{...RT.data.armadoPesaje}:{};
+    const prevKeyCount=Object.keys(prevMolde).length+Object.keys(prevPesaje).length;
+    if(rows.length===0&&prevKeyCount>0){
+      sbLog('pull armado_lineas: 0 filas; se conserva armado local (evita borrado total).',false);
+      return false;
+    }
+    _adminTryStoreArmadoEmergencyBackup();
     const newMolde={};
     const newPesaje={};
     rows.forEach(row=>{
@@ -1425,8 +1460,8 @@ async function _adminPullArmadoLineasFromCloud(){
       if(area==='pesaje')newPesaje[k]={...payload};
       else newMolde[k]={...payload};
     });
-    RT.data.armadoMolde=newMolde;
-    RT.data.armadoPesaje=newPesaje;
+    RT.data.armadoMolde={...prevMolde,...newMolde};
+    RT.data.armadoPesaje={...prevPesaje,...newPesaje};
     RT._ensureShape&&RT._ensureShape();
     return true;
   }catch(e){sbLog('pull armado_lineas: '+(e&&e.message?e.message:String(e)),false);return false;}
