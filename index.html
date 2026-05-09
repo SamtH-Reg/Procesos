@@ -9074,8 +9074,8 @@ try{
   const _c=_tbResolveSupabaseCreds();
   if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key,_tbSbAuthOptions());
 }catch(e){console.warn('[sb] init',e);}
-/** Solo '1' = ahorro (no WS moldes/pesajes; armado_lineas sigue en vivo). Ausente u otro = vivo (cambios remotos al instante). */
-function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
+/** Ahorro de cuota Realtime: por defecto activo. Solo `localStorage friosur_tb_msg_economy === '0'` activa WS moldes/pesajes (vivo). `armado_lineas` sigue en vivo salvo que cambies la suscripción en código. */
+function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')!=='0';}catch(e){return true;}}
 /** Valor `fecha` tal como lo espera .eq() contra Postgres (AAAA-MM-DD o prefijo ISO). */
 function _tbFechaEqFromRow(v){
   if(v==null||v==='')return'';
@@ -9528,7 +9528,7 @@ const TBSync={
       .subscribe();
     /* moldes + pesajes: un solo canal Realtime (menos suscripciones WS que dos canales).
        Registro general (generales) no usa Realtime: solo REST push/pull → ahorro de mensajes.
-       Modo ahorro: localStorage friosur_tb_msg_economy='1' (sin moldes/pesajes por WS). */
+       Modo ahorro por defecto; friosur_tb_msg_economy='0' fuerza WS moldes/pesajes (vivo). */
     if(!tbMsgEconomy()){
       _tbSb.channel('tb-ops')
         .on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{

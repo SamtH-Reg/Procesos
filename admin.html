@@ -730,7 +730,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
       <div class="form-field" style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px;line-height:1.45;">
           <input type="checkbox" id="sbMsgEconomy" onchange="sbMsgEconomyOnChange()" style="margin-top:3px;">
-          <span><strong>Modo ahorro de mensajes</strong> (opcional): no abre Realtime ni polling sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span> (menos tráfico WS). El <strong>armado de línea</strong> sigue sincronizándose en vivo. Usa <strong>Traer moldes y pesajes</strong> cuando este modo esté activo.</span>
+          <span><strong>Modo ahorro de mensajes</strong> (activado por defecto para no agotar la cuota Realtime del plan Free): sin WS ni polling automático sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span>. El <strong>armado de línea</strong> sigue en vivo. Usa <strong>Traer moldes y pesajes</strong> para actualizar registros. <em>Desmarca</em> esta casilla solo si necesitas ver moldes/pesajes al instante (gasta muchos mensajes).</span>
         </label>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:12px;">
@@ -818,9 +818,9 @@ const STORE_KEY='friosur_app_v1';
 const RT_KEY='friosur_rt_v1';
 /** Credenciales Supabase compartidas con index.html (tablet): misma clave en localStorage. */
 const SB_KEY='friosur_sb';
-/** Solo '1' = modo ahorro (sin Realtime/poll en moldes·pesajes). Ausente u otro valor = vivo (tablet → admin al instante). */
+/** Modo ahorro Realtime: por defecto activo. Solo valor `'0'` = vivo (WS + poll en moldes/pesajes). */
 const SB_MSG_ECONOMY_KEY='friosur_admin_msg_economy';
-function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)==='1';}catch(e){return false;}}
+function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)!=='0';}catch(e){return true;}}
 function sbMsgEconomySet(on){try{localStorage.setItem(SB_MSG_ECONOMY_KEY,on?'1':'0');}catch(e){}}
 function sbMsgEconomyInitCheckbox(){const el=document.getElementById('sbMsgEconomy');if(el)el.checked=sbMsgEconomyEnabled();}
 function sbMsgEconomyOnChange(){
