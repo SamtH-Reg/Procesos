@@ -1253,6 +1253,36 @@ body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--surface-alt);border-c
 .modal-body select.filled{border-color:var(--safety-green);background-color:color-mix(in srgb,var(--safety-green-bg) 60%,var(--surface));background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235d6b82' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 14px center;}
 .modal-ftr{flex-shrink:0;display:flex;gap:10px;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--border);background:var(--surface-alt);}
 .modal-ftr .btn{min-width:110px;}
+/* Modal en modo alerta crítica (p. ej. cierre anticipado de frío) */
+.modal.fr-modal-danger{border:2px solid var(--safety-red);box-shadow:0 16px 48px rgba(185,28,28,.2),var(--shadow-lg);}
+.modal.fr-modal-danger .modal-hdr{background:linear-gradient(135deg,#fef2f2 0%,#fee2e2 55%,#fecaca 100%);border-bottom:2px solid #fca5a5;}
+.modal.fr-modal-danger .mh-title{color:var(--safety-red-dark);font-weight:800;}
+.modal.fr-modal-danger .mh-close{color:var(--safety-red-dark);}
+.modal.fr-modal-danger .mh-close:hover{background:rgba(220,38,38,.12);color:#7f1d1d;}
+.modal.fr-modal-danger .modal-ftr{background:#fff5f5;border-top-color:#fecaca;}
+body[data-theme="dark"] .modal.fr-modal-danger{border-color:#f87171;}
+body[data-theme="dark"] .modal.fr-modal-danger .modal-hdr{background:linear-gradient(135deg,rgba(127,29,29,.55) 0%,rgba(69,10,10,.75) 100%);border-bottom-color:#991b1b;}
+body[data-theme="dark"] .modal.fr-modal-danger .mh-title{color:#fecaca;}
+body[data-theme="dark"] .modal.fr-modal-danger .mh-close{color:#fca5a5;}
+body[data-theme="dark"] .modal.fr-modal-danger .modal-ftr{background:rgba(40,10,10,.55);border-top-color:#7f1d1d;}
+/* Cuerpo: recuadro de advertencia muy visible */
+.modal-body .fr-stop-alert{position:relative;border:2px solid #dc2626;border-radius:14px;background:linear-gradient(180deg,#fff1f2 0%,#ffe4e6 40%,#fecdd3 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 6px 20px rgba(185,28,28,.15);padding:0;margin:0 0 18px;overflow:hidden;}
+.modal-body .fr-stop-alert::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#b91c1c,#dc2626);}
+body[data-theme="dark"] .modal-body .fr-stop-alert{border-color:#f87171;background:linear-gradient(180deg,rgba(69,10,10,.9) 0%,rgba(127,29,29,.55) 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 8px 28px rgba(0,0,0,.35);}
+body[data-theme="dark"] .modal-body .fr-stop-alert::before{background:linear-gradient(180deg,#f87171,#ef4444);}
+.modal-body .fr-stop-alert__inner{padding:16px 18px 16px 22px;}
+.modal-body .fr-stop-alert__ribbon{display:inline-flex;align-items:center;gap:8px;font:800 11px var(--font);letter-spacing:.06em;text-transform:uppercase;color:#7f1d1d;background:#fecaca;border:1px solid #f87171;border-radius:8px;padding:5px 12px;margin-bottom:12px;box-shadow:0 1px 2px rgba(185,28,28,.12);}
+body[data-theme="dark"] .modal-body .fr-stop-alert__ribbon{color:#fef2f2;background:rgba(185,28,28,.55);border-color:#f87171;}
+.modal-body .fr-stop-alert__lead{margin:0;font-size:15px;font-weight:700;color:#991b1b;line-height:1.55;}
+body[data-theme="dark"] .modal-body .fr-stop-alert__lead{color:#fecaca;}
+.modal-body .fr-stop-alert__lead strong{color:#7f1d1d;font-weight:800;}
+body[data-theme="dark"] .modal-body .fr-stop-alert__lead strong{color:#fff;}
+.modal-body .fr-stop-alert__sub{margin:12px 0 0;font-size:13px;font-weight:500;color:#9f1239;line-height:1.45;}
+body[data-theme="dark"] .modal-body .fr-stop-alert__sub{color:#fca5a5;}
+.modal-body .fr-stop-causal-wrap{margin-top:14px;padding-top:14px;border-top:1px dashed rgba(185,28,28,.35);}
+.modal-body textarea.fr-stop-causal{border-width:2px;border-color:#f87171;background:#fff;box-shadow:0 1px 3px rgba(185,28,28,.08);}
+body[data-theme="dark"] .modal-body textarea.fr-stop-causal{border-color:#dc2626;background:rgba(15,23,42,.45);color:#fef2f2;}
+.modal-body textarea.fr-stop-causal:focus{border-color:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.28);}
 @media (max-width:640px){
   .modal-body .form-grid{grid-template-columns:1fr;}
   .modal-body .form-grid .fg-full{grid-column:span 1;}
@@ -3174,12 +3204,15 @@ function updateBadges(){
 
 /* ═══ MODAL ══════════════════════════════════════════════════ */
 let _modalOnSave=null;
-function openModal(title,bodyHTML,onSave,saveLabel){
+function openModal(title,bodyHTML,onSave,saveLabel,opts){
+  const modalCard=document.querySelector('#modalOverlay .modal');
+  if(modalCard)modalCard.classList.toggle('fr-modal-danger',!!(opts&&opts.danger));
   document.getElementById('modalTitle').textContent=title;
   document.getElementById('modalBody').innerHTML=bodyHTML;
   const ftr=document.getElementById('modalFtr');
-  ftr.innerHTML=`<button class="btn ghost" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-primary" onclick="_modalSave()">${saveLabel||'Guardar'}</button>`;
+  const confirmCls=(opts&&opts.danger)?'btn danger':'btn btn-primary';
+  ftr.innerHTML=`<button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
+    <button class="${confirmCls}" type="button" onclick="_modalSave()">${saveLabel||'Guardar'}</button>`;
   _modalOnSave=onSave;
   document.getElementById('modalOverlay').classList.add('show');
   // highlight filled inputs
@@ -3194,7 +3227,12 @@ function openModal(title,bodyHTML,onSave,saveLabel){
     if(first)first.focus();
   },50);
 }
-function closeModal(){document.getElementById('modalOverlay').classList.remove('show');_modalOnSave=null;}
+function closeModal(){
+  const modalCard=document.querySelector('#modalOverlay .modal');
+  if(modalCard)modalCard.classList.remove('fr-modal-danger');
+  document.getElementById('modalOverlay').classList.remove('show');
+  _modalOnSave=null;
+}
 function _modalSave(){if(_modalOnSave){const ok=_modalOnSave();if(ok!==false)closeModal();}}
 window.closeModal=closeModal;window._modalSave=_modalSave;
 // Esc para cerrar modal
@@ -5476,17 +5514,24 @@ function finalizarCongelacion(){
   if(restMin>0){
     const human=_eqFmtMinutosHM(restMin);
     openModal('Finalizar frío antes de tiempo',`
-      <p style="margin:0 0 12px;font-size:14px;line-height:1.55;">El tiempo de congelación configurado <strong>aún no se ha cumplido</strong>. Tiempo restante aproximado: <strong>${esc(human)}</strong> (objetivo: <strong>${esc(String(rt.horasTotal||0))} h</strong> desde inicio <strong>${esc(rt.horaInicio||'—')}</strong>).</p>
-      <p style="margin:0 0 10px;font-size:13px;color:var(--text-3);">Si debes detener el frío igualmente, escribe la causal. Es obligatoria para guardar el cierre anticipado.</p>
-      <label class="form-label" for="eqEarlyCausal">Causal del cierre anticipado</label>
-      <textarea id="eqEarlyCausal" class="input filled" rows="3" placeholder="Ej.: falla de equipo, indicación de supervisor, cambio de programa…" style="width:100%;resize:vertical;min-height:76px;box-sizing:border-box;"></textarea>
+      <div class="fr-stop-alert" role="alert">
+        <div class="fr-stop-alert__inner">
+          <div class="fr-stop-alert__ribbon" aria-hidden="true">Atención — frío incompleto</div>
+          <p class="fr-stop-alert__lead">El tiempo de congelación configurado <strong>aún no se ha cumplido</strong>. Tiempo restante aproximado: <strong>${esc(human)}</strong> (objetivo <strong>${esc(String(rt.horasTotal||0))} h</strong> desde inicio <strong>${esc(rt.horaInicio||'—')}</strong>).</p>
+          <p class="fr-stop-alert__sub">Si debes detener el frío igualmente, indica la <strong>causal</strong> abajo. Es obligatoria para registrar un cierre anticipado.</p>
+        </div>
+      </div>
+      <div class="fr-stop-causal-wrap">
+        <label class="form-label" for="eqEarlyCausal">Causal del cierre anticipado</label>
+        <textarea id="eqEarlyCausal" class="input fr-stop-causal" rows="3" placeholder="Ej.: falla de equipo, indicación de supervisor, cambio de programa…" style="width:100%;resize:vertical;min-height:76px;box-sizing:border-box;"></textarea>
+      </div>
     `,()=>{
       const ta=document.getElementById('eqEarlyCausal');
       const causal=(ta&&ta.value||'').trim();
       if(!causal){showToast('Indica la causal para finalizar antes de tiempo','error');return false;}
       _finalizarCongelacionAplicar(cod,{anticipado:true,causal,minRestantes:restMin});
       return true;
-    },'Confirmar finalización');
+    },'Confirmar finalización',{danger:true});
     return;
   }
   _finalizarCongelacionAplicar(cod,null);
