@@ -5166,13 +5166,10 @@ function openEqModal(codigo){
       </div>
     </div>`);
   }
-  if(canLoadUi){
-    const manualTitle=rt.estado==='congelando'&&eq.tipo==='placa'
-      ?'Cargar más moldes (manual)'
-      :'Agregar '+(eq.tipo==='placa'?'moldes a la placa':'items al túnel')+' (manual)';
+  /* Manual: sólo en libre/cargando. En placa congelando solo «desde conteo» (sin formulario manual). */
+  if(canLoadUi&&!(rt.estado==='congelando'&&eq.tipo==='placa')){
     actions.push(`<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
-      <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">${manualTitle}</label>
-      ${rt.estado==='congelando'&&eq.tipo==='placa'?'<div style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.45;">No modifica la hora de inicio de la congelación en curso.</div>':''}
+      <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Agregar ${eq.tipo==='placa'?'moldes a la placa':'items al túnel'} (manual)</label>
       <div class="form-grid" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">
         <select id="eqAddPreset"><option value="">— Selecciona —</option>${presets.map(p=>`<option value="${p.id}">${esc(p.nombre)} (${p.kgRef}kg/u · ${p.tipo})</option>`).join('')}</select>
         <input type="number" id="eqAddCant" min="1"${eq.tipo==='placa'&&capRestPlaca!=null?' max="'+capRestPlaca+'"':''} placeholder="Cantidad">
@@ -5181,7 +5178,7 @@ function openEqModal(codigo){
       ${eq.tipo==='placa'&&!placaFull?`<div style="font-size:11px;color:var(--text-3);margin-top:6px;">Cupos disponibles en placa: <strong>${capRestPlaca}</strong> / ${eq.capacidad}</div>`:''}
       <button class="btn btn-primary" type="button" style="margin-top:10px;width:100%;" onclick="addEqItem()"${placaFull?' disabled':''}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        ${rt.estado==='congelando'&&eq.tipo==='placa'?'+ Agregar más a la placa':'Agregar '+(eq.tipo==='placa'?'a la placa':'al túnel')}
+        Agregar ${eq.tipo==='placa'?'a la placa':'al túnel'}
       </button>
     </div>`);
   }
