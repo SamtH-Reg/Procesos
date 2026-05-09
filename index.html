@@ -4992,6 +4992,16 @@ window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;
 const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'navy',t:'Listo'}};
 
 function getEqRT(cod){return RT.eqState[cod]||(RT.eqState[cod]={estado:'libre',items:[],congelando:false});}
+/** Unidades (moldes) ya en la placa / equipo — suma de cant por línea. */
+function _eqUnitsOnPlate(rt){
+  return(rt.items||[]).reduce((s,i)=>s+(Math.max(0,parseInt(i.cant,10)||0)),0);
+}
+/** Moldes que aún caben en una placa (0 si llena). Túnel: sin tope por equipo aquí. */
+function _eqPlacaCapRestante(eq,rt){
+  if(!eq||eq.tipo!=='placa')return Infinity;
+  const cap=Math.max(0,parseInt(eq.capacidad,10)||0);
+  return Math.max(0,cap-_eqUnitsOnPlate(rt));
+}
 function calcEqProgreso(eq,rt){
   if(rt.estado==='listo')return 100;
   if(rt.estado==='libre')return 0;
@@ -5125,6 +5135,9 @@ function openEqModal(codigo){
     return true;
   });
   const b=estadoBadgeTP[rt.estado];
+  const capRestPlaca=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):null;
+  const placaFull=capRestPlaca!=null&&capRestPlaca<=0;
+  const canLoadUi=(rt.estado==='libre'||rt.estado==='cargando')||(rt.estado==='congelando'&&eq.tipo==='placa');
   const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
       <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.producto)}</div><div style="font-size:11px;color:var(--text-3);">Cant: <strong>${it.cant}</strong> · Guía ${esc(it.guia)} · ${it.horasTotal}h</div></div>
@@ -5135,30 +5148,40 @@ function openEqModal(codigo){
   // Por cargar desde conteo (pending moldes filtered by tipo)
   const pendFilter=eq.tipo==='placa'?'molde':null;
   const pendientes=aggregatePendientes(pendFilter);
-  if((rt.estado==='libre'||rt.estado==='cargando')&&pendientes.length){
+  const cargarMasSub=rt.estado==='congelando'&&eq.tipo==='placa'
+    ?'<div style="font-size:11px;color:var(--text-3);margin:-4px 0 8px;line-height:1.45;">Añade moldes <strong>sin cambiar</strong> la hora de inicio ni el tiempo de congelación ya en curso.</div>'
+    :'';
+  if(canLoadUi&&pendientes.length){
     actions.push(`<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
-      <label style="font:700 12px var(--font);color:var(--safety-amber-dark,#b45309);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">Por cargar desde conteo</label>
+      <label style="font:700 12px var(--font);color:var(--safety-amber-dark,#b45309);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">${rt.estado==='congelando'&&eq.tipo==='placa'?'Cargar más desde conteo':'Por cargar desde conteo'}</label>
+      ${cargarMasSub}
+      ${placaFull?'<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:8px;">Placa a capacidad máxima: no se pueden cargar más moldes.</div>':''}
       <div style="display:flex;flex-direction:column;gap:6px;">
         ${pendientes.map(it=>`
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff8e6;border:1.5px solid var(--safety-amber);border-radius:var(--radius-sm);">
             <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.preset.nombre)}</div><div style="font-size:11px;color:var(--text-3);">${esc(it.preset.tipo)} · ${it.preset.kgRef} kg/u</div></div>
             <div style="font-size:20px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);">${it.cant}</div>
-            <button class="btn" type="button" style="background:var(--brand,#0f172a);color:white;padding:8px 14px;" onclick="cargarDesdeConteo(${it.preset.id})">Cargar</button>
+            <button class="btn" type="button" style="background:var(--brand,#0f172a);color:white;padding:8px 14px;" onclick="cargarDesdeConteo(${it.preset.id})"${placaFull?' disabled':''}>Cargar</button>
           </div>`).join('')}
       </div>
     </div>`);
   }
-  if(rt.estado==='libre'||rt.estado==='cargando'){
+  if(canLoadUi){
+    const manualTitle=rt.estado==='congelando'&&eq.tipo==='placa'
+      ?'Cargar más moldes (manual)'
+      :'Agregar '+(eq.tipo==='placa'?'moldes a la placa':'items al túnel')+' (manual)';
     actions.push(`<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
-      <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Agregar ${eq.tipo==='placa'?'moldes a la placa':'items al túnel'} (manual)</label>
+      <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">${manualTitle}</label>
+      ${rt.estado==='congelando'&&eq.tipo==='placa'?'<div style="font-size:11px;color:var(--text-3);margin-bottom:8px;line-height:1.45;">No modifica la hora de inicio de la congelación en curso.</div>':''}
       <div class="form-grid" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">
         <select id="eqAddPreset"><option value="">— Selecciona —</option>${presets.map(p=>`<option value="${p.id}">${esc(p.nombre)} (${p.kgRef}kg/u · ${p.tipo})</option>`).join('')}</select>
-        <input type="number" id="eqAddCant" min="1" placeholder="Cantidad">
+        <input type="number" id="eqAddCant" min="1"${eq.tipo==='placa'&&capRestPlaca!=null?' max="'+capRestPlaca+'"':''} placeholder="Cantidad">
         <input type="text" id="eqAddGuia" placeholder="Guía">
       </div>
-      <button class="btn btn-primary" type="button" style="margin-top:10px;width:100%;" onclick="addEqItem()">
+      ${eq.tipo==='placa'&&!placaFull?`<div style="font-size:11px;color:var(--text-3);margin-top:6px;">Cupos disponibles en placa: <strong>${capRestPlaca}</strong> / ${eq.capacidad}</div>`:''}
+      <button class="btn btn-primary" type="button" style="margin-top:10px;width:100%;" onclick="addEqItem()"${placaFull?' disabled':''}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Agregar ${eq.tipo==='placa'?'a la placa':'al túnel'}
+        ${rt.estado==='congelando'&&eq.tipo==='placa'?'+ Agregar más a la placa':'Agregar '+(eq.tipo==='placa'?'a la placa':'al túnel')}
       </button>
     </div>`);
   }
@@ -5186,40 +5209,17 @@ function openEqModal(codigo){
   document.getElementById('modalBody').innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
       <span class="badge ${b.c}" style="font-size:12px;"><span class="badge-dot"></span>${b.t}</span>
-      <span style="font-size:12px;color:var(--text-3);">${eq.tipo==='tunel'?'Túnel':'Placa'} · Capacidad ${eq.capacidad} ${esc(eq.unidad)}</span>
+      <span style="font-size:12px;color:var(--text-3);">${eq.tipo==='tunel'?'Túnel':'Placa'} · Capacidad ${eq.capacidad} ${esc(eq.unidad)}${eq.tipo==='placa'?' · En placa: <strong>'+_eqUnitsOnPlate(rt)+'</strong> / '+eq.capacidad:''}</span>
       ${rt.horaInicio?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Inicio: <strong>${esc(rt.horaInicio)}</strong></span>`:''}
     </div>
     <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Productos cargados</label>
     ${itemsHtml}
-    ${actions.join('')}
-    ${renderEqHistoryHTML(eq.codigo)}`;
+    ${actions.join('')}`;
   document.getElementById('modalFtr').innerHTML=footer;
   document.getElementById('modalOverlay').classList.add('show');
   _modalOnSave=null;
 }
 function closeEqModal(){closeModal();_eqModalCode=null;}
-function renderEqHistoryHTML(codigo){
-  const hist=(RT.eqHist&&RT.eqHist[codigo])||[];
-  if(!hist.length)return '';
-  const rows=hist.slice(0,5).map(h=>`<tr>
-    <td class="mono" style="font-size:11px;">${esc(h.horaInicio||'—')} → ${esc(h.horaDescarga||'—')}</td>
-    <td style="font-size:12px;">${esc(h.productos||'—')}</td>
-    <td class="num" style="font-weight:700;">${h.cant}</td>
-    <td class="mono" style="font-size:11px;color:var(--text-3);">${h.horasTotal?h.horasTotal+'h':'—'}</td>
-  </tr>`).join('');
-  return `<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:16px;">
-    <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-      Últimas cargas (${hist.length})
-    </label>
-    <div class="tbl-wrap" style="max-height:180px;overflow-y:auto;">
-      <table style="font-size:12px;">
-        <thead><tr><th>Período</th><th>Productos</th><th class="num">Cant.</th><th>Dur.</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
 function addEqItem(){
   const rt=getEqRT(_eqModalCode);
   const pid=parseInt(document.getElementById('eqAddPreset').value);
@@ -5232,9 +5232,18 @@ function addEqItem(){
   const eq=DB.data.equipos.find(e=>e.codigo===_eqModalCode);
   const horasTotal=eq.tipo==='tunel'?p.horasTunel:p.horasPlaca;
   if(!horasTotal){showToast('Este preset no tiene horas de '+(eq.tipo==='tunel'?'túnel':'placa'),'error');return;}
+  const rest=_eqPlacaCapRestante(eq,rt);
+  if(eq.tipo==='placa'){
+    if(rest<=0){showToast('La placa ya está a máxima capacidad','error');return;}
+    if(cant>rest){showToast('Solo caben '+rest+' molde(s) más (capacidad '+eq.capacidad+')','error');return;}
+  }
   rt.items=rt.items||[];
   rt.items.push({producto:p.nombre,presetId:p.id,cant,guia,horasTotal,fuente:'manual'});
-  rt.estado='cargando';rt.horasTotal=Math.max(rt.horasTotal||0,horasTotal);
+  if(rt.estado==='congelando'&&eq.tipo==='placa'){
+    /* No tocar horaInicio, horasTotal ni progreso del ciclo en curso. */
+  }else{
+    rt.estado='cargando';rt.horasTotal=Math.max(rt.horasTotal||0,horasTotal);
+  }
   rtSave();openEqModal(_eqModalCode);renderEquipos();
   showToast('Producto cargado','success');
 }
@@ -5259,19 +5268,25 @@ function cargarDesdeConteo(presetId){
   const rt=getEqRT(_eqModalCode);
   const pend=aggregatePendientes(eq.tipo==='placa'?'molde':null).find(x=>x.preset.id===presetId);
   if(!pend||pend.cant<=0){showToast('Sin pendientes','error');return;}
-  const capLeft=eq.tipo==='placa'?(eq.capacidad-(rt.items||[]).reduce((s,i)=>s+(i.cant||0),0)):pend.cant;
-  const max=Math.min(pend.cant,Math.max(1,capLeft));
-  const resp=prompt('Cantidad a cargar en '+eq.nombre+'\nDisponible: '+pend.cant+(eq.tipo==='placa'?' · Cap. restante: '+capLeft:''),String(max));
+  const capLeft=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):pend.cant;
+  if(eq.tipo==='placa'&&capLeft<=0){showToast('Placa sin capacidad restante','error');return;}
+  const max=Math.min(pend.cant,Math.max(1,eq.tipo==='placa'?capLeft:pend.cant));
+  const resp=prompt('Cantidad a cargar en '+eq.nombre+'\nDisponible en conteo: '+pend.cant+(eq.tipo==='placa'?'\nMáximo por capacidad de placa: '+capLeft+'\nTope de esta carga: '+max:''),String(max));
   if(resp==null)return;
-  const cant=parseInt(resp);
+  const cant=parseInt(resp,10);
   if(!cant||cant<1){showToast('Cantidad inválida','error');return;}
   if(cant>pend.cant){showToast('Excede pendientes ('+pend.cant+')','error');return;}
+  if(cant>max){showToast('No puede superar '+max+' (capacidad de la placa o pendientes)','error');return;}
   const horasTotal=eq.tipo==='tunel'?p.horasTunel:p.horasPlaca;
   if(!horasTotal){showToast('Preset sin horas de '+(eq.tipo==='tunel'?'túnel':'placa'),'error');return;}
   const res=consumirPendientes(presetId,cant);
   rt.items=rt.items||[];
   rt.items.push({producto:p.nombre,presetId:p.id,cant:res.consumido,guia:res.guias.join(', ')||'—',horasTotal,fuente:'conteo'});
-  rt.estado='cargando';rt.horasTotal=Math.max(rt.horasTotal||0,horasTotal);
+  if(rt.estado==='congelando'&&eq.tipo==='placa'){
+    /* Congelación en curso: no reiniciar reloj ni horasTotal globales. */
+  }else{
+    rt.estado='cargando';rt.horasTotal=Math.max(rt.horasTotal||0,horasTotal);
+  }
   rtSave();openEqModal(_eqModalCode);renderEquipos();renderMoldesTable();renderPorCargar();renderAnalisis();
   showToast('Cargados '+res.consumido+' moldes desde conteo','success');
 }
