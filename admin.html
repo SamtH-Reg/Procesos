@@ -2166,9 +2166,10 @@ function drawTableWidget(w,moldes,pesajes){
         const prod=String(r.producto||r.preset||'—').trim()||'—';
         const tid=String(r.trabId||nom);
         const k=tid+'\u0001'+prod;
-        if(!map[k])map[k]={nom, prod, byHKg:{},totKg:0};
-        const kg=+r.kg||0;
+        if(!map[k])map[k]={nom, prod, byHKg:{},totCant:0,totKg:0};
+        const cant=+r.cant||0,kg=+r.kg||0;
         if(hh!=null)map[k].byHKg[hh]=(map[k].byHKg[hh]||0)+kg;
+        map[k].totCant+=cant;
         map[k].totKg+=kg;
       }else{
         const esp=String(r.especie||'—').trim()||'—';
@@ -2186,31 +2187,37 @@ function drawTableWidget(w,moldes,pesajes){
     const totCol={};
     if(isMol){
       const totColKg={};
-      let totGrandKg=0;
+      let totGrandKg=0,totGrandCant=0;
       rows.forEach(r=>{
         hours.forEach(h=>{totColKg[h]=(totColKg[h]||0)+(r.byHKg[h]||0);});
         totGrandKg+=r.totKg;
+        totGrandCant+=r.totCant;
       });
       const locKg=v=>(v==null||Number.isNaN(+v)?'—':(+v).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}));
+      const locMol=v=>(v==null||Number.isNaN(+v)?'—':(+v).toLocaleString('es-CL',{maximumFractionDigits:0}));
       const cellKgH=kg=>{const n=+kg||0;if(!n)return'—';return`<strong>${locKg(n)}</strong>`;};
+      const footKg=h=>{const n=+(totColKg[h]||0);if(!n)return'<span style="opacity:.85">—</span>';return locKg(n);};
+      const fs='background:#0f172a;color:#fff;font-weight:700;padding:8px 10px;';
       html=`<table>
       <thead><tr>
         <th>Operario</th><th>Producto</th>
         ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}<div style="font-size:10px;font-weight:600;color:var(--text-3);">kg</div></th>`).join('')}
-        <th class="num">KG</th>
+        <th class="num">Moldes</th><th class="num">KG</th>
       </tr></thead>
       <tbody>`+
       rows.map(r=>`<tr>
         <td><strong>${esc(r.nom)}</strong></td>
         <td style="color:var(--text-2);">${esc(r.prod)}</td>
         ${hours.map(h=>`<td class="num">${cellKgH(r.byHKg[h])}</td>`).join('')}
+        <td class="num"><strong>${locMol(r.totCant)}</strong></td>
         <td class="num"><strong>${locKg(r.totKg)}</strong></td>
       </tr>`).join('')+
       `</tbody>
       <tfoot><tr>
-        <td colspan="2">TOTAL</td>
-        ${hours.map(h=>`<td class="num">${cellKgH(totColKg[h])}</td>`).join('')}
-        <td class="num"><strong>${locKg(totGrandKg)}</strong></td>
+        <td colspan="2" style="${fs}">TOTAL</td>
+        ${hours.map(h=>`<td class="num" style="${fs}">${footKg(h)}</td>`).join('')}
+        <td class="num" style="${fs}">${locMol(totGrandCant)}</td>
+        <td class="num" style="${fs}">${locKg(totGrandKg)}</td>
       </tr></tfoot></table>`;
     }else{
       let gt=0;
