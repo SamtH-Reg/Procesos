@@ -6487,65 +6487,51 @@ function renderMResumen(){
   if(!mol.length){
     const filtroTxt=filtro==='todos'?'':_resumenFiltroTurnoSub(filtro);
     wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes para '+esc(hoyStr)+(filtroTxt?' · '+esc(filtroTxt):'')+(lineaVal?' · línea '+esc(lineaVal):'')+'.</div>';
-    if(sub)sub.textContent='0 moldes · '+hoyStr+(lineaVal?' · '+lineaVal:'')+(filtro!=='todos'?' · '+filtroTxt:'');return;
+    if(sub)sub.textContent='0 kg · '+hoyStr+(lineaVal?' · '+lineaVal:'')+(filtro!=='todos'?' · '+filtroTxt:'');return;
   }
   const hours=_mResumenHourColsFromFiltro(mol,filtro);
   if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin horas en datos ni en Admin → Turnos para este filtro.</div>';if(sub)sub.textContent='0 h · '+hoyStr+(lineaVal?' · '+esc(lineaVal):'');return;}
   const map={};
   mol.forEach(row=>{
     const key=(row.trabId||row.nombre||'—')+'||'+(row.producto||'—');
-    if(!map[key])map[key]={nombre:row.nombre||'—',producto:row.producto||'—',byHour:{},byHourKg:{},tot:0,totKg:0};
+    if(!map[key])map[key]={nombre:row.nombre||'—',producto:row.producto||'—',byHourKg:{},totKg:0};
     const h=(row.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
-    const cant=+row.cant||0;
     const kgRow=+row.kg||0;
-    if(hh!=null){
-      map[key].byHour[hh]=(map[key].byHour[hh]||0)+cant;
-      map[key].byHourKg[hh]=(map[key].byHourKg[hh]||0)+kgRow;
-    }
-    map[key].tot+=cant;map[key].totKg+=kgRow;
+    if(hh!=null)map[key].byHourKg[hh]=(map[key].byHourKg[hh]||0)+kgRow;
+    map[key].totKg+=kgRow;
   });
   const rows=Object.values(map).sort((a,b)=>a.nombre.localeCompare(b.nombre));
-  const fmt=v=>v?v.toLocaleString('es-CL'):'';
-  const fmtKg=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
-  const totCol={};const totColKg={};let totGrand=0,totGrandKg=0;
+  const fmtKg=v=>{
+    if(v==null||v===''||Number.isNaN(+v))return'—';
+    return(+v).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
+  };
+  const totColKg={};let totGrandKg=0;
   rows.forEach(r=>{
-    hours.forEach(h=>{
-      totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);
-      totColKg[h]=(totColKg[h]||0)+(r.byHourKg[h]||0);
-    });
-    totGrand+=r.tot;totGrandKg+=r.totKg;
+    hours.forEach(h=>{totColKg[h]=(totColKg[h]||0)+(r.byHourKg[h]||0);});
+    totGrandKg+=r.totKg;
   });
   const hoy=new Date().toLocaleDateString('es-CL');
-  const cellHora=(nMoldes,kgH)=>{
-    if(!nMoldes&&!kgH)return'<span style="color:var(--text-3);">—</span>';
-    const m=nMoldes?fmt(nMoldes):'0';
-    const k=kgH?fmtKg(kgH):'';
-    if(!kgH)return m;
-    return`<div style="line-height:1.25;"><span style="font-weight:700;">${m}</span><div style="font-size:11px;color:var(--text-3);font-weight:600;">${k} kg</div></div>`;
-  };
+  const cellKg=kg=>{const n=+kg||0;if(!n)return'<span style="color:var(--text-3);">—</span>';return`<span style="font-weight:700;">${fmtKg(n)}</span>`;};
   const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">PRODUCTO</th>'+
-    hours.map(h=>`<th class="num" style="min-width:78px;">${esc(_fmtHoraResumenTh(h))}<div style="font-size:10px;font-weight:600;color:var(--text-3);text-transform:none;letter-spacing:0;">mol · kg</div></th>`).join('')+
-    '<th class="num" style="min-width:100px;">MOLDES</th>'+
+    hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}<div style="font-size:10px;font-weight:600;color:var(--text-3);text-transform:none;letter-spacing:0;">kg</div></th>`).join('')+
     '<th class="num" style="min-width:100px;">KG</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
     <td style="color:var(--text-2);">${esc(r.producto)}</td>
-    ${hours.map(h=>`<td class="num">${cellHora(r.byHour[h],r.byHourKg[h])}</td>`).join('')}
-    <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
+    ${hours.map(h=>`<td class="num">${cellKg(r.byHourKg[h])}</td>`).join('')}
     <td class="num" style="font-weight:700;">${fmtKg(r.totKg)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
     <tr>
       <td colspan="2">Total ${esc(hoy)}</td>
-      ${hours.map(h=>`<td class="num">${cellHora(totCol[h],totColKg[h])}</td>`).join('')}
-      <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
+      ${hours.map(h=>`<td class="num">${cellKg(totColKg[h])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmtKg(totGrandKg)}</td>
     </tr>
   </tfoot>`;
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
   const filtroSub=_resumenFiltroTurnoSub(filtro);
   const lineaSub=lineaVal?' · Línea '+lineaVal:'';
-  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmt(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub;
+  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub;
 }
 
 /* ═══ MOLDES — Consolidado (kg acumulados por persona, hoy) ═══════ */
