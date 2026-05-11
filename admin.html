@@ -3353,8 +3353,35 @@ async function bindSupabaseAuth(){
     try{_authSub.unsubscribe();}catch(e){}
     _authSub=null;
   }
+  let sessionApplied=false;
+  const{data:{session:initialSess}}=await _sb.auth.getSession();
+  if(initialSess){
+    await applySession(initialSess);
+    sessionApplied=true;
+  }else{
+    _currentUser=null;
+    try{applyRolePermissions();}catch(_){}
+    try{updateUserBadge();}catch(_){}
+    const msg=document.getElementById('authMsg');
+    if(msg){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
+    showAuthOverlay();
+    try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+  }
   const{data:{subscription}}=_sb.auth.onAuthStateChange(async(event,sess)=>{
     try{
+      if(event==='INITIAL_SESSION'){
+        if(sess&&!sessionApplied){await applySession(sess);sessionApplied=true;}
+        else if(!sess&&!sessionApplied){
+          _currentUser=null;
+          try{applyRolePermissions();}catch(_){}
+          try{updateUserBadge();}catch(_){}
+          const m=document.getElementById('authMsg');
+          if(m){m.style.color='#64748b';m.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
+          showAuthOverlay();
+          try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+        }
+        return;
+      }
       if(event==='SIGNED_OUT'){
         _currentUser=null;
         try{applyRolePermissions();}catch(_){}
@@ -3364,25 +3391,9 @@ async function bindSupabaseAuth(){
         return;
       }
       if(event==='SIGNED_IN'&&sess)await applySession(sess);
-      if(event==='TOKEN_REFRESHED'&&sess)await applySession(sess);
     }catch(err){try{sbLog('auth listener: '+(err&&err.message?err.message:String(err)),false);}catch(_){}}
   });
   _authSub=subscription;
-  const{data:{session}}=await _sb.auth.getSession();
-  if(session){await applySession(session);}
-  else{
-    _currentUser=null;
-    try{applyRolePermissions();}catch(_){}
-    try{updateUserBadge();}catch(_){}
-    const msg=document.getElementById('authMsg');
-    if(msg){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
-    showAuthOverlay();
-    try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
-    void _sbPingAuthServer().catch(e=>{
-      const m=document.getElementById('authMsg');
-      if(m){m.style.color='#b45309';m.textContent=(m.textContent?m.textContent+' ':'')+'Red: '+(e&&e.message?e.message:String(e));}
-    });
-  }
 }
 /** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
 function dashRefreshKgSummary(opts){
@@ -3492,88 +3503,28 @@ async function applySession(session){
   },400);
   return true;
 }
-/** Evita quedar en «Verificando…» indefinidamente si la red o Auth no responden. */
-async function _raceMs(promise,ms,errMsg){
-  let t;
-  const to=new Promise((_,rej)=>{t=setTimeout(()=>rej(new Error(errMsg||'Tiempo de espera agotado')),ms);});
-  try{return await Promise.race([promise.finally(()=>{clearTimeout(t);}),to]);}
-  finally{clearTimeout(t);}
-}
-/** Comprueba que el navegador pueda hablar con Auth (GET rápido). Falla en ~12 s si la red bloquea *.supabase.co. */
-async function _sbPingAuthServer(){
-  if(typeof navigator!=='undefined'&&navigator.onLine===false)throw new Error('El navegador indica que estás sin conexión a Internet.');
-  const base=(document.getElementById('sbUrl').value.trim()||'').replace(/\/$/,'');
-  const key=(document.getElementById('sbKey').value.trim()||'');
-  if(!base||!key)throw new Error('Completá URL y clave anon en la pestaña Supabase.');
-  let host='';
-  try{host=new URL(base).host;}catch(_){throw new Error('La URL de Supabase no es válida (debe ser https://….supabase.co).');}
-  const ctrl=new AbortController();
-  const t=setTimeout(()=>ctrl.abort(),12000);
+/** Mismas opciones Auth que `index.html` (`_tbSbAuthOptions`): persistencia, URL, lock en no-op. */
+function _sbAdminAuthOptions(){
   try{
-    const r=await fetch(base+'/auth/v1/health',{method:'GET',headers:{'apikey':key,'Authorization':'Bearer '+key},signal:ctrl.signal});
-    if(!r.ok)throw new Error('Auth respondió HTTP '+r.status+' para '+host+'. Revisá la clave anon.');
-    return true;
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined,lock:async(_n,_t,fn)=>await fn()}};
   }catch(e){
-    const nm=e&&e.name?String(e.name):'';
-    if(nm==='AbortError')throw new Error('No se alcanzó '+host+' en 12 s (GET). Suele ser firewall, VPN, DNS o proxy que bloquea *.supabase.co. Probá otra red o pedí a IT desbloqueo HTTPS saliente a *.supabase.co.');
-    throw new Error((e&&e.message?String(e.message):'Sin conexión a Supabase')+' ('+host+').');
-  }finally{clearTimeout(t);}
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,lock:async(_n,_t,fn)=>await fn()}};
+  }
 }
-/**
- * Login por HTTP directo (mismo endpoint que el SDK) + setSession.
- * Evita bloqueos del cliente JS (p. ej. Web Locks) cuando signInWithPassword no termina.
- */
-async function _sbPasswordGrantTokens(email,password){
-  const base=(document.getElementById('sbUrl').value.trim()||'').replace(/\/$/,'');
-  const key=(document.getElementById('sbKey').value.trim()||'');
-  if(!base||!key)throw new Error('Falta URL o clave anon de Supabase.');
-  const ctrl=new AbortController();
-  const t=setTimeout(()=>ctrl.abort(),60000);
-  try{
-    const r=await fetch(base+'/auth/v1/token?grant_type=password',{
-      method:'POST',
-      signal:ctrl.signal,
-      headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+key},
-      body:JSON.stringify({email,password})
-    });
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok){
-      const m=(j.error_description||j.msg||j.message||j.hint||'')+'';
-      throw new Error(m.trim()||('Supabase respondió HTTP '+r.status));
-    }
-    if(!j.access_token||!j.refresh_token)throw new Error('Respuesta de acceso incompleta desde Supabase.');
-    return j;
-  }finally{clearTimeout(t);}
-}
+/** Igual que `tbDoLogin` en index: solo `signInWithPassword`; la sesión la aplica `onAuthStateChange` (SIGNED_IN / INITIAL_SESSION). */
 async function doLogin(){
-  const rawEmail=document.getElementById('authEmail').value.trim();
-  const email=rawEmail.toLowerCase();
+  const email=document.getElementById('authEmail').value.trim();
   const pass=document.getElementById('authPass').value;
   const msg=document.getElementById('authMsg');
   msg.textContent='';
   if(!email||!pass){msg.style.color='#dc2626';msg.textContent='Ingresa email y contraseña';return;}
   if(!_sb){msg.style.color='#dc2626';msg.textContent='Supabase no conectado. Revisa URL y clave en la pestaña Supabase o esperá unos segundos y reintentá.';return;}
-  const errTok='No hubo respuesta al pedir token (POST /auth/v1/token). Suele ser la misma causa que bloquea *.supabase.co: firewall, antivirus, VPN o DNS. Probá otra red o hotspot.';
+  msg.style.color='#64748b';msg.textContent='Verificando…';
   try{
-    msg.style.color='#64748b';msg.textContent='Comprobando red hasta Supabase…';
-    await _sbPingAuthServer();
-    msg.textContent='Autenticando (envío seguro de contraseña)…';
-    let tokens;
-    try{
-      tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),60000,errTok);
-    }catch(first){
-      if(String(first&&first.message||'').includes('No hubo respuesta al pedir token')){
-        msg.textContent='Reintentando token…';
-        await new Promise(r=>setTimeout(r,900));
-        tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),35000,errTok);
-      }else throw first;
-    }
-    msg.textContent='Guardando sesión y reconectando…';
-    await _raceMs(_sbAdminPersistTokensAndReconnect(tokens),60000,'La reconexión tras login tardó demasiado. Probá recargar la página (F5) e intentar de nuevo.');
+    const{error}=await _sb.auth.signInWithPassword({email,password:pass});
+    if(error)throw error;
+    msg.style.color='#16a34a';msg.textContent='✓ Ingresando…';
     document.getElementById('authPass').value='';
-    if(!isSbAdmin())return;
-    msg.style.color='#16a34a';msg.textContent='✓ Sesión admin iniciada';
-    toast('Sesión iniciada','success');
   }catch(e){
     msg.style.color='#dc2626';msg.textContent=e&&e.message?String(e.message):'Credenciales incorrectas';
   }
@@ -3581,7 +3532,7 @@ async function doLogin(){
 async function doLogout(){
   if(!_sb)return;
   if(typeof sbStopPoll==='function')sbStopPoll();
-  try{await _sb.auth.signOut({scope:'global'});}catch(_){try{await _sb.auth.signOut();}catch(__){}}
+  try{await _sb.auth.signOut();}catch(_){}
   _currentUser=null;
   try{applyRolePermissions();}catch(_){}
   try{updateUserBadge();}catch(_){}
@@ -3648,63 +3599,11 @@ function applyRolePermissions(){
   });
 }
 function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
-/**
- * Clave Auth en localStorage distinta a index.html (tablet). Si ambas usan la default `sb-<ref>-auth-token`,
- * comparten Web Lock (`lock:…`) y setSession/getSession pueden colgar entre pestañas.
- */
-function _sbAdminAuthStorageKey(urlStr){
-  try{
-    const u=new URL(String(urlStr||'').trim());
-    return 'sb-'+u.hostname.split('.')[0]+'-auth-token-admin';
-  }catch(_){
-    return 'sb-friosur-admin-auth-token';
-  }
-}
-/**
- * Graba la sesión en localStorage (formato GoTrue sin userStorage) y recrea el cliente.
- * Evita setSession(), que en algunos navegadores queda colgado aunque el token por fetch sea válido.
- */
-async function _sbAdminPersistTokensAndReconnect(tokens){
-  const url=document.getElementById('sbUrl').value.trim();
-  const sk=_sbAdminAuthStorageKey(url);
-  const now=Math.floor(Date.now()/1000);
-  const expIn=Math.max(60,Number(tokens.expires_in)||3600);
-  const expAt=tokens.expires_at!=null&&!isNaN(Number(tokens.expires_at))?Number(tokens.expires_at):now+expIn;
-  if(!tokens.user)throw new Error('Respuesta de login sin datos de usuario.');
-  const session={
-    access_token:tokens.access_token,
-    refresh_token:tokens.refresh_token,
-    expires_in:expIn,
-    expires_at:expAt,
-    token_type:tokens.token_type||'bearer',
-    user:tokens.user
-  };
-  try{
-    localStorage.setItem(sk,JSON.stringify(session));
-    localStorage.removeItem(sk+'-user');
-    localStorage.removeItem(sk+'-code-verifier');
-  }catch(err){throw new Error('No se pudo guardar la sesión: '+(err&&err.message?err.message:String(err)));}
-  try{if(_authSub){_authSub.unsubscribe();}}catch(_e){}
-  _authSub=null;
-  _sb=null;
-  _currentUser=null;
-  await connectSupabase(true);
-  if(!_sb)throw new Error('No se pudo reconectar el cliente Supabase.');
-}
 async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');const m=document.getElementById('authMsg');if(m){m.style.color='#dc2626';m.textContent='Completá URL y clave anon en Supabase para poder ingresar.';}return;}
   try{
-    const authOpts={auth:{
-      persistSession:true,
-      autoRefreshToken:true,
-      detectSessionInUrl:false,
-      storage:typeof localStorage!=='undefined'?localStorage:undefined,
-      storageKey:_sbAdminAuthStorageKey(url),
-      /** Refuerzo: sin Web Locks aunque otra pestaña admin comparta el mismo storageKey. */
-      lock:async(_name,_acquireTimeout,fn)=>await fn()
-    }};
-    _sb=window.supabase.createClient(url,key,authOpts);
+    _sb=window.supabase.createClient(url,key,_sbAdminAuthOptions());
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
     await bindSupabaseAuth();
   }
