@@ -593,7 +593,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center;max-width:700px;">
         <label class="form-label" style="margin:0;">URL proyecto Asistencia</label>
         <input class="input" id="syncUrl" placeholder="https://xxxxx.supabase.co" style="font-size:12px;">
-        <label class="form-label" style="margin:0;">API Key <span style="font-size:10px;color:var(--text-3);">(anon o service_role)</span></label>
+        <label class="form-label" style="margin:0;">API Key <span style="font-size:10px;color:var(--text-3);">(solo <strong>anon</strong> en este navegador)</span></label>
         <input class="input" id="syncKey" placeholder="eyJhbGci..." style="font-size:12px;font-family:monospace;">
         <label class="form-label" style="margin:0;">Tabla origen</label>
         <input class="input" id="syncTable" value="empleados" style="font-size:12px;">
@@ -606,7 +606,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
         <div style="font-size:11px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:8px;line-height:1.7;">
           El proyecto Asistencia tiene RLS activo. Ejecuta esto en su <strong>SQL Editor</strong>:<br>
           <code style="display:block;margin-top:4px;background:#fff;padding:4px 6px;border-radius:4px;font-size:10px;">create policy "sync_read" on empleados for select to anon using (true);</code>
-          <span style="color:var(--text-3);">O usa la <strong>service_role key</strong> del proyecto Asistencia (Settings → API)</span>
+          <span style="color:var(--text-3);">No pegues <strong>service_role</strong> aquí (bypasea RLS). Si hace falta acceso privilegiado, usa una <strong>Edge Function</strong> o política SQL acotada en el proyecto Asistencia.</span>
         </div>
       </div>
       <div style="margin-top:8px;display:flex;gap:6px;">
@@ -1134,6 +1134,8 @@ let dashWidgets=JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
 /* Layouts guardados con nombre */
 const LAYOUTS_KEY='friosur_dash_layouts';
 const DASH_CLOUD_KEY='friosur_dashboard';
+/** Paridad con tablet `TB_EQ_CLOUD_KEY`: estado túneles/placas en `app_kv`. */
+const EQ_RUNTIME_CLOUD_KEY='friosur_eq_runtime';
 let dashLayouts={};
 let _dashApplyingFromCloud=false;
 let _dashCloudPushTimer=null;
@@ -2838,7 +2840,7 @@ async function runSyncEmpleados(){
       chunk=await r.json();all=all.concat(chunk);offset+=chunk.length;
     }while(chunk.length===1000);
     if(!all.length){
-      _syncLog('⚠ Respuesta vacía — posible bloqueo RLS. Ejecuta en Asistencia SQL Editor:\n  create policy "sync_read" on empleados for select to anon using (true);\nO usa la service_role key en lugar de la anon key.',false);
+      _syncLog('⚠ Respuesta vacía — posible bloqueo RLS. Ejecuta en Asistencia SQL Editor:\n  create policy "sync_read" on empleados for select to anon using (true);\nNo uses service_role en el navegador; preferí políticas anon/Edge Function.',false);
       btn.disabled=false;btn.textContent='↓ Sincronizar ahora';return;
     }
     _syncLog(`${all.length} empleados descargados — mapeando…`);
@@ -3428,6 +3430,27 @@ async function sbManualPullTabletRegs(){
     rtPulse('manual');
   }catch(e){toast('Error: '+(e&&e.message?e.message:String(e)),'err');}
 }
+/** Aplica `app_kv` `friosur_eq_runtime` (estado túneles/placas) en RT.data. */
+function _adminApplyEqRuntimeFromCloud(val){
+  if(!val||typeof val!=='object'||!RT.data)return;
+  try{
+    if(val.eqState&&typeof val.eqState==='object')RT.data.eqState=JSON.parse(JSON.stringify(val.eqState));
+    if(val.eqHist&&typeof val.eqHist==='object')RT.data.eqHist=JSON.parse(JSON.stringify(val.eqHist));
+    if(RT._ensureShape)RT._ensureShape();
+    if(RT.save)RT.save();
+    if(typeof _doRender==='function')_doRender(null);
+    if(typeof rtPulse==='function')rtPulse('eq_runtime');
+  }catch(e){console.warn('[admin eq_runtime]',e);}
+}
+async function _adminPullEqRuntimeFromCloud(){
+  if(!_sb||!_currentUser||!RT.data)return false;
+  try{
+    const{data,error}=await _sb.from('app_kv').select('value,updated_at').eq('key',EQ_RUNTIME_CLOUD_KEY).maybeSingle();
+    if(error||!data||!data.value)return false;
+    _adminApplyEqRuntimeFromCloud(data.value);
+    return true;
+  }catch(e){return false;}
+}
 /** Moldes/pesajes desde la nube (tablets / otros admins). Necesario para tiempo real entre dispositivos — localStorage no cruza equipos. */
 async function sbPullRuntimeFromCloud(){
   if(!_sb)return;
@@ -3446,6 +3469,7 @@ async function sbPullRuntimeFromCloud(){
     }
     const armOk=await _adminPullArmadoLineasFromCloud();
     if(armOk)sbLog('armado_lineas aplicado desde nube',true);
+    try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) aplicado desde nube',true);}catch(_e){}
     RT._ensureShape();
     if(RT.save)RT.save();
     try{
@@ -3667,12 +3691,18 @@ function sbSubscribeRealtime(){
   try{
     const chKv=_sb.channel('rt-app-kv').on('postgres_changes',{event:'*',schema:'public',table:'app_kv'},(p)=>{
       const row=p.new||p.old;
-      if(!row||row.key!==DASH_CLOUD_KEY||p.eventType==='DELETE')return;
-      if(row.value&&applyDashboardFromPayload(row.value)){
-        if(typeof refreshLayoutPicker==='function')refreshLayoutPicker();
-        if(typeof renderKPIs==='function')renderKPIs();
-        if(typeof renderDashGrid==='function')renderDashGrid();
-        rtPulse('dashboard');
+      if(!row||p.eventType==='DELETE')return;
+      if(row.key===DASH_CLOUD_KEY){
+        if(row.value&&applyDashboardFromPayload(row.value)){
+          if(typeof refreshLayoutPicker==='function')refreshLayoutPicker();
+          if(typeof renderKPIs==='function')renderKPIs();
+          if(typeof renderDashGrid==='function')renderDashGrid();
+          rtPulse('dashboard');
+        }
+        return;
+      }
+      if(row.key===EQ_RUNTIME_CLOUD_KEY&&row.value){
+        _adminApplyEqRuntimeFromCloud(row.value);
       }
     }).subscribe((status)=>{sbLog('canal app_kv: '+status);});
     _sbChannels.push(chKv);
