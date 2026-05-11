@@ -47,7 +47,12 @@ button,input,select,textarea{font-family:inherit;color:inherit;}
 .topbar .brand-sub{font-size:11px;color:#9fb4d4;font-weight:500;margin-top:2px;}
 .topbar-ctx{display:flex;gap:14px;margin-left:22px;font-size:12px;color:#c8d7ee;flex:1;}
 .topbar-ctx .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(255,255,255,.08);border-radius:999px;}
-.topbar-right{display:flex;align-items:center;gap:10px;}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.topbar-user{min-width:0;max-width:min(280px,36vw);text-align:right;line-height:1.25;margin-right:4px;}
+.topbar-user-name{font-weight:700;font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar-user-meta{font-size:11px;color:#9fb4d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.roles-legend{font-size:12px;color:var(--text-3);margin:0 0 12px;line-height:1.5;max-width:900px;}
+.roles-table-cap{font-size:11px;color:var(--text-3);font-weight:500;padding:4px 2px 8px;}
 .top-btn{background:transparent;border:1px solid rgba(255,255,255,.14);color:#fff;padding:8px 14px;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
 .top-btn:hover{background:rgba(255,255,255,.08);}
 .top-btn.primary{background:#3b6fb8;border-color:#3b6fb8;}
@@ -283,6 +288,10 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
     <div class="chip"><span class="status-dot offline" id="sbDot"></span><span id="sbStatus">Supabase: no conectado</span></div>
     <div class="chip" id="dbSizeChip">DB local: —</div>
     <div class="chip" id="dateChip">—</div>
+  </div>
+  <div class="topbar-user" id="topbarUserBlock" title="">
+    <div class="topbar-user-name" id="topbarUserName">—</div>
+    <div class="topbar-user-meta" id="topbarUserMeta"></div>
   </div>
   <div class="topbar-right">
     <button class="top-btn" type="button" id="btnAuthLogin" onclick="onTopbarAuthClick()" title="Iniciar o cerrar sesión con Supabase Auth">Ingresar</button>
@@ -647,7 +656,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
 <!-- ═══ ROLES ═══ -->
 <div class="page" id="page-roles">
   <div class="page-hdr">
-    <div><h1 class="page-title">Permisos y roles</h1><div class="page-sub">Pestañas de la tablet por rol y usuarios Supabase (alta, contraseña y baja).</div></div>
+    <div><h1 class="page-title">Permisos y roles</h1><div class="page-sub">Módulos de esta consola y pestañas del index (tablet) por rol; abajo, usuarios Supabase (correo, contraseña y permisos en la nube).</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="btn" onclick="openRolModal()">+ Nuevo rol</button>
       <button type="button" class="btn ghost" onclick="openAuthUserCreateModal()">+ Nuevo usuario</button>
@@ -3016,22 +3025,41 @@ function openEqModal(cod){
 function delEq(cod){if(!confirm('¿Eliminar equipo?'))return;DB.data.equipos=DB.data.equipos.filter(e=>e.codigo!==cod);DB.save();renderEquipos();}
 
 /* ════════════ ROLES ════════════ */
+const CONSOLE_MODULES=['dashboard','reportes','analisis','presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes'];
+const CONSOLE_MODULE_LABELS={dashboard:'Dashboard',reportes:'Reportes',analisis:'Análisis',presets:'Productos / Presets',trabajadores:'Trabajadores',turnos:'Turnos y horarios',equipos:'Equipos',roles:'Permisos y roles',import:'Importar / Exportar',supabase:'Supabase',ajustes:'Ajustes generales'};
 const TABLET_TAB_KEYS=['moldes','tuneles','pesaje','general','eliminar'];
+const TABLET_TAB_LABELS={moldes:'Moldes (barra)',tuneles:'Túneles (barra)',pesaje:'Pesaje (barra)',general:'General (barra)',eliminar:'Eliminar en tablet'};
+function _rolTabletResumen(r){
+  const p=r&&r.permisos||{};
+  const bits=TABLET_TAB_KEYS.filter(k=>p[k]).map(k=>String(k).charAt(0).toUpperCase()+String(k).slice(1));
+  return bits.length?bits.join(', '):'— sin pestañas —';
+}
 function renderRoles(){
   const host=document.getElementById('rolesTablesHost');if(!host)return;
-  const head2=`<table style="width:100%;border-collapse:collapse;"><caption style="caption-side:top;text-align:left;font-weight:700;padding:8px 0;color:var(--text-2);">Vista tablet (index) — pestañas y eliminar</caption>
-  <thead><tr><th>Rol</th>${TABLET_TAB_KEYS.map(m=>`<th style="text-align:center;font-size:10px;">${esc(m)}</th>`).join('')}<th></th></tr></thead><tbody>
-  ${DB.data.roles.map(r=>`<tr>
+  const rolesArr=Array.isArray(DB.data&&DB.data.roles)?DB.data.roles:[];
+  const head0=`<p class="roles-legend"><strong>Consola admin:</strong> cada casilla es un ítem del menú lateral que ese <em>código de rol</em> puede ver en <code>admin.html</code>. <strong>Tablet (index):</strong> controla qué botones de la barra inferior ve en <code>index.html</code> y si puede eliminar; el texto «Resumen tablet» lista lo habilitado.</p>`;
+  const head1=`<table style="width:100%;border-collapse:collapse;margin-bottom:20px;"><caption style="caption-side:top;text-align:left;font-weight:700;padding:8px 0;color:var(--text-2);">Consola admin — módulos del menú por rol</caption>
+  <thead><tr><th style="text-align:left;">Rol</th>${CONSOLE_MODULES.map(m=>`<th style="text-align:center;max-width:72px;"><div class="mono" style="font-size:10px;">${esc(m)}</div><div class="roles-table-cap">${esc(CONSOLE_MODULE_LABELS[m]||m)}</div></th>`).join('')}<th></th></tr></thead><tbody>
+  ${rolesArr.map(r=>`<tr>
     <td><strong>${esc(r.nombre)}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(r.codigo||'')}</div></td>
-    ${TABLET_TAB_KEYS.map(m=>`<td style="text-align:center;"><input type="checkbox" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
-    <td><button type="button" class="btn sm ghost" onclick="delRol(${r.id})" title="Eliminar rol">✕</button></td>
+    ${CONSOLE_MODULES.map(m=>`<td style="text-align:center;"><input type="checkbox" title="${esc(CONSOLE_MODULE_LABELS[m]||m)}" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
+    <td><button type="button" class="btn sm ghost" onclick="delRol(${r.id})" title="Eliminar rol del catálogo">✕</button></td>
+  </tr>`).join('')}
+  </tbody></table>`;
+  const head2=`<table style="width:100%;border-collapse:collapse;"><caption style="caption-side:top;text-align:left;font-weight:700;padding:8px 0;color:var(--text-2);">Vista tablet (index.html) — barra inferior y permisos</caption>
+  <thead><tr><th style="text-align:left;">Rol</th>${TABLET_TAB_KEYS.map(m=>`<th style="text-align:center;max-width:88px;"><div class="mono" style="font-size:10px;">${esc(m)}</div><div class="roles-table-cap">${esc(TABLET_TAB_LABELS[m]||m)}</div></th>`).join('')}<th style="text-align:left;min-width:140px;">Resumen tablet</th><th></th></tr></thead><tbody>
+  ${rolesArr.map(r=>`<tr>
+    <td><strong>${esc(r.nombre)}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(r.codigo||'')}</div></td>
+    ${TABLET_TAB_KEYS.map(m=>`<td style="text-align:center;"><input type="checkbox" title="${esc(TABLET_TAB_LABELS[m]||m)}" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
+    <td style="font-size:11px;color:var(--text-2);">${esc(_rolTabletResumen(r))}</td>
+    <td><button type="button" class="btn sm ghost" onclick="delRol(${r.id})" title="Eliminar rol del catálogo">✕</button></td>
   </tr>`).join('')}
   </tbody></table>
   <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <div>
         <div style="font-weight:700;color:var(--text-2);">Usuarios (Supabase Auth)</div>
-        <div style="font-size:12px;color:var(--text-3);max-width:520px;">Correo y contraseña se administran aquí (RPC <span class="mono">rpc_admin_*</span>). Requiere sesión con rol <strong>admin</strong>. Las contraseñas no se listan.</div>
+        <div style="font-size:12px;color:var(--text-3);max-width:640px;">Alta de correo + contraseña inicial, cambio de clave y baja (RPC <span class="mono">rpc_admin_*</span>). Solo rol <strong>admin</strong> en la nube. Podés <strong>generar contraseña</strong> en el modal y <strong>copiar correo</strong> desde la tabla. Las claves no se guardan en texto claro en la lista.</div>
       </div>
       <div style="display:flex;gap:8px;">
         <button type="button" class="btn ghost sm" onclick="refreshAuthUsersList()">↻ Actualizar lista</button>
@@ -3040,8 +3068,37 @@ function renderRoles(){
     </div>
     <div id="authUsersMount" class="mono" style="font-size:13px;">Cargando usuarios…</div>
   </div>`;
-  host.innerHTML=head2;
+  host.innerHTML=head0+head1+head2;
   void refreshAuthUsersList();
+}
+function authSuggestPassword(){
+  const chars='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const out=[];
+  try{
+    const a=new Uint8Array(14);
+    crypto.getRandomValues(a);
+    for(let i=0;i<a.length;i++)out.push(chars[a[i]%chars.length]);
+  }catch(e){
+    for(let i=0;i<14;i++)out.push(chars[Math.floor(Math.random()*chars.length)]);
+  }
+  return out.join('')+'9a!';
+}
+function authFillSuggestedPassword(inputId){
+  const el=document.getElementById(inputId);
+  if(!el)return;
+  el.value=authSuggestPassword();
+  el.type='text';
+  setTimeout(()=>{try{el.type='password';}catch(_){}},600);
+  toast('Contraseña generada (se oculta de nuevo en un instante)','info');
+}
+function authCopyText(t){
+  const s=String(t==null?'':t);
+  if(!s){toast('Nada que copiar','warn');return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    void navigator.clipboard.writeText(s).then(()=>toast('Correo copiado','success')).catch(()=>toast('No se pudo copiar (permiso del navegador)','err'));
+    return;
+  }
+  toast('Portapapeles no disponible: '+s,'info');
 }
 async function refreshAuthUsersList(){
   const mount=document.getElementById('authUsersMount');if(!mount)return;
@@ -3063,7 +3120,7 @@ async function refreshAuthUsersList(){
     const{data,error}=await _sb.from('user_profiles').select('id,email,rol,nombre,activo,created_at').order('created_at',{ascending:false});
     if(error)throw error;
     const rows=Array.isArray(data)?data:[];
-    const codOpts=[...new Set((DB.data.roles||[]).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
+    const codOpts=[...new Set((((DB.data&&DB.data.roles)||[])).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
     ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
     codOpts.sort();
     mount.innerHTML=`<table style="width:100%;border-collapse:collapse;font-family:inherit;"><thead><tr>
@@ -3077,12 +3134,12 @@ async function refreshAuthUsersList(){
       const self=u.id===_currentUser.id;
       const sel=codOpts.map(c=>`<option value="${esc(c)}" ${String(u.rol)===c?'selected':''}>${esc(c)}</option>`).join('');
       return `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><strong>${esc(u.email||'')}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(u.id)}</div></td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><strong>${esc(u.email||'')}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(u.id)}</div><button type="button" class="btn ghost sm" style="margin-top:4px;font-size:11px;padding:2px 8px;" onclick='authCopyText(${JSON.stringify(u.email||'')})'>Copiar correo</button></td>
         <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><input class="input" data-auth-nombre="${esc(u.id)}" value="${esc(u.nombre||'')}" style="min-width:120px;font-size:12px;padding:4px 8px;"></td>
         <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><select class="input" onchange="authUserPatchRol('${u.id}',this.value)" style="font-size:12px;padding:4px 8px;">${sel}</select></td>
         <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;"><input type="checkbox" ${u.activo!==false?'checked':''} onchange="authUserPatchActivo('${u.id}',this.checked)"></td>
         <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
-          <button type="button" class="btn sm ghost" onclick="authUserSaveNombre('${u.id}')">Nombre</button>
+          <button type="button" class="btn sm ghost" onclick="authUserSaveNombre('${u.id}')">Guardar nombre</button>
           <button type="button" class="btn sm" onclick='openAuthUserPasswordModal(${JSON.stringify(u.id)},${JSON.stringify(u.email||'')})'>Contraseña</button>
           <button type="button" class="btn sm ghost" onclick="authUserDelete('${u.id}')" ${self?'disabled':''} style="${self?'opacity:.4':''}">Eliminar</button>
         </td>
@@ -3101,13 +3158,13 @@ function openAuthUserCreateModal(){
   if(!_sb){toast('Conectá Supabase','err');return;}
   if(!_currentUser){toast('Pulsa Ingresar arriba e inicia sesión con email y contraseña Supabase.','err');openAuthLoginPanel();return;}
   if(!isSbAdmin()){toast('Tu rol en la nube no es admin; solo admin puede crear usuarios.','err');return;}
-  const codOpts=[...new Set((DB.data.roles||[]).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
+  const codOpts=[...new Set((((DB.data&&DB.data.roles)||[])).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
   ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
   codOpts.sort();
-  const body=`<div class="form-field"><label class="form-label">Correo</label><input class="input" id="aucEmail" type="email" autocomplete="off"></div>
-  <div class="form-field"><label class="form-label">Contraseña inicial (mín. 6 caracteres)</label><input class="input" id="aucPass" type="password" autocomplete="new-password"></div>
-  <div class="form-field"><label class="form-label">Nombre mostrado</label><input class="input" id="aucNom" placeholder="opcional"></div>
-  <div class="form-field"><label class="form-label">Rol (código)</label><select class="input" id="aucRol">${codOpts.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></div>`;
+  const body=`<div class="form-field"><label class="form-label">Correo (login en tablet y admin)</label><input class="input" id="aucEmail" type="email" autocomplete="off" placeholder="usuario@empresa.cl"></div>
+  <div class="form-field"><label class="form-label">Contraseña inicial (mín. 6 caracteres)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input class="input" id="aucPass" type="password" autocomplete="new-password" style="flex:1;min-width:160px;"><button type="button" class="btn ghost sm" onclick="authFillSuggestedPassword('aucPass')">Generar</button></div></div>
+  <div class="form-field"><label class="form-label">Nombre mostrado (ej. Administrador)</label><input class="input" id="aucNom" placeholder="opcional"></div>
+  <div class="form-field"><label class="form-label">Rol en la nube (código = columna catálogo)</label><select class="input" id="aucRol">${codOpts.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></div>`;
   openModal('Nuevo usuario',body,async()=>{
     const email=(document.getElementById('aucEmail')||{}).value.trim();
     const pw=(document.getElementById('aucPass')||{}).value||'';
@@ -3126,7 +3183,7 @@ function openAuthUserPasswordModal(userId,emailLabel){
   if(!_currentUser){toast('Pulsa Ingresar arriba e inicia sesión.','err');openAuthLoginPanel();return;}
   if(!isSbAdmin()){toast('Solo el rol admin puede cambiar contraseñas.','err');return;}
   const body=`<p style="font-size:13px;color:var(--text-2);margin:0 0 12px;">${esc(emailLabel||userId)}</p>
-  <div class="form-field"><label class="form-label">Nueva contraseña</label><input class="input" id="aupPass" type="password" autocomplete="new-password"></div>`;
+  <div class="form-field"><label class="form-label">Nueva contraseña (mín. 6)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input class="input" id="aupPass" type="password" autocomplete="new-password" style="flex:1;min-width:160px;"><button type="button" class="btn ghost sm" onclick="authFillSuggestedPassword('aupPass')">Generar</button></div></div>`;
   openModal('Cambiar contraseña',body,async()=>{
     const pw=(document.getElementById('aupPass')||{}).value||'';
     if(pw.length<6){toast('Mínimo 6 caracteres','err');return false;}
@@ -3170,7 +3227,7 @@ async function authUserSaveNombre(id){
   if(error){toast(error.message,'err');await refreshAuthUsersList();return;}
   toast('Nombre guardado','success');
 }
-function togglePerm(rid,mod,val){const r=DB.data.roles.find(x=>x.id===rid);if(!r)return;r.permisos=r.permisos||{};r.permisos[mod]=val;DB.save();toast('Permiso actualizado','info');}
+function togglePerm(rid,mod,val){const r=DB.data.roles.find(x=>x.id===rid);if(!r)return;r.permisos=r.permisos||{};r.permisos[mod]=val;DB.save();toast('Permiso actualizado','info');if(document.getElementById('page-roles')&&document.getElementById('page-roles').classList.contains('active'))renderRoles();}
 function openRolModal(){
   const n=prompt('Nombre del nuevo rol:');if(!n||!String(n).trim())return;
   const c=prompt('Código interno (minúsculas; debe coincidir con user_profiles.rol en Supabase):',_slugCodigoRol(n));
@@ -3416,6 +3473,21 @@ async function doLogout(){
   toast('Sesión cerrada','success');
   showAuthOverlay();
 }
+function syncTopbarSession(){
+  const nm=document.getElementById('topbarUserName');
+  const meta=document.getElementById('topbarUserMeta');
+  const blk=document.getElementById('topbarUserBlock');
+  if(!nm)return;
+  if(_currentUser){
+    nm.textContent=_currentUser.nombre||_currentUser.email||'Usuario';
+    meta.textContent=(_currentUser.rol||'')+' · '+(_currentUser.email||'');
+    if(blk)blk.title='Sesión Supabase: '+(_currentUser.email||'')+' ('+(_currentUser.rol||'')+')';
+  }else{
+    nm.textContent='Sin sesión en la nube';
+    meta.textContent='Pulsa Ingresar para usar correo y contraseña';
+    if(blk)blk.title='';
+  }
+}
 function updateUserBadge(){
   let badge=document.getElementById('userBadge');
   if(!badge){
@@ -3438,7 +3510,9 @@ function updateUserBadge(){
     topBtn.textContent=_currentUser?'Cuenta':'Ingresar';
     topBtn.title=_currentUser?('Sesión: '+(_currentUser.email||'')+' · '+(_currentUser.rol||'')+' — clic para cerrar sesión'):'Iniciar sesión (email y contraseña Supabase)';
   }
+  syncTopbarSession();
 }
+setTimeout(()=>{try{syncTopbarSession();}catch(_){}},0);
 function applyRolePermissions(){
   if(!_currentUser)return;
   const r=_currentUser.rol;
