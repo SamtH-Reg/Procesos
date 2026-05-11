@@ -3662,7 +3662,14 @@ async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');const m=document.getElementById('authMsg');if(m){m.style.color='#dc2626';m.textContent='Completá URL y clave anon en Supabase para poder ingresar.';}return;}
   try{
-    const authOpts={auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storage:typeof localStorage!=='undefined'?localStorage:undefined}};
+    const authOpts={auth:{
+      persistSession:true,
+      autoRefreshToken:true,
+      detectSessionInUrl:false,
+      storage:typeof localStorage!=='undefined'?localStorage:undefined,
+      /** Evita navigator.locks: otra pestaña (p. ej. index/tablet) puede dejar setSession/getSession colgados con el mismo storageKey. */
+      lock:async(_name,_acquireTimeout,fn)=>await fn()
+    }};
     _sb=window.supabase.createClient(url,key,authOpts);
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
     await bindSupabaseAuth();

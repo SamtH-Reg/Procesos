@@ -9546,9 +9546,9 @@ let _tbSb=null;
 /** Opciones Auth: persistencia en localStorage (evita pedir login en cada recarga; compatible con INITIAL_SESSION en GoTrue). */
 function _tbSbAuthOptions(){
   try{
-    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage}};
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage,lock:async(_n,_t,fn)=>await fn()}};
   }catch(e){
-    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}};
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,lock:async(_n,_t,fn)=>await fn()}};
   }
 }
 try{
