@@ -2888,9 +2888,16 @@ function _ctxClockTick(){
   if(elT){const t=_turnoActual(d);elT.textContent=t.nombre+' · '+t.rango;}
   setTimeout(_ctxClockTick,1000);
 }
-/* Usuario activo (desde DB.data.usuario si existe) */
+/* Usuario activo: con sesión Supabase usa `_tbUser`; si no, `DB.data.usuario` (catálogo local). */
 function renderUserChip(){
-  const u=(window.DB&&DB.data&&DB.data.usuario)||{nombre:'C. Rodríguez',rol:'Supervisor'};
+  let u=(window.DB&&DB.data&&DB.data.usuario)||{nombre:'C. Rodríguez',rol:'Supervisor'};
+  try{
+    if(typeof _tbUser!=='undefined'&&_tbUser&&(_tbUser.nombre||_tbUser.email)){
+      const rr=String(_tbUser.rol||'').trim().toLowerCase();
+      const rolDisp={admin:'Admin',administrador:'Admin',supervisor:'Supervisor',planillero:'Planillero',tunelero:'Tunelero',operario:'Operario'}[rr]||(_tbUser.rol||'—');
+      u={nombre:_tbUser.nombre||(_tbUser.email||'').split('@')[0]||'—',rol:rolDisp};
+    }
+  }catch(_){}
   const elN=document.getElementById('userName');if(elN)elN.textContent=u.nombre||'—';
   const elR=document.getElementById('userRole');if(elR)elR.textContent=u.rol||'—';
   const elA=document.getElementById('userAvatar');
@@ -10158,17 +10165,9 @@ async function tbDoLogin(){
 }
 async function tbDoLogout(){if(_tbSb){await _tbSb.auth.signOut();_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();}}
 function tbUpdateUserBadge(){
-  let b=document.getElementById('tbUserBadge');
-  if(!b){
-    b=document.createElement('div');b.id='tbUserBadge';
-    b.style.cssText='position:fixed;top:8px;right:8px;display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(10,22,40,.85);color:#fff;border-radius:16px;font-size:12px;z-index:9998;cursor:pointer;backdrop-filter:blur(8px);';
-    b.onclick=()=>{if(confirm('¿Cerrar sesión?'))tbDoLogout();};
-    document.body.appendChild(b);
-  }
-  if(_tbUser){
-    const rolColor={admin:'#dc2626',supervisor:'#f59e0b',planillero:'#3b6fb8',operario:'#64748b'}[_tbUser.rol]||'#64748b';
-    b.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+rolColor+';"></span><span><strong>'+(_tbUser.nombre||'')+'</strong></span><span style="opacity:.7;font-size:10px;">⎋</span>';
-  }else if(b){b.innerHTML='';}
+  const b=document.getElementById('tbUserBadge');
+  if(b)b.remove();
+  if(typeof renderUserChip==='function')renderUserChip();
   if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
   if(typeof _idxApplyModuleRestrictions==='function')_idxApplyModuleRestrictions();
 }
