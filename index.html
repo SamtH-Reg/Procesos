@@ -2835,8 +2835,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>
     <span class="tab-nav-label">General</span>
   </button>
-  <div class="tabbar-divider"></div>
-  <a class="tab-nav" href="admin.html" target="_blank" rel="noopener" style="text-decoration:none;">
+  <div class="tabbar-divider" id="tabbarDividerAdmin" style="display:none" aria-hidden="true"></div>
+  <a class="tab-nav" id="tabNavAdmin" href="admin.html" target="_blank" rel="noopener" style="text-decoration:none;display:none;" title="Consola administración">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 2l3 6 6 .9-4.5 4.3L18 20l-6-3.2L6 20l1.5-6.8L3 8.9l6-.9z"/></svg>
     <span class="tab-nav-label">Admin</span>
   </a>
@@ -2879,8 +2879,37 @@ function renderUserChip(){
   const elR=document.getElementById('userRole');if(elR)elR.textContent=u.rol||'—';
   const elA=document.getElementById('userAvatar');
   if(elA){const ini=(u.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'?';elA.textContent=ini;}
+  if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
 }
 window.renderUserChip=renderUserChip;
+
+/** Rol efectivo en tablet: perfil Supabase (`_tbUser`) o, si no hay sesión, `DB.data.usuario` (catálogo local). */
+function _idxRolTabletNormalizado(){
+  try{
+    if(typeof _tbUser!=='undefined'&&_tbUser&&_tbUser.rol)return String(_tbUser.rol).trim().toLowerCase();
+  }catch(_){}
+  try{
+    const u=window.DB&&DB.data&&DB.data.usuario;
+    if(u&&u.rol)return String(u.rol).trim().toLowerCase();
+  }catch(_){}
+  return '';
+}
+/** Solo administradores ven el enlace a `admin.html` en la tab bar (código `admin` en perfil / usuario). */
+function _idxUsuarioEsAdminRolTablet(){
+  const r=_idxRolTabletNormalizado();
+  return r==='admin'||r==='administrador';
+}
+function _idxRefreshAdminTabNav(){
+  const show=_idxUsuarioEsAdminRolTablet();
+  const div=document.getElementById('tabbarDividerAdmin');
+  const a=document.getElementById('tabNavAdmin');
+  if(div)div.style.display=show?'':'none';
+  if(a)a.style.display=show?'flex':'none';
+}
+window._idxRefreshAdminTabNav=_idxRefreshAdminTabNav;
+
+/* Sesión tablet Supabase — declarar antes de `initRuntime()` (usa rol para tab Admin). */
+let _tbUser=null;
 
 function navTo(el,panelId){
   document.querySelectorAll('.tab-nav').forEach(n=>n.classList.remove('active'));
@@ -9186,6 +9215,7 @@ function refreshOperateUiAfterCatalogChange(){
   _safeRun(renderTurnos,'renderTurnos');
   _safeRun(renderPresets,'renderPresets');
   _safeRun(renderEquiposCfg,'renderEquiposCfg');
+  _safeRun(()=>{if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();},'adminTabNav');
 }
 function syncCatalogFromStorage(opts){
   opts=opts||{};
@@ -9851,7 +9881,6 @@ const _rtSaveOrig=rtSave;
 rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();_tbMaybeStoreArmadoBackupOnRtSave();TBSync.schedulePush();};
 
 /* ── AUTH TABLET ── */
-let _tbUser=null;
 function tbShowAuth(){document.getElementById('tbAuthOverlay').style.display='flex';}
 function tbHideAuth(){document.getElementById('tbAuthOverlay').style.display='none';}
 async function tbInitAuth(){
@@ -9870,13 +9899,14 @@ async function tbInitAuth(){
       else if(!sess&&!sessionApplied){tbShowAuth();}
       return;
     }
-    if(event==='SIGNED_OUT'){_tbUser=null;tbShowAuth();return;}
+    if(event==='SIGNED_OUT'){_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();tbShowAuth();return;}
     if(event==='SIGNED_IN'&&sess){
       await tbApplySession(sess);
       try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
       try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos tras login',e2);}
     }
   });
+  if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
 }
 async function tbApplySession(session){
   tbHideAuth();
@@ -9901,7 +9931,7 @@ async function tbDoLogin(){
     document.getElementById('tbAuthPass').value='';
   }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
 }
-async function tbDoLogout(){if(_tbSb){await _tbSb.auth.signOut();_tbUser=null;}}
+async function tbDoLogout(){if(_tbSb){await _tbSb.auth.signOut();_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();}}
 function tbUpdateUserBadge(){
   let b=document.getElementById('tbUserBadge');
   if(!b){
@@ -9913,7 +9943,8 @@ function tbUpdateUserBadge(){
   if(_tbUser){
     const rolColor={admin:'#dc2626',supervisor:'#f59e0b',planillero:'#3b6fb8',operario:'#64748b'}[_tbUser.rol]||'#64748b';
     b.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+rolColor+';"></span><span><strong>'+(_tbUser.nombre||'')+'</strong></span><span style="opacity:.7;font-size:10px;">⎋</span>';
-  }
+  }else if(b){b.innerHTML='';}
+  if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
 }
 
 // Arranca auth (reemplaza sync directo)
