@@ -2,9 +2,11 @@
 -- FRIOSUR · RPCs admin para usuarios (Auth) desde admin.html
 -- Aplicar con Supabase MCP (apply_migration) o SQL Editor.
 -- Requiere: supabase_auth.sql (user_profiles, is_admin), pgcrypto.
+-- En Supabase, pgcrypto suele vivir en schema `extensions`; sin él en search_path aparece:
+--   function gen_salt(unknown) does not exist
 -- ══════════════════════════════════════════════════════════════════
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- Helper interno: inserta en auth.users + identities y actualiza perfil.
 -- NO conceder EXECUTE a anon/authenticated; solo lo llaman funciones admin.
@@ -16,7 +18,7 @@ create or replace function public.crear_usuario_friosur(
 ) returns uuid
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 declare
   v_uid uuid;
@@ -47,7 +49,7 @@ begin
     'authenticated',
     'authenticated',
     trim(p_email),
-    crypt(p_password, gen_salt('bf')),
+    extensions.crypt(p_password::text, extensions.gen_salt('bf'::text)),
     now(), null,
     '', null,
     '', null,
@@ -92,7 +94,7 @@ create or replace function public.rpc_admin_create_user(
 ) returns uuid
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 declare
   v_email text := trim(p_email);
@@ -125,7 +127,7 @@ create or replace function public.rpc_admin_set_user_password(
 ) returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 begin
   if not public.is_admin() then
@@ -135,7 +137,7 @@ begin
     raise exception 'La contraseña debe tener al menos 6 caracteres';
   end if;
   update auth.users
-  set encrypted_password = crypt(trim(p_password), gen_salt('bf')),
+  set encrypted_password = extensions.crypt(trim(p_password), extensions.gen_salt('bf'::text)),
       updated_at = now()
   where id = p_user_id;
   if not found then
@@ -147,7 +149,7 @@ $$;
 create or replace function public.rpc_admin_delete_user(p_user_id uuid) returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 begin
   if not public.is_admin() then
