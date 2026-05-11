@@ -3495,6 +3495,32 @@ async function _raceMs(promise,ms,errMsg){
   try{return await Promise.race([promise.finally(()=>{clearTimeout(t);}),to]);}
   finally{clearTimeout(t);}
 }
+/**
+ * Login por HTTP directo (mismo endpoint que el SDK) + setSession.
+ * Evita bloqueos del cliente JS (p. ej. Web Locks) cuando signInWithPassword no termina.
+ */
+async function _sbPasswordGrantTokens(email,password){
+  const base=(document.getElementById('sbUrl').value.trim()||'').replace(/\/$/,'');
+  const key=(document.getElementById('sbKey').value.trim()||'');
+  if(!base||!key)throw new Error('Falta URL o clave anon de Supabase.');
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),50000);
+  try{
+    const r=await fetch(base+'/auth/v1/token?grant_type=password',{
+      method:'POST',
+      signal:ctrl.signal,
+      headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+key},
+      body:JSON.stringify({email,password})
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){
+      const m=(j.error_description||j.msg||j.message||j.hint||'')+'';
+      throw new Error(m.trim()||('Supabase respondió HTTP '+r.status));
+    }
+    if(!j.access_token||!j.refresh_token)throw new Error('Respuesta de acceso incompleta desde Supabase.');
+    return j;
+  }finally{clearTimeout(t);}
+}
 async function doLogin(){
   const rawEmail=document.getElementById('authEmail').value.trim();
   const email=rawEmail.toLowerCase();
@@ -3503,25 +3529,29 @@ async function doLogin(){
   msg.textContent='';
   if(!email||!pass){msg.style.color='#dc2626';msg.textContent='Ingresa email y contraseña';return;}
   if(!_sb){msg.style.color='#dc2626';msg.textContent='Supabase no conectado. Revisa URL y clave en la pestaña Supabase o esperá unos segundos y reintentá.';return;}
-  msg.style.color='#64748b';msg.textContent='Autenticando con Supabase…';
-  const netErr='La red tardó demasiado. Revisá conexión, URL del proyecto y firewall; probá «Borrar sesión guardada en este navegador».';
-  const lockHint=' Si queda colgado, cerrá otras pestañas con esta consola y pulsá «Borrar sesión guardada en este navegador».';
+  msg.style.color='#64748b';msg.textContent='Autenticando (conexión directa)…';
+  const netErr='No hubo respuesta a tiempo desde tu red hasta Supabase. Revisá URL del proyecto, clave anon, firewall o VPN; probá datos móviles o «Borrar sesión guardada en este navegador».';
   try{
-    const{error}=await _raceMs(_sb.auth.signInWithPassword({email,password:pass}),25000,netErr+lockHint);
-    if(error)throw error;
+    const tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),50000,netErr);
+    msg.textContent='Aplicando sesión…';
+    const{data:setData,error:setErr}=await _raceMs(_sb.auth.setSession({access_token:tokens.access_token,refresh_token:tokens.refresh_token}),20000,netErr);
+    if(setErr)throw setErr;
+    const session=setData&&setData.session;
+    if(!session)throw new Error('No se pudo fijar la sesión en el cliente.');
     document.getElementById('authPass').value='';
-    msg.textContent='Leyendo sesión…';
-    const{data:{session}}=await _raceMs(_sb.auth.getSession(),15000,netErr+lockHint);
-    if(!session)throw new Error('No se pudo leer la sesión tras el ingreso');
     msg.textContent='Cargando perfil (user_profiles)…';
-    const ok=await _raceMs(applySession(session),25000,netErr+lockHint);
+    const ok=await _raceMs(applySession(session),30000,netErr);
     if(!ok){
       if(!msg.textContent)msg.textContent='Acceso denegado a la consola admin.';
       return;
     }
     msg.style.color='#16a34a';msg.textContent='✓ Sesión admin iniciada';
     toast('Sesión iniciada','success');
-  }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
+  }catch(e){
+    let m=e&&e.message?String(e.message):'Credenciales incorrectas';
+    if(/aborted|AbortError/i.test(m))m=netErr;
+    msg.style.color='#dc2626';msg.textContent=m;
+  }
 }
 async function doLogout(){
   if(!_sb)return;
