@@ -3378,6 +3378,10 @@ async function bindSupabaseAuth(){
     if(msg){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
     showAuthOverlay();
     try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+    void _sbPingAuthServer().catch(e=>{
+      const m=document.getElementById('authMsg');
+      if(m){m.style.color='#b45309';m.textContent=(m.textContent?m.textContent+' ':'')+'Red: '+(e&&e.message?e.message:String(e));}
+    });
   }
 }
 /** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
@@ -3495,6 +3499,26 @@ async function _raceMs(promise,ms,errMsg){
   try{return await Promise.race([promise.finally(()=>{clearTimeout(t);}),to]);}
   finally{clearTimeout(t);}
 }
+/** Comprueba que el navegador pueda hablar con Auth (GET rápido). Falla en ~12 s si la red bloquea *.supabase.co. */
+async function _sbPingAuthServer(){
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)throw new Error('El navegador indica que estás sin conexión a Internet.');
+  const base=(document.getElementById('sbUrl').value.trim()||'').replace(/\/$/,'');
+  const key=(document.getElementById('sbKey').value.trim()||'');
+  if(!base||!key)throw new Error('Completá URL y clave anon en la pestaña Supabase.');
+  let host='';
+  try{host=new URL(base).host;}catch(_){throw new Error('La URL de Supabase no es válida (debe ser https://….supabase.co).');}
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),12000);
+  try{
+    const r=await fetch(base+'/auth/v1/health',{method:'GET',headers:{'apikey':key,'Authorization':'Bearer '+key},signal:ctrl.signal});
+    if(!r.ok)throw new Error('Auth respondió HTTP '+r.status+' para '+host+'. Revisá la clave anon.');
+    return true;
+  }catch(e){
+    const nm=e&&e.name?String(e.name):'';
+    if(nm==='AbortError')throw new Error('No se alcanzó '+host+' en 12 s (GET). Suele ser firewall, VPN, DNS o proxy que bloquea *.supabase.co. Probá otra red o pedí a IT desbloqueo HTTPS saliente a *.supabase.co.');
+    throw new Error((e&&e.message?String(e.message):'Sin conexión a Supabase')+' ('+host+').');
+  }finally{clearTimeout(t);}
+}
 /**
  * Login por HTTP directo (mismo endpoint que el SDK) + setSession.
  * Evita bloqueos del cliente JS (p. ej. Web Locks) cuando signInWithPassword no termina.
@@ -3504,7 +3528,7 @@ async function _sbPasswordGrantTokens(email,password){
   const key=(document.getElementById('sbKey').value.trim()||'');
   if(!base||!key)throw new Error('Falta URL o clave anon de Supabase.');
   const ctrl=new AbortController();
-  const t=setTimeout(()=>ctrl.abort(),50000);
+  const t=setTimeout(()=>ctrl.abort(),60000);
   try{
     const r=await fetch(base+'/auth/v1/token?grant_type=password',{
       method:'POST',
@@ -3529,18 +3553,31 @@ async function doLogin(){
   msg.textContent='';
   if(!email||!pass){msg.style.color='#dc2626';msg.textContent='Ingresa email y contraseña';return;}
   if(!_sb){msg.style.color='#dc2626';msg.textContent='Supabase no conectado. Revisa URL y clave en la pestaña Supabase o esperá unos segundos y reintentá.';return;}
-  msg.style.color='#64748b';msg.textContent='Autenticando (conexión directa)…';
-  const netErr='No hubo respuesta a tiempo desde tu red hasta Supabase. Revisá URL del proyecto, clave anon, firewall o VPN; probá datos móviles o «Borrar sesión guardada en este navegador».';
+  const errTok='No hubo respuesta al pedir token (POST /auth/v1/token). Suele ser la misma causa que bloquea *.supabase.co: firewall, antivirus, VPN o DNS. Probá otra red o hotspot.';
+  const errSess='El token llegó pero el navegador no pudo aplicar la sesión en el cliente (setSession). Cerrá otras pestañas de esta app y pulsá «Borrar sesión guardada en este navegador», luego reintentá.';
+  const errProf='La sesión está activa pero no hubo respuesta al leer user_profiles (REST). Revisá RLS y red.';
   try{
-    const tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),50000,netErr);
-    msg.textContent='Aplicando sesión…';
-    const{data:setData,error:setErr}=await _raceMs(_sb.auth.setSession({access_token:tokens.access_token,refresh_token:tokens.refresh_token}),20000,netErr);
+    msg.style.color='#64748b';msg.textContent='Comprobando red hasta Supabase…';
+    await _sbPingAuthServer();
+    msg.textContent='Autenticando (envío seguro de contraseña)…';
+    let tokens;
+    try{
+      tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),60000,errTok);
+    }catch(first){
+      if(String(first&&first.message||'').includes('No hubo respuesta al pedir token')){
+        msg.textContent='Reintentando token…';
+        await new Promise(r=>setTimeout(r,900));
+        tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),35000,errTok);
+      }else throw first;
+    }
+    msg.textContent='Aplicando sesión en el navegador…';
+    const{data:setData,error:setErr}=await _raceMs(_sb.auth.setSession({access_token:tokens.access_token,refresh_token:tokens.refresh_token}),45000,errSess);
     if(setErr)throw setErr;
     const session=setData&&setData.session;
     if(!session)throw new Error('No se pudo fijar la sesión en el cliente.');
     document.getElementById('authPass').value='';
     msg.textContent='Cargando perfil (user_profiles)…';
-    const ok=await _raceMs(applySession(session),30000,netErr);
+    const ok=await _raceMs(applySession(session),35000,errProf);
     if(!ok){
       if(!msg.textContent)msg.textContent='Acceso denegado a la consola admin.';
       return;
@@ -3548,9 +3585,7 @@ async function doLogin(){
     msg.style.color='#16a34a';msg.textContent='✓ Sesión admin iniciada';
     toast('Sesión iniciada','success');
   }catch(e){
-    let m=e&&e.message?String(e.message):'Credenciales incorrectas';
-    if(/aborted|AbortError/i.test(m))m=netErr;
-    msg.style.color='#dc2626';msg.textContent=m;
+    msg.style.color='#dc2626';msg.textContent=e&&e.message?String(e.message):'Credenciales incorrectas';
   }
 }
 async function doLogout(){
