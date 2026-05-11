@@ -273,13 +273,17 @@ body[data-theme="dark"] .ie-ex-row:nth-child(even){filter:brightness(1.04);}
 .ie-ex-range{display:block;margin-top:8px;font-size:12px;color:var(--text-2);line-height:1.55;}
 .ie-ex-range .ie-ex-dt{color:var(--brand);font-weight:800;font-family:var(--mono);font-size:12px;}
 body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
-/* Consola admin: sin sesión admin válida no se interactúa con la app (overlay encima). */
+/* Consola admin: sin sesión admin válida no se ve ni se usa la app (solo overlay). */
 body.admin-auth-lock{overflow:hidden;}
-body.admin-auth-lock .app{pointer-events:none;user-select:none;}
+body.admin-auth-lock .app{
+  visibility:hidden !important;
+  pointer-events:none;
+  user-select:none;
+}
 body.admin-auth-lock #authOverlay{pointer-events:auto;}
 </style>
 </head>
-<body>
+<body class="admin-auth-lock">
 
 <div class="app">
 
@@ -805,7 +809,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <div class="toast-container" id="toasts"></div>
 
 <!-- ═══ LOGIN MODAL ═══ -->
-<div id="authOverlay" style="display:none;position:fixed;inset:0;background:rgba(10,22,40,.92);z-index:2147483000;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:row;padding:16px;box-sizing:border-box;">
+<div id="authOverlay" style="display:flex;position:fixed;inset:0;background:#0a1628;z-index:2147483000;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:row;padding:16px;box-sizing:border-box;">
   <div style="background:#fff;border-radius:16px;padding:28px;width:min(400px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:calc(100vh - 32px);overflow:auto;">
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:28px;font-weight:800;color:#1e3a66;">🐟 FRIOSUR SpA</div>
@@ -821,7 +825,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <input id="authPass" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button type="button" onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
-    <div id="authMsg" style="margin-top:12px;font-size:12px;color:#dc2626;text-align:center;min-height:16px;"></div>
+    <div id="authMsg" style="margin-top:12px;font-size:12px;color:#64748b;text-align:center;min-height:16px;">Comprobando sesión…</div>
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
       <button type="button" class="btn ghost sm" style="width:100%;color:var(--err);" onclick="void forceSupabaseAuthReset()">Borrar sesión guardada en este navegador</button>
     </div>
@@ -3297,7 +3301,7 @@ function importExcel(e){
 let _sb=null;
 function loadSbCreds(){try{const c=JSON.parse(localStorage.getItem(SB_KEY))||{};if(!c.url&&SB_DEFAULT.url){return{...SB_DEFAULT,connected:true};}return c;}catch(e){return{...SB_DEFAULT,connected:true};}}
 function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
-(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();}catch(_){}});},300);})();
+(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))requestAnimationFrame(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();}catch(_){}});});})();
 
 /* ════════════ AUTH ════════════ */
 let _currentUser=null;
@@ -3371,7 +3375,7 @@ async function bindSupabaseAuth(){
     try{applyRolePermissions();}catch(_){}
     try{updateUserBadge();}catch(_){}
     const msg=document.getElementById('authMsg');
-    if(msg&&!msg.textContent){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
+    if(msg){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
     showAuthOverlay();
     try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   }
@@ -3484,21 +3488,30 @@ async function applySession(session){
   },400);
   return true;
 }
+/** Evita quedar en «Verificando…» indefinidamente si la red o Auth no responden. */
+async function _raceMs(promise,ms,errMsg){
+  let t;
+  const to=new Promise((_,rej)=>{t=setTimeout(()=>rej(new Error(errMsg||'Tiempo de espera agotado')),ms);});
+  try{return await Promise.race([promise.finally(()=>{clearTimeout(t);}),to]);}
+  finally{clearTimeout(t);}
+}
 async function doLogin(){
-  const email=document.getElementById('authEmail').value.trim();
+  const rawEmail=document.getElementById('authEmail').value.trim();
+  const email=rawEmail.toLowerCase();
   const pass=document.getElementById('authPass').value;
   const msg=document.getElementById('authMsg');
   msg.textContent='';
-  if(!email||!pass){msg.textContent='Ingresa email y contraseña';return;}
-  if(!_sb){msg.textContent='Supabase no conectado';return;}
+  if(!email||!pass){msg.style.color='#dc2626';msg.textContent='Ingresa email y contraseña';return;}
+  if(!_sb){msg.style.color='#dc2626';msg.textContent='Supabase no conectado. Revisa URL y clave en la pestaña Supabase o esperá unos segundos y reintentá.';return;}
   msg.style.color='#64748b';msg.textContent='Verificando…';
+  const netErr='La red tardó demasiado. Revisá conexión, URL del proyecto y firewall; probá «Borrar sesión guardada en este navegador».';
   try{
-    const{error}=await _sb.auth.signInWithPassword({email,password:pass});
+    const{error}=await _raceMs(_sb.auth.signInWithPassword({email,password:pass}),45000,netErr);
     if(error)throw error;
     document.getElementById('authPass').value='';
-    const{data:{session}}=await _sb.auth.getSession();
+    const{data:{session}}=await _raceMs(_sb.auth.getSession(),15000,netErr);
     if(!session)throw new Error('No se pudo leer la sesión tras el ingreso');
-    const ok=await applySession(session);
+    const ok=await _raceMs(applySession(session),30000,netErr);
     if(!ok){
       if(!msg.textContent)msg.textContent='Acceso denegado a la consola admin.';
       return;
@@ -3579,14 +3592,18 @@ function applyRolePermissions(){
 function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
 async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
-  if(!url||!key){toast('Ingresa URL y key','err');return;}
+  if(!url||!key){toast('Ingresa URL y key','err');const m=document.getElementById('authMsg');if(m){m.style.color='#dc2626';m.textContent='Completá URL y clave anon en Supabase para poder ingresar.';}return;}
   try{
     const authOpts={auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined}};
     _sb=window.supabase.createClient(url,key,authOpts);
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
     await bindSupabaseAuth();
   }
-  catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
+  catch(e){
+    toast('Error al conectar','err');sbLog('Error: '+e.message,false);
+    const m=document.getElementById('authMsg');
+    if(m){m.style.color='#dc2626';m.textContent='No se pudo crear el cliente Supabase: '+(e&&e.message?e.message:String(e));}
+  }
 }
 let _sbChannels=[];
 function sbSubscribeRealtime(){
