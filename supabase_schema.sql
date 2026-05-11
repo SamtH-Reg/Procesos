@@ -63,7 +63,8 @@ create table if not exists equipos(
 create table if not exists roles(
   id         bigint primary key,
   nombre     text not null,
-  permisos   jsonb not null default '{}'::jsonb,  -- {modulo: {read:bool, write:bool}}
+  codigo     text,  -- identificador estable (user_profiles.rol, trabajadores.rol); ej. admin, planillero, tunelero
+  permisos   jsonb not null default '{}'::jsonb,  -- flags tablet + admin (moldes, tuneles, dashboard, …)
   updated_at timestamptz default now()
 );
 
@@ -255,5 +256,6 @@ create policy "app_kv_update_authenticated" on app_kv for update to authenticate
 --   alter publication supabase_realtime add table trabajadores;
 --   alter publication supabase_realtime add table turnos;
 --   alter publication supabase_realtime add table equipos;
+--   alter publication supabase_realtime add table roles;
 -- Sin esto, la tablet sigue actualizando al volver a la pestaña (pull cada ~15s)
 -- y al abrir la app; el push en vivo requiere Realtime + RLS que permita SELECT al rol que use el cliente.

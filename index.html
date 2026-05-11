@@ -2734,8 +2734,9 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
         </button>
         <div style="flex:1;">
           <div class="section-title">Permisos y roles</div>
-          <div class="section-sub">Define qué puede hacer cada rol del sistema</div>
+          <div class="section-sub">Define qué puede hacer cada rol del sistema. El <strong>código</strong> debe coincidir con el campo <code>rol</code> del perfil en Supabase (<code>user_profiles</code>).</div>
         </div>
+        <button type="button" class="btn btn-primary" onclick="openIdxRolModal()" style="white-space:nowrap;">+ Nuevo rol</button>
       </div>
       <div id="rolesContainer" class="roles-matrix"></div>
     </div>
@@ -2818,7 +2819,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
      TAB BAR INFERIOR
      ═══════════════════════════════════════════════════════════ -->
 <nav class="tabbar" role="tablist">
-  <button class="tab-nav active" onclick="navTo(this,'panelMoldes')">
+  <button class="tab-nav active" id="tabnavMoldes" onclick="navTo(this,'panelMoldes')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18"/></svg>
     <span class="tab-nav-label">Moldes</span>
   </button>
@@ -2827,11 +2828,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
     <span class="tab-nav-label">Túneles</span>
     <span class="tab-count" id="tabnavTunelesBadge" style="display:none;">0</span>
   </button>
-  <button class="tab-nav tab-nav-pesaje" onclick="navTo(this,'panelPesaje')">
+  <button class="tab-nav tab-nav-pesaje" id="tabnavPesaje" onclick="navTo(this,'panelPesaje')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 6l7-3 7 3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/></svg>
     <span class="tab-nav-label">Pesaje</span>
   </button>
-  <button class="tab-nav tab-nav-general" onclick="navTo(this,'panelGeneral')">
+  <button class="tab-nav tab-nav-general" id="tabnavGeneral" onclick="navTo(this,'panelGeneral')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>
     <span class="tab-nav-label">General</span>
   </button>
@@ -2880,20 +2881,73 @@ function renderUserChip(){
   const elA=document.getElementById('userAvatar');
   if(elA){const ini=(u.nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'?';elA.textContent=ini;}
   if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+  if(typeof _idxApplyModuleRestrictions==='function')_idxApplyModuleRestrictions();
 }
 window.renderUserChip=renderUserChip;
 
 /** Rol efectivo en tablet: perfil Supabase (`_tbUser`) o, si no hay sesión, `DB.data.usuario` (catálogo local). */
 function _idxRolTabletNormalizado(){
+  let raw='';
   try{
-    if(typeof _tbUser!=='undefined'&&_tbUser&&_tbUser.rol)return String(_tbUser.rol).trim().toLowerCase();
+    if(typeof _tbUser!=='undefined'&&_tbUser&&_tbUser.rol)raw=String(_tbUser.rol).trim();
   }catch(_){}
-  try{
+  if(!raw)try{
     const u=window.DB&&DB.data&&DB.data.usuario;
-    if(u&&u.rol)return String(u.rol).trim().toLowerCase();
+    if(u&&u.rol)raw=String(u.rol).trim();
   }catch(_){}
-  return '';
+  const x=raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(x==='administrador'||x==='admin')return'admin';
+  return x;
 }
+/** Busca definición de rol en catálogo local (por codigo o nombre). */
+function _idxRolRecordForSession(){
+  const code=_idxRolTabletNormalizado();
+  if(!code)return null;
+  const roles=(window.DB&&DB.data&&Array.isArray(DB.data.roles))?DB.data.roles:[];
+  let r=roles.find(x=>String(x.codigo||'').trim().toLowerCase()===code);
+  if(!r)r=roles.find(x=>_slugCodigoRol(x.nombre)===code);
+  if(!r)r=roles.find(x=>String(x.nombre||'').trim().toLowerCase()===code);
+  return r||null;
+}
+/** Permiso de matriz (tablet). Sin sesión o sin fila de rol en catálogo → permisivo (no bloquear planta). */
+function _idxPerm(key){
+  try{
+    const r=_idxRolRecordForSession();
+    if(!r||!r.permisos)return true;
+    const a=String(r.codigo||'').trim().toLowerCase();
+    if(a==='admin'||a==='administrador')return true;
+    return !!r.permisos[key];
+  }catch(_){return true;}
+}
+function _idxFirstAllowedPanel(){
+  if(_idxPerm('moldes'))return'panelMoldes';
+  if(_idxPerm('tuneles'))return'panelTuneles';
+  if(_idxPerm('pesaje'))return'panelPesaje';
+  if(_idxPerm('general'))return'panelGeneral';
+  return'panelMoldes';
+}
+/** Oculta pestañas inferiores según permisos; si la vista activa queda prohibida, cambia a la primera permitida. */
+function _idxApplyModuleRestrictions(){
+  const pairs=[['tabnavMoldes','moldes'],['tabnavTuneles','tuneles'],['tabnavPesaje','pesaje'],['tabnavGeneral','general']];
+  pairs.forEach(([id,key])=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.style.display=_idxPerm(key)?'flex':'none';
+  });
+  if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+  const map={panelMoldes:'moldes',panelTuneles:'tuneles',panelPesaje:'pesaje',panelGeneral:'general'};
+  const cur=document.querySelector('.panel.active');
+  const curId=cur&&cur.id;
+  if(curId&&map[curId]&&!_idxPerm(map[curId])){
+    const first=_idxFirstAllowedPanel();
+    const tabMap={panelMoldes:'tabnavMoldes',panelTuneles:'tabnavTuneles',panelPesaje:'tabnavPesaje',panelGeneral:'tabnavGeneral'};
+    const tid=tabMap[first];
+    const tabBtn=tid?document.getElementById(tid):null;
+    if(tabBtn&&typeof navTo==='function')navTo(tabBtn,first);
+  }
+}
+window._idxPerm=_idxPerm;
+window._idxApplyModuleRestrictions=_idxApplyModuleRestrictions;
 /** Solo administradores ven el enlace a `admin.html` en la tab bar (código `admin` en perfil / usuario). */
 function _idxUsuarioEsAdminRolTablet(){
   const r=_idxRolTabletNormalizado();
@@ -2912,6 +2966,12 @@ window._idxRefreshAdminTabNav=_idxRefreshAdminTabNav;
 let _tbUser=null;
 
 function navTo(el,panelId){
+  const PANEL_PERM={panelMoldes:'moldes',panelTuneles:'tuneles',panelPesaje:'pesaje',panelGeneral:'general'};
+  const pk=PANEL_PERM[panelId];
+  if(pk&&typeof _idxPerm==='function'&&!_idxPerm(pk)){
+    showToast('No tienes acceso a este módulo','error');
+    return;
+  }
   document.querySelectorAll('.tab-nav').forEach(n=>n.classList.remove('active'));
   el.classList.add('active');
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -3090,6 +3150,12 @@ function mergePresetsWithLocalSnapshot(remoteRows){
 const THEME_KEY='friosur_theme';
 const CONTRAST_KEY='friosur_contrast';
 
+/** Slug estable para `roles.codigo` (debe alinear con `user_profiles.rol` en Supabase). */
+function _slugCodigoRol(nombre){
+  const s=String(nombre==null?'':nombre).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  return(s||'rol').slice(0,48);
+}
+
 const SEED={
   presets:[
     {id:1,nombre:'Filete Merluza 170-UP Bloque',destino:'POLONIA',calibre:'170-UP',especie:'MERLUZA DE COLA',tipo:'molde',formato:'BLOQUE',kgRef:7.5,horasTunel:9,horasPlaca:4.5,tempObj:-18,activo:true},
@@ -3136,10 +3202,11 @@ const SEED={
     {id:10,codigo:'P-06',nombre:'Placa 6',tipo:'placa',capacidad:120,unidad:'moldes',activo:true},
   ],
   roles:[
-    {id:1,nombre:'Administrador',codigo:'admin',permisos:{config:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:true,eliminar:true}},
-    {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{config:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:true,eliminar:true}},
-    {id:3,nombre:'Planillero',codigo:'planillero',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:true,pesaje:true,empaque:true,analisis:true,export:false,eliminar:true}},
-    {id:4,nombre:'Operario',codigo:'operario',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:false,pesaje:true,empaque:true,analisis:false,export:false,eliminar:false}},
+    {id:1,nombre:'Administrador',codigo:'admin',permisos:{config:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,moldes:true,tuneles:true,pesaje:true,general:true,empaque:true,analisis:true,export:true,eliminar:true}},
+    {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{config:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,moldes:true,tuneles:true,pesaje:true,general:true,empaque:true,analisis:true,export:true,eliminar:true}},
+    {id:3,nombre:'Planillero',codigo:'planillero',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:false,pesaje:true,general:false,empaque:false,analisis:false,export:false,eliminar:true}},
+    {id:4,nombre:'Operario',codigo:'operario',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:true,tuneles:false,pesaje:true,general:true,empaque:true,analisis:false,export:false,eliminar:false}},
+    {id:5,nombre:'Tunelero',codigo:'tunelero',permisos:{config:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,moldes:false,tuneles:true,pesaje:false,general:false,empaque:false,analisis:false,export:false,eliminar:false}},
   ],
 };
 
@@ -3187,6 +3254,22 @@ const DB={
         if(e.unidad==='kg'){e.unidad='moldes';e.capacidad=120;}
       }
     });
+    // Roles: codigo estable + permisos objeto; fusionar defaults de SEED por codigo
+    const seedRolByCod={};
+    (SEED.roles||[]).forEach(sr=>{if(sr&&sr.codigo)seedRolByCod[String(sr.codigo).toLowerCase()]=sr;});
+    (this.data.roles||[]).forEach(r=>{
+      if(!r||typeof r!=='object')return;
+      let p=r.permisos;
+      if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){p={};}}
+      if(!p||typeof p!=='object')p={};
+      r.permisos=p;
+      if(!r.codigo||!String(r.codigo).trim())r.codigo=_slugCodigoRol(r.nombre||'rol');
+      r.codigo=String(r.codigo).trim().toLowerCase();
+      const seed=seedRolByCod[r.codigo];
+      if(seed&&seed.permisos){
+        Object.keys(seed.permisos).forEach(k=>{if(r.permisos[k]===undefined)r.permisos[k]=seed.permisos[k];});
+      }
+    });
   },
   addDictValue(field,value){
     const v=String(value||'').trim();if(!v)return false;
@@ -3211,6 +3294,18 @@ const CFG_SUBS=['Presets','Trabajadores','Turnos','Equipos','Roles','Temas','IO'
 const CFG_RENDER={presets:renderPresets,trabajadores:renderTrabajadores,turnos:renderTurnos,equipos:renderEquiposCfg,roles:renderRoles,temas:renderTemas,io:()=>{}};
 
 function openCfg(key){
+  const permFor=k=>{
+    if(k==='presets')return'presets';
+    if(k==='trabajadores')return'trabajadores';
+    if(k==='turnos')return'turnos';
+    if(k==='equipos')return'equipos';
+    if(k==='roles')return'roles';
+    return'config';
+  };
+  if(typeof _idxPerm==='function'&&!_idxPerm(permFor(key))){
+    showToast('Sin permiso para abrir esta sección','error');
+    return;
+  }
   document.getElementById('cfgHome').classList.add('hidden');
   CFG_SUBS.forEach(s=>document.getElementById('cfgSub'+s).classList.add('hidden'));
   const map={presets:'Presets',trabajadores:'Trabajadores',turnos:'Turnos',equipos:'Equipos',roles:'Roles',temas:'Temas',io:'IO'};
@@ -3330,7 +3425,7 @@ function renderTrabajadores(){
   }
   const areaL={moldes:'Moldes',pesaje:'Pesaje',empaque:'Empaque'};
   const turnoL={dia:'Día',noche:'Noche'};
-  const rolL={operario:'Operario',planillero:'Planillero',supervisor:'Supervisor',admin:'Admin'};
+  const rolL={operario:'Operario',planillero:'Planillero',tunelero:'Tunelero',supervisor:'Supervisor',admin:'Admin'};
   const initials=n=>n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
   list.innerHTML=items.map(t=>{
     const ab=t.activo?'<span class="badge green">Activo</span>':'<span class="badge slate">Inactivo</span>';
@@ -3357,7 +3452,7 @@ function editTrabajador(id){
       <div class="fg-full"><label>Nombre completo</label><input id="f_nombre" value="${esc(t.nombre)}" placeholder="Marcela García Pérez"></div>
       <div><label>Área</label><select id="f_area"><option value="moldes" ${t.area==='moldes'?'selected':''}>Moldes</option><option value="pesaje" ${t.area==='pesaje'?'selected':''}>Pesaje</option><option value="empaque" ${t.area==='empaque'?'selected':''}>Empaque</option></select></div>
       <div><label>Turno</label><select id="f_turno">${DB.data.turnos.map(tu=>`<option value="${tu.codigo}" ${t.turno===tu.codigo?'selected':''}>${esc(tu.nombre)}</option>`).join('')}</select></div>
-      <div class="fg-full"><label>Rol</label><select id="f_rol"><option value="operario" ${t.rol==='operario'?'selected':''}>Operario</option><option value="planillero" ${t.rol==='planillero'?'selected':''}>Planillero</option><option value="supervisor" ${t.rol==='supervisor'?'selected':''}>Supervisor</option><option value="admin" ${t.rol==='admin'?'selected':''}>Administrador</option></select></div>
+      <div class="fg-full"><label>Rol</label><select id="f_rol"><option value="operario" ${t.rol==='operario'?'selected':''}>Operario</option><option value="planillero" ${t.rol==='planillero'?'selected':''}>Planillero</option><option value="tunelero" ${t.rol==='tunelero'?'selected':''}>Tunelero</option><option value="supervisor" ${t.rol==='supervisor'?'selected':''}>Supervisor</option><option value="admin" ${t.rol==='admin'?'selected':''}>Administrador</option></select></div>
       <div class="fg-full"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="f_activo" ${t.activo?'checked':''} style="width:18px;height:18px;accent-color:var(--brand);"> Trabajador activo</label></div>
     </div>`,()=>{
     const codigo=document.getElementById('f_codigo').value.trim().toUpperCase();
@@ -3500,9 +3595,10 @@ const PERM_DEFS=[
   {k:'turnos',l:'Gestionar Turnos'},
   {k:'equipos',l:'Gestionar Equipos'},
   {k:'roles',l:'Gestionar Roles'},
-  {k:'moldes',l:'Módulo Moldes'},
-  {k:'tuneles',l:'Módulo Túneles'},
-  {k:'pesaje',l:'Módulo Pesaje'},
+  {k:'moldes',l:'Módulo Moldes (pestaña inferior)'},
+  {k:'tuneles',l:'Módulo Túneles / placas (pestaña inferior)'},
+  {k:'pesaje',l:'Módulo Pesaje (pestaña inferior)'},
+  {k:'general',l:'Módulo Registro general (pestaña inferior)'},
   {k:'empaque',l:'Módulo Empaque'},
   {k:'analisis',l:'Módulo Análisis'},
   {k:'export',l:'Exportar datos'},
@@ -3510,23 +3606,51 @@ const PERM_DEFS=[
 ];
 function renderRoles(){
   const c=document.getElementById('rolesContainer');
+  const head=DB.data.roles.map(r=>{
+    const cc=r.codigo?`<div class="mono" style="font-size:10px;color:var(--text-3);font-weight:600;">${esc(r.codigo)}</div>`:'';
+    return`<th class="center" style="min-width:72px;vertical-align:bottom;"><div style="font-weight:700;">${esc(r.nombre)}</div>${cc}</th>`;
+  }).join('');
+  const delRow=`<tr><td style="font-weight:600;color:var(--text-3);">Eliminar rol</td>${DB.data.roles.map(r=>{
+    const isAd=r.codigo==='admin';
+    return`<td class="center" style="vertical-align:middle;">${isAd?'—':`<button type="button" class="btn btn-danger-outline sm" onclick="delIdxRol(${r.id})">Eliminar</button>`}</td>`;
+  }).join('')}</tr>`;
   c.innerHTML=`<table>
-    <thead><tr><th>Permiso</th>${DB.data.roles.map(r=>`<th class="center">${esc(r.nombre)}</th>`).join('')}</tr></thead>
+    <thead><tr><th>Permiso</th>${head}</tr></thead>
     <tbody>${PERM_DEFS.map(p=>`
       <tr><td style="font-weight:600;">${p.l}</td>
       ${DB.data.roles.map(r=>{
         const on=!!(r.permisos&&r.permisos[p.k]);
         const isAdmin=r.codigo==='admin';
         return `<td class="center"><input type="checkbox" ${on?'checked':''} ${isAdmin?'disabled':''} onchange="togglePerm(${r.id},'${p.k}',this.checked)"></td>`;
-      }).join('')}</tr>`).join('')}
+      }).join('')}</tr>`).join('')+delRow}
     </tbody></table>`;
+}
+function openIdxRolModal(){
+  const nombre=prompt('Nombre del rol (ej.: Tunelero):');if(!nombre||!String(nombre).trim())return;
+  const sug=_slugCodigoRol(nombre);
+  const codRaw=prompt('Código interno (sin espacios). Debe ser el mismo valor que `rol` en Supabase user_profiles:',sug);
+  if(codRaw===null)return;
+  const codigo=_slugCodigoRol(codRaw||nombre);
+  if((DB.data.roles||[]).some(r=>String(r.codigo||'').toLowerCase()===codigo)){
+    showToast('Ya existe un rol con ese código','error');
+    return;
+  }
+  DB.data.roles.push({id:Date.now(),nombre:String(nombre).trim(),codigo,permisos:{}});
+  DB.save();renderRoles();showToast('Rol creado: marca permisos en la tabla','success');
+}
+function delIdxRol(id){
+  const r=DB.data.roles.find(x=>x.id===id);if(!r)return;
+  if(r.codigo==='admin'){showToast('No se puede eliminar el rol administrador','error');return;}
+  if(!confirm('¿Eliminar el rol «'+r.nombre+'»? Los usuarios con ese código dejarán de coincidir hasta que ajustes Supabase.'))return;
+  DB.data.roles=DB.data.roles.filter(x=>x.id!==id);
+  DB.save();renderRoles();showToast('Rol eliminado','success');
 }
 function togglePerm(roleId,key,val){
   const r=DB.data.roles.find(x=>x.id===roleId);if(!r)return;
   if(!r.permisos)r.permisos={};r.permisos[key]=val;
   DB.save();showToast('Permiso actualizado','success');
 }
-window.togglePerm=togglePerm;window.renderRoles=renderRoles;
+window.togglePerm=togglePerm;window.renderRoles=renderRoles;window.openIdxRolModal=openIdxRolModal;window.delIdxRol=delIdxRol;
 
 /* ═══ TEMAS ═══════════════════════════════════════════════════ */
 const THEMES=[
@@ -4805,6 +4929,7 @@ function renderMoldesTable(){
     tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-3);">'+(RT.moldes.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde la pestaña "Registrar".')+'</td></tr>';
     return;
   }
+  const canDel=typeof _idxPerm!=='function'||_idxPerm('eliminar');
   tb.innerHTML=rows.map(r=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
     const pendBadge=pend===0?'<span class="badge slate" style="font-size:10px;">Cargado</span>':pend<r.cant?`<span class="badge amber" style="font-size:10px;">${pend}/${r.cant} pend.</span>`:'';
@@ -4821,7 +4946,7 @@ function renderMoldesTable(){
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
     <td style="white-space:nowrap;">
       <button class="row-icon-btn" onclick="editMolde(${r.id})" aria-label="Editar" style="margin-right:4px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-      <button class="row-icon-btn danger" onclick="delMolde(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+      ${canDel?`<button class="row-icon-btn danger" onclick="delMolde(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`:''}
     </td>
   </tr>`;}).join('');
 }
@@ -4873,6 +4998,7 @@ function saveEditMolde(id){
 }
 window.editMolde=editMolde;window.closeEditMolde=closeEditMolde;window.saveEditMolde=saveEditMolde;
 function delMolde(id){
+  if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
   if(!confirm('¿Eliminar este registro?'))return;
   RT.moldes=RT.moldes.filter(r=>r.id!==id);rtSave();renderMoldesTable();renderPorCargar();renderAnalisis();showToast('Registro eliminado','success');
 }
@@ -5057,6 +5183,7 @@ function renderGeneralesTable(){
     return;
   }
   const tipoL={pallet:'Pallet',carro:'Carro',castillo:'Castillo'};
+  const canDelG=typeof _idxPerm!=='function'||_idxPerm('eliminar');
   tb.innerHTML=rows.map(r=>{
     const fd=r.fecha?String(r.fecha).split('-').reverse().join('/'):'—';
     return`<tr>
@@ -5068,7 +5195,7 @@ function renderGeneralesTable(){
     <td class="num">${r.cant}</td>
     <td class="num">${(+r.kg||0).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
-    <td><button class="row-icon-btn danger" onclick="delGeneral(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td>
+    <td>${canDelG?`<button class="row-icon-btn danger" onclick="delGeneral(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`:''}</td>
   </tr>`;
   }).join('');
 }
@@ -5152,6 +5279,7 @@ function renderGResumen(){
   if(sub)sub.textContent=out.length+' productos · '+rows.length+' registros · '+fmt(totGrand)+' u · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub;
 }
 function delGeneral(id){
+  if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
   if(!confirm('¿Eliminar este registro general?'))return;
   RT.generales=RT.generales.filter(r=>r.id!==id);rtSave();
   renderGeneralesTable();
@@ -6354,6 +6482,7 @@ function renderPesajeTable(){
     tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.</td></tr>';
     return;
   }
+  const canDelP=typeof _idxPerm!=='function'||_idxPerm('eliminar');
   tb.innerHTML=rows.map(r=>`<tr>
     <td class="mono">${esc(r.hora)}</td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
@@ -6364,11 +6493,12 @@ function renderPesajeTable(){
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
     <td style="white-space:nowrap;">
       <button class="btn ghost sm icon" type="button" title="Editar" onclick="editPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-      <button class="btn ghost sm icon" type="button" title="Eliminar" onclick="delPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+      ${canDelP?`<button class="btn ghost sm icon" type="button" title="Eliminar" onclick="delPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`:''}
     </td>
   </tr>`).join('');
 }
 function delPesaje(id){
+  if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   if(!confirm('¿Eliminar pesaje de '+r.nombre+' ('+r.kg+' kg)?'))return;
@@ -9216,6 +9346,7 @@ function refreshOperateUiAfterCatalogChange(){
   _safeRun(renderPresets,'renderPresets');
   _safeRun(renderEquiposCfg,'renderEquiposCfg');
   _safeRun(()=>{if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();},'adminTabNav');
+  _safeRun(()=>{if(typeof _idxApplyModuleRestrictions==='function')_idxApplyModuleRestrictions();},'moduleRestrictions');
 }
 function syncCatalogFromStorage(opts){
   opts=opts||{};
@@ -9541,6 +9672,17 @@ async function _tbSbDeleteArmadoLineas(sb,delRows){
   return null;
 }
 
+/** Fila `roles` desde Supabase → objeto catálogo tablet (permisos jsonb + codigo). */
+function _tbMapRoleFromSb(row){
+  if(!row||typeof row!=='object')return null;
+  let p=row.permisos;
+  if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){p={};}}
+  if(!p||typeof p!=='object')p={};
+  const nombre=String(row.nombre||'').trim()||'Rol';
+  const codigo=String(row.codigo||'').trim().toLowerCase()||_slugCodigoRol(nombre);
+  return{id:+row.id,nombre,codigo,permisos:p};
+}
+
 const TBSync={
   _pushLastAt:0,
   _pushMinGapMs:6000,
@@ -9567,13 +9709,16 @@ const TBSync={
   async pullCatalogs(){
     if(!_tbSb)return;
     try{
-      const tables=['presets','trabajadores','turnos','equipos'];
+      const tables=['presets','trabajadores','turnos','equipos','roles'];
       for(const t of tables){
         const{data,error}=await _tbSb.from(t).select('*');
         if(error){console.warn('[sb pull]',t,error.message);continue;}
         if(data&&data.length){
           if(t==='presets')DB.data.presets=mergePresetsWithLocalSnapshot(data);
-          else DB.data[t]=data;
+          else if(t==='roles'){
+            const mapped=data.map(_tbMapRoleFromSb).filter(Boolean);
+            if(mapped.length)DB.data.roles=mapped;
+          }else DB.data[t]=data;
         }
       }
       DB.save();
@@ -9788,6 +9933,7 @@ const TBSync={
       .on('postgres_changes',{event:'*',schema:'public',table:'trabajadores'},bumpRemoteCatalog)
       .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
       .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
+      .on('postgres_changes',{event:'*',schema:'public',table:'roles'},bumpRemoteCatalog)
       .subscribe();
     /* moldes + pesajes: un solo canal Realtime (menos suscripciones WS que dos canales).
        Registro general (generales) no usa Realtime: solo REST push/pull → ahorro de mensajes.
@@ -9945,6 +10091,7 @@ function tbUpdateUserBadge(){
     b.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+rolColor+';"></span><span><strong>'+(_tbUser.nombre||'')+'</strong></span><span style="opacity:.7;font-size:10px;">⎋</span>';
   }else if(b){b.innerHTML='';}
   if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+  if(typeof _idxApplyModuleRestrictions==='function')_idxApplyModuleRestrictions();
 }
 
 // Arranca auth (reemplaza sync directo)

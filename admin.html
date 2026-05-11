@@ -649,7 +649,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
     <div><h1 class="page-title">Permisos y roles</h1><div class="page-sub">Matriz de permisos · quién puede ver o editar cada módulo</div></div>
     <button class="btn" onclick="openRolModal()">+ Nuevo rol</button>
   </div>
-  <div class="tbl-wrap"><table id="tbRoles"></table></div>
+  <div class="tbl-wrap" id="rolesTablesHost"></div>
 </div>
 
 <!-- ═══ IMPORT / EXPORT ═══ -->
@@ -834,6 +834,10 @@ function sbMsgEconomyOnChange(){
 }
 const SB_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function _slugCodigoRol(nombre){
+  const s=String(nombre==null?'':nombre).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  return(s||'rol').slice(0,48);
+}
 function inferUsoEquipo(p){
   if(!p||typeof p!=='object')return'ambos';
   const u=String(p.usoEquipo||p.uso_equipo||'').toLowerCase();
@@ -853,9 +857,17 @@ const DB={data:null,
     const d=this.data;
     d.presets=d.presets||[];d.trabajadores=d.trabajadores||[];d.turnos=d.turnos||[];d.equipos=d.equipos||[];
     d.presets.forEach(p=>{p.usoEquipo=inferUsoEquipo(p);});
-    d.roles=d.roles||[{id:1,nombre:'Admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true}},
-                     {id:2,nombre:'Supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false}},
-                     {id:3,nombre:'Operario',permisos:{dashboard:true,reportes:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,import:false,supabase:false,ajustes:false}}];
+    d.roles=d.roles||[{id:1,nombre:'Admin',codigo:'admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
+                     {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
+                     {id:3,nombre:'Operario',codigo:'operario',permisos:{dashboard:true,reportes:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:false,pesaje:true,general:true,eliminar:false}}];
+    (d.roles||[]).forEach(r=>{
+      if(!r||typeof r!=='object')return;
+      let p=r.permisos;
+      if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){p={};}}
+      r.permisos=p&&typeof p==='object'?p:{};
+      if(!r.codigo||!String(r.codigo).trim())r.codigo=_slugCodigoRol(r.nombre||'rol');
+      r.codigo=String(r.codigo).trim().toLowerCase();
+    });
     d.usuario=d.usuario||{nombre:'C. Rodríguez',rol:'Admin'};
   },
   _seed(){return {
@@ -2987,22 +2999,39 @@ function delEq(cod){if(!confirm('¿Eliminar equipo?'))return;DB.data.equipos=DB.
 
 /* ════════════ ROLES ════════════ */
 const MODULES=['dashboard','reportes','analisis','presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes'];
+const TABLET_TAB_KEYS=['moldes','tuneles','pesaje','general','eliminar'];
 function renderRoles(){
-  const tb=document.getElementById('tbRoles');
-  tb.innerHTML=`<thead><tr><th>Rol</th>${MODULES.map(m=>`<th style="text-align:center;font-size:10px;">${esc(m)}</th>`).join('')}<th></th></tr></thead><tbody>
+  const host=document.getElementById('rolesTablesHost');if(!host)return;
+  const head1=`<table style="width:100%;border-collapse:collapse;margin-bottom:8px;"><thead><tr><th>Rol</th>${MODULES.map(m=>`<th style="text-align:center;font-size:10px;">${esc(m)}</th>`).join('')}<th></th></tr></thead><tbody>
   ${DB.data.roles.map(r=>`<tr>
-    <td><strong>${esc(r.nombre)}</strong></td>
+    <td><strong>${esc(r.nombre)}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(r.codigo||'')}</div></td>
     ${MODULES.map(m=>`<td style="text-align:center;"><input type="checkbox" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
     <td><button class="btn sm ghost" onclick="delRol(${r.id})">✕</button></td>
   </tr>`).join('')}
-  </tbody>`;
+  </tbody></table>`;
+  const head2=`<table style="margin-top:20px;width:100%;border-collapse:collapse;"><caption style="caption-side:top;text-align:left;font-weight:700;padding:8px 0;color:var(--text-2);">Vista tablet (index) — pestañas y eliminar</caption>
+  <thead><tr><th>Rol</th>${TABLET_TAB_KEYS.map(m=>`<th style="text-align:center;font-size:10px;">${esc(m)}</th>`).join('')}</tr></thead><tbody>
+  ${DB.data.roles.map(r=>`<tr>
+    <td><strong>${esc(r.nombre)}</strong></td>
+    ${TABLET_TAB_KEYS.map(m=>`<td style="text-align:center;"><input type="checkbox" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
+  </tr>`).join('')}
+  </tbody></table>`;
+  host.innerHTML=head1+head2;
 }
 function togglePerm(rid,mod,val){const r=DB.data.roles.find(x=>x.id===rid);if(!r)return;r.permisos=r.permisos||{};r.permisos[mod]=val;DB.save();toast('Permiso actualizado','info');}
 function openRolModal(){
-  const n=prompt('Nombre del nuevo rol:');if(!n)return;
-  DB.data.roles.push({id:Date.now(),nombre:n,permisos:{}});DB.save();renderRoles();
+  const n=prompt('Nombre del nuevo rol:');if(!n||!String(n).trim())return;
+  const c=prompt('Código interno (minúsculas; debe coincidir con user_profiles.rol en Supabase):',_slugCodigoRol(n));
+  if(c===null)return;
+  const codigo=_slugCodigoRol(c||n);
+  if((DB.data.roles||[]).some(r=>String(r.codigo||'').toLowerCase()===codigo)){toast('Ya existe un rol con ese código','err');return;}
+  DB.data.roles.push({id:Date.now(),nombre:String(n).trim(),codigo,permisos:{}});DB.save();renderRoles();toast('Rol creado','success');
 }
-function delRol(id){if(!confirm('¿Eliminar rol?'))return;DB.data.roles=DB.data.roles.filter(r=>r.id!==id);DB.save();renderRoles();}
+function delRol(id){
+  const r=DB.data.roles.find(x=>x.id===id);
+  if(r&&String(r.codigo||'')==='admin'){toast('No se puede eliminar el rol admin','err');return;}
+  if(!confirm('¿Eliminar rol?'))return;DB.data.roles=DB.data.roles.filter(x=>x.id!==id);DB.save();renderRoles();
+}
 
 /* ════════════ IMPORT / EXPORT ════════════ */
 function exportJSON(){
@@ -3419,8 +3448,15 @@ const SB_MAP={
     in:r=>r
   },
   roles:{
-    out:r=>({id:r.id,nombre:r.nombre,permisos:r.permisos||{}}),
-    in:r=>r
+    out:r=>({id:r.id,nombre:r.nombre,codigo:(r.codigo!=null&&String(r.codigo).trim())?String(r.codigo).trim().toLowerCase():_slugCodigoRol(r.nombre),permisos:r.permisos||{}}),
+    in:r=>{
+      let p=r.permisos;
+      if(typeof p==='string'){try{p=JSON.parse(p);}catch(_){p={};}}
+      if(!p||typeof p!=='object')p={};
+      const nombre=String(r.nombre||'').trim()||'Rol';
+      const codigo=String(r.codigo||'').trim().toLowerCase()||_slugCodigoRol(nombre);
+      return{id:r.id,nombre,codigo,permisos:p};
+    }
   },
   moldes:{
     out:r=>({id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,producto:r.producto||null,preset_id:r.presetId??r.preset_id??null,destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,cant:r.cant??null,pendiente:r.pendiente??null,kg:r.kg??null,guia:r.guia||null,fecha:r.fecha||_today()}),
