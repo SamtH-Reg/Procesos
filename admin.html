@@ -3554,8 +3554,6 @@ async function doLogin(){
   if(!email||!pass){msg.style.color='#dc2626';msg.textContent='Ingresa email y contraseña';return;}
   if(!_sb){msg.style.color='#dc2626';msg.textContent='Supabase no conectado. Revisa URL y clave en la pestaña Supabase o esperá unos segundos y reintentá.';return;}
   const errTok='No hubo respuesta al pedir token (POST /auth/v1/token). Suele ser la misma causa que bloquea *.supabase.co: firewall, antivirus, VPN o DNS. Probá otra red o hotspot.';
-  const errSess='El token llegó pero el navegador no pudo aplicar la sesión en el cliente (setSession). Cerrá otras pestañas de esta app y pulsá «Borrar sesión guardada en este navegador», luego reintentá.';
-  const errProf='La sesión está activa pero no hubo respuesta al leer user_profiles (REST). Revisá RLS y red.';
   try{
     msg.style.color='#64748b';msg.textContent='Comprobando red hasta Supabase…';
     await _sbPingAuthServer();
@@ -3570,18 +3568,10 @@ async function doLogin(){
         tokens=await _raceMs(_sbPasswordGrantTokens(email,pass),35000,errTok);
       }else throw first;
     }
-    msg.textContent='Aplicando sesión en el navegador…';
-    const{data:setData,error:setErr}=await _raceMs(_sb.auth.setSession({access_token:tokens.access_token,refresh_token:tokens.refresh_token}),45000,errSess);
-    if(setErr)throw setErr;
-    const session=setData&&setData.session;
-    if(!session)throw new Error('No se pudo fijar la sesión en el cliente.');
+    msg.textContent='Guardando sesión y reconectando…';
+    await _raceMs(_sbAdminPersistTokensAndReconnect(tokens),60000,'La reconexión tras login tardó demasiado. Probá recargar la página (F5) e intentar de nuevo.');
     document.getElementById('authPass').value='';
-    msg.textContent='Cargando perfil (user_profiles)…';
-    const ok=await _raceMs(applySession(session),35000,errProf);
-    if(!ok){
-      if(!msg.textContent)msg.textContent='Acceso denegado a la consola admin.';
-      return;
-    }
+    if(!isSbAdmin())return;
     msg.style.color='#16a34a';msg.textContent='✓ Sesión admin iniciada';
     toast('Sesión iniciada','success');
   }catch(e){
@@ -3669,6 +3659,37 @@ function _sbAdminAuthStorageKey(urlStr){
   }catch(_){
     return 'sb-friosur-admin-auth-token';
   }
+}
+/**
+ * Graba la sesión en localStorage (formato GoTrue sin userStorage) y recrea el cliente.
+ * Evita setSession(), que en algunos navegadores queda colgado aunque el token por fetch sea válido.
+ */
+async function _sbAdminPersistTokensAndReconnect(tokens){
+  const url=document.getElementById('sbUrl').value.trim();
+  const sk=_sbAdminAuthStorageKey(url);
+  const now=Math.floor(Date.now()/1000);
+  const expIn=Math.max(60,Number(tokens.expires_in)||3600);
+  const expAt=tokens.expires_at!=null&&!isNaN(Number(tokens.expires_at))?Number(tokens.expires_at):now+expIn;
+  if(!tokens.user)throw new Error('Respuesta de login sin datos de usuario.');
+  const session={
+    access_token:tokens.access_token,
+    refresh_token:tokens.refresh_token,
+    expires_in:expIn,
+    expires_at:expAt,
+    token_type:tokens.token_type||'bearer',
+    user:tokens.user
+  };
+  try{
+    localStorage.setItem(sk,JSON.stringify(session));
+    localStorage.removeItem(sk+'-user');
+    localStorage.removeItem(sk+'-code-verifier');
+  }catch(err){throw new Error('No se pudo guardar la sesión: '+(err&&err.message?err.message:String(err)));}
+  try{if(_authSub){_authSub.unsubscribe();}}catch(_e){}
+  _authSub=null;
+  _sb=null;
+  _currentUser=null;
+  await connectSupabase(true);
+  if(!_sb)throw new Error('No se pudo reconectar el cliente Supabase.');
 }
 async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
