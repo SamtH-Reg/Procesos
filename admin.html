@@ -3658,6 +3658,18 @@ function applyRolePermissions(){
   });
 }
 function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
+/**
+ * Clave Auth en localStorage distinta a index.html (tablet). Si ambas usan la default `sb-<ref>-auth-token`,
+ * comparten Web Lock (`lock:…`) y setSession/getSession pueden colgar entre pestañas.
+ */
+function _sbAdminAuthStorageKey(urlStr){
+  try{
+    const u=new URL(String(urlStr||'').trim());
+    return 'sb-'+u.hostname.split('.')[0]+'-auth-token-admin';
+  }catch(_){
+    return 'sb-friosur-admin-auth-token';
+  }
+}
 async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');const m=document.getElementById('authMsg');if(m){m.style.color='#dc2626';m.textContent='Completá URL y clave anon en Supabase para poder ingresar.';}return;}
@@ -3667,7 +3679,8 @@ async function connectSupabase(silent){
       autoRefreshToken:true,
       detectSessionInUrl:false,
       storage:typeof localStorage!=='undefined'?localStorage:undefined,
-      /** Evita navigator.locks: otra pestaña (p. ej. index/tablet) puede dejar setSession/getSession colgados con el mismo storageKey. */
+      storageKey:_sbAdminAuthStorageKey(url),
+      /** Refuerzo: sin Web Locks aunque otra pestaña admin comparta el mismo storageKey. */
       lock:async(_name,_acquireTimeout,fn)=>await fn()
     }};
     _sb=window.supabase.createClient(url,key,authOpts);
