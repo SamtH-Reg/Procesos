@@ -5799,6 +5799,7 @@ function cargarDesdeConteo(presetId){
     rt.estado='cargando';rt.horasTotal=Math.max(rt.horasTotal||0,horasTotal);
   }
   rtSave();openEqModal(_eqModalCode);renderEquipos();renderMoldesTable();renderPorCargar();renderAnalisis();
+  try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}
   showToast('Cargados '+res.consumido+' moldes desde conteo','success');
 }
 window.cargarDesdeConteo=cargarDesdeConteo;
@@ -5822,6 +5823,7 @@ function removeEqItem(idx){
   rt.items.splice(idx,1);
   if(!rt.items.length){rt.estado='libre';rt.horasTotal=0;}
   rtSave();openEqModal(_eqModalCode);renderEquipos();renderMoldesTable();renderPorCargar();renderAnalisis();
+  if(it&&it.fuente==='conteo'&&it.presetId){try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}}
 }
 function iniciarCongelacion(){
   const rt=getEqRT(_eqModalCode);
@@ -9865,7 +9867,7 @@ const TBSync={
         codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
         producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
         destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,
-        cant:r.cant||null,pendiente:r.pendiente||null,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
+        cant:r.cant!=null?r.cant:null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
         fecha:r.fecha||today
       };
     });
