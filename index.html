@@ -261,6 +261,7 @@ input,select,textarea{font-family:inherit;}
   background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.08);
   border-radius:24px;
+  cursor:pointer;
 }
 .user-avatar{
   width:32px;height:32px;border-radius:50%;
@@ -1618,7 +1619,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
     <button class="top-btn" title="Buscar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
     </button>
-    <div class="user-chip" id="userChip">
+    <div class="user-chip" id="userChip" role="button" tabindex="0" title="Usuario · clic para cerrar sesión (Supabase)" onclick="idxUserChipClick()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();idxUserChipClick();}">
       <div class="user-avatar" id="userAvatar">CR</div>
       <div class="user-info">
         <div class="user-name" id="userName">C. Rodríguez</div>
@@ -10164,6 +10165,12 @@ async function tbDoLogin(){
   }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
 }
 async function tbDoLogout(){if(_tbSb){await _tbSb.auth.signOut();_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();}}
+function idxUserChipClick(){
+  try{
+    if(typeof _tbUser!=='undefined'&&_tbUser){if(confirm('¿Cerrar sesión?'))tbDoLogout();}
+  }catch(_){}
+}
+window.idxUserChipClick=idxUserChipClick;
 function tbUpdateUserBadge(){
   const b=document.getElementById('tbUserBadge');
   if(b)b.remove();
