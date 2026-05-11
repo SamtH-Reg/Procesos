@@ -285,6 +285,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
     <div class="chip" id="dateChip">—</div>
   </div>
   <div class="topbar-right">
+    <button class="top-btn" type="button" id="btnAuthLogin" onclick="onTopbarAuthClick()" title="Iniciar o cerrar sesión con Supabase Auth">Ingresar</button>
     <button class="top-btn" type="button" onclick="openSupabaseModal()" title="URL, clave API y estado de conexión">Supabase</button>
     <button class="top-btn primary" onclick="tabletLink()">Abrir Tablet</button>
   </div>
@@ -791,8 +792,8 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
 <div class="toast-container" id="toasts"></div>
 
 <!-- ═══ LOGIN MODAL ═══ -->
-<div id="authOverlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:99999;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;">
-  <div style="background:#fff;border-radius:16px;padding:32px;width:min(380px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.5);">
+<div id="authOverlay" style="display:none;position:fixed;inset:0;background:rgba(10,22,40,.92);z-index:2147483000;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:row;padding:16px;box-sizing:border-box;">
+  <div style="background:#fff;border-radius:16px;padding:28px;width:min(400px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:calc(100vh - 32px);overflow:auto;">
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:28px;font-weight:800;color:#1e3a66;">🐟 FRIOSUR SpA</div>
       <div style="font-size:13px;color:#64748b;margin-top:4px;">Control de Producción · Admin</div>
@@ -805,8 +806,12 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
       <label style="font-size:12px;font-weight:600;color:#334155;display:block;margin-bottom:4px;">Contraseña</label>
       <input id="authPass" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
-    <button onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
+    <button type="button" onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
     <div id="authMsg" style="margin-top:12px;font-size:12px;color:#dc2626;text-align:center;min-height:16px;"></div>
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
+      <button type="button" class="btn ghost sm" style="width:100%;" onclick="hideAuthOverlay()">Cerrar panel (seguir sin cuenta en la nube)</button>
+      <button type="button" class="btn ghost sm" style="width:100%;color:var(--err);" onclick="void forceSupabaseAuthReset()">Borrar sesión guardada en este navegador</button>
+    </div>
     <div style="margin-top:16px;font-size:11px;color:#94a3b8;text-align:center;">
       ¿Olvidaste tu contraseña? Contacta al administrador.
     </div>
@@ -3033,13 +3038,14 @@ function renderRoles(){
         <button type="button" class="btn sm" onclick="openAuthUserCreateModal()">+ Nuevo usuario</button>
       </div>
     </div>
-    <div id="authUsersMount" class="mono" style="font-size:13px;">…</div>
+    <div id="authUsersMount" class="mono" style="font-size:13px;">Cargando usuarios…</div>
   </div>`;
   host.innerHTML=head2;
   void refreshAuthUsersList();
 }
 async function refreshAuthUsersList(){
   const mount=document.getElementById('authUsersMount');if(!mount)return;
+  try{
   if(!_sb){mount.innerHTML='<span style="color:var(--text-3);">Conectá Supabase para ver usuarios.</span>';return;}
   if(!_currentUser){
     try{
@@ -3048,7 +3054,7 @@ async function refreshAuthUsersList(){
     }catch(_){}
   }
   if(!_currentUser){
-    mount.innerHTML='<span style="color:var(--text-3);">No hay sesión de usuario: usá el formulario de ingreso (overlay) o el chip arriba a la derecha <strong>Sin sesión · clic para ingresar</strong>. Después pulsá <strong>Reintentar</strong>.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
+    mount.innerHTML='<span style="color:var(--text-3);">No hay sesión: pulsá <strong>Ingresar</strong> en la barra superior, completá email y contraseña, y luego <strong>Reintentar</strong>. Si el ingreso falla siempre, en el panel usá <strong>Borrar sesión guardada en este navegador</strong>.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
     return;
   }
   if(!isSbAdmin()){mount.innerHTML='<span style="color:var(--text-3);">Tu rol en la nube es «<strong>'+esc(_currentUser.rol)+'</strong>»; hace falta <strong>admin</strong> en <span class="mono">user_profiles.rol</span> (exacto o equivalente normalizado). Si ya sos admin y no ves la lista, pulsá <strong>Reintentar</strong> tras iniciar sesión.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';return;}
@@ -3085,12 +3091,15 @@ async function refreshAuthUsersList(){
     </tbody></table>`;
     if(!rows.length)mount.innerHTML='<span style="color:var(--text-3);">No hay filas en user_profiles.</span>';
   }catch(e){
-    mount.innerHTML='<span style="color:var(--err);">'+esc(e.message||String(e))+'</span>';
+    mount.innerHTML='<span style="color:var(--err);">'+esc(e.message||String(e))+'</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
+  }
+  }catch(err){
+    mount.innerHTML='<span style="color:var(--err);">'+esc(err&&err.message?err.message:String(err))+'</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
   }
 }
 function openAuthUserCreateModal(){
   if(!_sb){toast('Conectá Supabase','err');return;}
-  if(!_currentUser){toast('Iniciá sesión con tu usuario Supabase (email y contraseña del overlay).','err');return;}
+  if(!_currentUser){toast('Pulsa Ingresar arriba e inicia sesión con email y contraseña Supabase.','err');openAuthLoginPanel();return;}
   if(!isSbAdmin()){toast('Tu rol en la nube no es admin; solo admin puede crear usuarios.','err');return;}
   const codOpts=[...new Set((DB.data.roles||[]).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
   ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
@@ -3114,7 +3123,7 @@ function openAuthUserCreateModal(){
 }
 function openAuthUserPasswordModal(userId,emailLabel){
   if(!_sb){toast('Conectá Supabase','err');return;}
-  if(!_currentUser){toast('Iniciá sesión primero.','err');return;}
+  if(!_currentUser){toast('Pulsa Ingresar arriba e inicia sesión.','err');openAuthLoginPanel();return;}
   if(!isSbAdmin()){toast('Solo el rol admin puede cambiar contraseñas.','err');return;}
   const body=`<p style="font-size:13px;color:var(--text-2);margin:0 0 12px;">${esc(emailLabel||userId)}</p>
   <div class="form-field"><label class="form-label">Nueva contraseña</label><input class="input" id="aupPass" type="password" autocomplete="new-password"></div>`;
@@ -3130,7 +3139,7 @@ function openAuthUserPasswordModal(userId,emailLabel){
 }
 async function authUserDelete(userId){
   if(!_sb){toast('Conectá Supabase','err');return;}
-  if(!_currentUser){toast('Iniciá sesión primero.','err');return;}
+  if(!_currentUser){toast('Pulsa Ingresar arriba e inicia sesión.','err');openAuthLoginPanel();return;}
   if(!isSbAdmin()){toast('Solo el rol admin puede eliminar usuarios.','err');return;}
   if(userId===_currentUser.id){toast('No podés eliminar tu propia sesión','err');return;}
   if(!confirm('¿Eliminar este usuario de Supabase Auth? No se puede deshacer.'))return;
@@ -3231,8 +3240,35 @@ function _normalizeSesionRol(r){
   return x||'operario';
 }
 function isSbAdmin(){return!!(_currentUser&&_normalizeSesionRol(_currentUser.rol)==='admin');}
-function showAuthOverlay(){document.getElementById('authOverlay').style.display='flex';}
-function hideAuthOverlay(){document.getElementById('authOverlay').style.display='none';}
+function showAuthOverlay(){
+  const o=document.getElementById('authOverlay');if(!o)return;
+  o.style.display='flex';
+  o.style.alignItems='center';
+  o.style.justifyContent='center';
+  requestAnimationFrame(()=>{try{document.getElementById('authEmail')?.focus();}catch(e){}});
+}
+function hideAuthOverlay(){const o=document.getElementById('authOverlay');if(o)o.style.display='none';}
+function openAuthLoginPanel(){showAuthOverlay();}
+function onTopbarAuthClick(){
+  if(_currentUser){
+    if(confirm('¿Cerrar sesión Supabase?'))void doLogout();
+    return;
+  }
+  openAuthLoginPanel();
+}
+/** Si el token local está corrupto o desincronizado, borrar y volver a enlazar Auth. */
+async function forceSupabaseAuthReset(){
+  try{if(_sb)await _sb.auth.signOut({scope:'global'});}catch(_){}
+  try{if(_authSub){_authSub.unsubscribe();}}catch(_){}
+  _authSub=null;
+  _currentUser=null;
+  try{applyRolePermissions();}catch(_){}
+  try{updateUserBadge();}catch(_){}
+  try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+  if(_sb){try{await bindSupabaseAuth();}catch(e){try{sbLog('bind auth tras reset: '+e.message,false);}catch(_){}}}
+  showAuthOverlay();
+  toast('Sesión del navegador borrada. Ingresá de nuevo.','success');
+}
 /** Suscripción Auth del cliente actual (tras cada connectSupabase). Evita quedar sin sesión con cliente nuevo. */
 let _authSub=null;
 async function bindSupabaseAuth(){
@@ -3262,7 +3298,7 @@ async function bindSupabaseAuth(){
     _currentUser=null;
     try{applyRolePermissions();}catch(_){}
     try{updateUserBadge();}catch(_){}
-    showAuthOverlay();
+    hideAuthOverlay();
     try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   }
 }
@@ -3359,21 +3395,26 @@ async function doLogin(){
   if(!_sb){msg.textContent='Supabase no conectado';return;}
   msg.style.color='#64748b';msg.textContent='Verificando…';
   try{
-    const{data,error}=await _sb.auth.signInWithPassword({email,password:pass});
+    const{error}=await _sb.auth.signInWithPassword({email,password:pass});
     if(error)throw error;
-    msg.style.color='#16a34a';msg.textContent='✓ Ingresando…';
     document.getElementById('authPass').value='';
+    const{data:{session}}=await _sb.auth.getSession();
+    if(session){await applySession(session);}
+    else{throw new Error('No se pudo leer la sesión tras el ingreso');}
+    msg.style.color='#16a34a';msg.textContent='✓ Sesión iniciada';
+    toast('Sesión iniciada','success');
   }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
 }
 async function doLogout(){
   if(!_sb)return;
   if(typeof sbStopPoll==='function')sbStopPoll();
-  await _sb.auth.signOut();
+  try{await _sb.auth.signOut({scope:'global'});}catch(_){try{await _sb.auth.signOut();}catch(__){}}
   _currentUser=null;
   try{applyRolePermissions();}catch(_){}
   try{updateUserBadge();}catch(_){}
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   toast('Sesión cerrada','success');
+  showAuthOverlay();
 }
 function updateUserBadge(){
   let badge=document.getElementById('userBadge');
@@ -3391,6 +3432,11 @@ function updateUserBadge(){
   }else{
     badge.innerHTML='<span style="opacity:.9;font-size:11px;">Sin sesión · clic para ingresar</span>';
     badge.title='Iniciá sesión con tu usuario Supabase';
+  }
+  const topBtn=document.getElementById('btnAuthLogin');
+  if(topBtn){
+    topBtn.textContent=_currentUser?'Cuenta':'Ingresar';
+    topBtn.title=_currentUser?('Sesión: '+(_currentUser.email||'')+' · '+(_currentUser.rol||'')+' — clic para cerrar sesión'):'Iniciar sesión (email y contraseña Supabase)';
   }
 }
 function applyRolePermissions(){
