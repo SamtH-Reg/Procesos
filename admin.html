@@ -273,6 +273,10 @@ body[data-theme="dark"] .ie-ex-row:nth-child(even){filter:brightness(1.04);}
 .ie-ex-range{display:block;margin-top:8px;font-size:12px;color:var(--text-2);line-height:1.55;}
 .ie-ex-range .ie-ex-dt{color:var(--brand);font-weight:800;font-family:var(--mono);font-size:12px;}
 body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
+/* Consola admin: sin sesión admin válida no se interactúa con la app (overlay encima). */
+body.admin-auth-lock{overflow:hidden;}
+body.admin-auth-lock .app{pointer-events:none;user-select:none;}
+body.admin-auth-lock #authOverlay{pointer-events:auto;}
 </style>
 </head>
 <body>
@@ -806,6 +810,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:28px;font-weight:800;color:#1e3a66;">🐟 FRIOSUR SpA</div>
       <div style="font-size:13px;color:#64748b;margin-top:4px;">Control de Producción · Admin</div>
+      <div style="font-size:12px;color:#b45309;margin-top:10px;font-weight:600;">Solo cuentas con rol <strong>admin</strong> en Supabase (<code>user_profiles</code>).</div>
     </div>
     <div style="margin-bottom:12px;">
       <label style="font-size:12px;font-weight:600;color:#334155;display:block;margin-bottom:4px;">Email</label>
@@ -818,7 +823,6 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
     <button type="button" onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
     <div id="authMsg" style="margin-top:12px;font-size:12px;color:#dc2626;text-align:center;min-height:16px;"></div>
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
-      <button type="button" class="btn ghost sm" style="width:100%;" onclick="hideAuthOverlay()">Cerrar panel (seguir sin cuenta en la nube)</button>
       <button type="button" class="btn ghost sm" style="width:100%;color:var(--err);" onclick="void forceSupabaseAuthReset()">Borrar sesión guardada en este navegador</button>
     </div>
     <div style="margin-top:16px;font-size:11px;color:#94a3b8;text-align:center;">
@@ -877,6 +881,7 @@ const DB={data:null,
     d.roles=d.roles||[{id:1,nombre:'Admin',codigo:'admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
                      {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
                      {id:3,nombre:'Operario',codigo:'operario',permisos:{dashboard:true,reportes:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:false,pesaje:true,general:true,eliminar:false}}];
+    let adminPermHeal=false;
     (d.roles||[]).forEach(r=>{
       if(!r||typeof r!=='object')return;
       let p=r.permisos;
@@ -884,7 +889,12 @@ const DB={data:null,
       r.permisos=p&&typeof p==='object'?p:{};
       if(!r.codigo||!String(r.codigo).trim())r.codigo=_slugCodigoRol(r.nombre||'rol');
       r.codigo=String(r.codigo).trim().toLowerCase();
+      if(r.codigo==='admin'){
+        const full=['dashboard','reportes','analisis','presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes','moldes','tuneles','pesaje','general','eliminar'];
+        full.forEach(k=>{if(!r.permisos[k])adminPermHeal=true;r.permisos[k]=true;});
+      }
     });
+    if(adminPermHeal)try{localStorage.setItem(STORE_KEY,JSON.stringify(d));}catch(e){}
     d.usuario=d.usuario||{nombre:'C. Rodríguez',rol:'Admin'};
   },
   _seed(){return {
@@ -1223,6 +1233,7 @@ async function sbPushDashboardCloud(){
 async function sbPullDashboardCloud(opts){
   opts=opts||{};
   if(!_sb)return false;
+  if(!_currentUser||!isSbAdmin())return false;
   try{
     const{data,error}=await _sb.from('app_kv').select('key,value,updated_at').eq('key',DASH_CLOUD_KEY).maybeSingle();
     if(error){
@@ -3302,9 +3313,13 @@ function showAuthOverlay(){
   o.style.display='flex';
   o.style.alignItems='center';
   o.style.justifyContent='center';
+  try{document.body.classList.add('admin-auth-lock');}catch(e){}
   requestAnimationFrame(()=>{try{document.getElementById('authEmail')?.focus();}catch(e){}});
 }
-function hideAuthOverlay(){const o=document.getElementById('authOverlay');if(o)o.style.display='none';}
+function hideAuthOverlay(){
+  const o=document.getElementById('authOverlay');if(o)o.style.display='none';
+  try{document.body.classList.remove('admin-auth-lock');}catch(e){}
+}
 function openAuthLoginPanel(){showAuthOverlay();}
 function onTopbarAuthClick(){
   if(_currentUser){
@@ -3355,7 +3370,9 @@ async function bindSupabaseAuth(){
     _currentUser=null;
     try{applyRolePermissions();}catch(_){}
     try{updateUserBadge();}catch(_){}
-    hideAuthOverlay();
+    const msg=document.getElementById('authMsg');
+    if(msg&&!msg.textContent){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
+    showAuthOverlay();
     try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   }
 }
@@ -3384,7 +3401,7 @@ function dashRefreshKgSummary(opts){
 /** Moldes/pesajes desde la nube (tablets). Solo SELECT por HTTP — no cuenta como mensajes Realtime. */
 async function sbManualPullTabletRegs(){
   if(!_sb){toast('Conecta Supabase primero','warn');return;}
-  if(!_currentUser){toast('Inicia sesión para leer moldes y pesajes','warn');return;}
+  if(!_currentUser||!isSbAdmin()){toast('Solo sesión admin puede traer datos operativos','warn');return;}
   try{
     await sbPullRuntimeFromCloud();
     await sbPullDashboardCloud({silent:true});
@@ -3395,6 +3412,7 @@ async function sbManualPullTabletRegs(){
 /** Moldes/pesajes desde la nube (tablets / otros admins). Necesario para tiempo real entre dispositivos — localStorage no cruza equipos. */
 async function sbPullRuntimeFromCloud(){
   if(!_sb)return;
+  if(!_currentUser||!isSbAdmin())return;
   try{
     if(!RT.data)RT.data={};
     for(const t of['moldes','pesajes']){
@@ -3422,18 +3440,40 @@ async function sbPullRuntimeFromCloud(){
   }catch(e){sbLog('pull RT: '+e.message,false);}
 }
 async function applySession(session){
-  hideAuthOverlay();
-  // Cargar perfil + rol
+  if(!_sb||!session)return false;
+  const msgEl=document.getElementById('authMsg');
   try{
     const{data,error}=await _sb.from('user_profiles').select('*').eq('id',session.user.id).single();
     if(error)throw error;
     _currentUser={id:session.user.id,email:session.user.email,rol:_normalizeSesionRol(data.rol),nombre:data.nombre||session.user.email.split('@')[0]};
-  }catch(e){_currentUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
+  }catch(e){
+    _currentUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};
+    if(msgEl){
+      msgEl.style.color='#dc2626';
+      msgEl.textContent='No se pudo leer user_profiles: '+(e&&e.message?e.message:'¿existe tu fila y políticas RLS?')+'.';
+    }
+  }
+  if(!isSbAdmin()){
+    const rolBad=_currentUser?_normalizeSesionRol(_currentUser.rol):'';
+    _currentUser=null;
+    try{await _sb.auth.signOut({scope:'global'});}catch(_){try{await _sb.auth.signOut();}catch(__){}}
+    showAuthOverlay();
+    if(msgEl){
+      msgEl.style.color='#dc2626';
+      const keep=String(msgEl.textContent||'').includes('user_profiles');
+      if(!keep){msgEl.textContent='Esta consola admin es solo para rol admin en Supabase. Rol detectado: «'+rolBad+'».';}
+    }
+    try{applyRolePermissions();}catch(_){}
+    try{updateUserBadge();}catch(_){}
+    try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+    return false;
+  }
+  if(msgEl){msgEl.textContent='';msgEl.style.color='#64748b';}
+  hideAuthOverlay();
   applyRolePermissions();
   updateUserBadge();
-  sbLog('Sesión: '+_currentUser.email+' ('+_currentUser.rol+')');
+  sbLog('Sesión admin: '+_currentUser.email+' ('+_currentUser.rol+')');
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
-  // Una descarga HTTP inicial; Realtime/poll en moldes·pesajes solo si modo vivo
   setTimeout(async()=>{
     await sbPullRuntimeFromCloud();
     await sbPullDashboardCloud({silent:true});
@@ -3442,6 +3482,7 @@ async function applySession(session){
     if(sbMsgEconomyEnabled()){sbStopPoll();sbLog('Modo ahorro: usa «Traer moldes y pesajes» o el topbar (pocos mensajes Realtime).');}
     else if(typeof sbStartPoll==='function')sbStartPoll();
   },400);
+  return true;
 }
 async function doLogin(){
   const email=document.getElementById('authEmail').value.trim();
@@ -3456,9 +3497,13 @@ async function doLogin(){
     if(error)throw error;
     document.getElementById('authPass').value='';
     const{data:{session}}=await _sb.auth.getSession();
-    if(session){await applySession(session);}
-    else{throw new Error('No se pudo leer la sesión tras el ingreso');}
-    msg.style.color='#16a34a';msg.textContent='✓ Sesión iniciada';
+    if(!session)throw new Error('No se pudo leer la sesión tras el ingreso');
+    const ok=await applySession(session);
+    if(!ok){
+      if(!msg.textContent)msg.textContent='Acceso denegado a la consola admin.';
+      return;
+    }
+    msg.style.color='#16a34a';msg.textContent='✓ Sesión admin iniciada';
     toast('Sesión iniciada','success');
   }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
 }
@@ -3538,7 +3583,7 @@ async function connectSupabase(silent){
   try{
     const authOpts={auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined}};
     _sb=window.supabase.createClient(url,key,authOpts);
-    saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
+    saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
     await bindSupabaseAuth();
   }
   catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
@@ -3783,6 +3828,7 @@ async function sbDeletePresetRemote(id){
 
 async function pushAll(){
   if(!_sb){toast('Conecta primero','warn');return;}
+  if(!_currentUser||!isSbAdmin()){toast('Solo sesión admin en esta consola','warn');return;}
   document.getElementById('sbDot').className='status-dot syncing';
   const tables={presets:DB.data.presets,trabajadores:DB.data.trabajadores,turnos:DB.data.turnos,equipos:DB.data.equipos,roles:DB.data.roles,moldes:RT.data.moldes,pesajes:RT.data.pesajes,generales:RT.data.generales};
   // Sets de IDs válidos para limpiar foreign keys
@@ -3806,6 +3852,7 @@ async function pushAll(){
 }
 async function pullAll(){
   if(!_sb){toast('Conecta primero','warn');return;}
+  if(!_currentUser||!isSbAdmin()){toast('Solo sesión admin en esta consola','warn');return;}
   document.getElementById('sbDot').className='status-dot syncing';
   try{
     for(const t of['presets','trabajadores','turnos','equipos','roles']){
