@@ -286,6 +286,8 @@ input,select,textarea{font-family:inherit;}
 
 .panel{display:none;animation:fadeIn .2s ease;}
 .panel.active{display:block;}
+body.idx-rol-lock .tabbar .tab-nav{display:none!important;}
+body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
 
 /* Section header */
@@ -2550,6 +2552,19 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
     </div>
   </div>
 
+  <!-- ═══ PANEL: SIN ACCESO (rol desconocido o sin módulos en sesión Supabase) ═══ -->
+  <div class="panel" id="panelSinAcceso" data-screen-label="Sin acceso">
+    <div style="max-width:540px;margin:40px auto;padding:28px;border-radius:var(--radius);background:var(--surface-alt);border:1px solid var(--border);box-shadow:var(--shadow-md);">
+      <h2 style="margin:0 0 12px;font-size:18px;color:var(--safety-red-dark);">No hay módulos disponibles</h2>
+      <p id="idxSinAccesoMsg" style="margin:0 0 18px;font-size:14px;line-height:1.55;color:var(--text-2);"></p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <button type="button" class="btn btn-primary" onclick="if(typeof TBSync!=='undefined'&&TBSync.pullCatalogs){TBSync.pullCatalogs();showToast('Actualizando catálogo…','info');}">Sincronizar catálogo</button>
+        <button type="button" class="btn ghost" onclick="if(typeof tbDoLogout==='function')tbDoLogout();">Cerrar sesión</button>
+      </div>
+      <p style="margin:16px 0 0;font-size:12px;color:var(--text-3);">Si el problema continúa, un administrador debe revisar que el campo <code>rol</code> en Supabase (<code>user_profiles</code>) sea exactamente el mismo <strong>código</strong> que en la tabla <strong>roles</strong>, y que ese rol tenga permisos de módulo marcados.</p>
+    </div>
+  </div>
+
   <!-- ═══ PANEL: CONFIG ════════════════════════════════════════ -->
   <div class="panel" id="panelConfig" data-screen-label="06 Configuración">
 
@@ -2909,13 +2924,56 @@ function _idxRolRecordForSession(){
   if(!r)r=roles.find(x=>String(x.nombre||'').trim().toLowerCase()===code);
   return r||null;
 }
-/** Permiso de matriz (tablet). Sin sesión o sin fila de rol en catálogo → permisivo (no bloquear planta). */
+/**
+ * Sesión Supabase activa y catálogo con roles, pero el perfil no coincide con ninguna fila (o falta rol en perfil).
+ * No aplica a uso solo local sin `_tbUser`.
+ */
+function _idxSesionBloqueadaPorRol(){
+  try{
+    if(typeof _tbUser==='undefined'||!_tbUser)return false;
+    const roles=(window.DB&&DB.data&&Array.isArray(DB.data.roles))?DB.data.roles:[];
+    if(!roles.length)return false;
+    const code=_idxRolTabletNormalizado();
+    if(code==='admin'||code==='administrador')return false;
+    if(!code)return true;
+    return !_idxRolRecordForSession();
+  }catch(_){return false;}
+}
+/** `sin_modulos`: sesión OK y rol reconocido pero ningún flag de pestaña inferior activo. */
+function _idxSinAccesoMotivo(){
+  if(_idxSesionBloqueadaPorRol())return'rol_desconocido';
+  try{
+    if(typeof _tbUser==='undefined'||!_tbUser)return null;
+    if(_idxFirstAllowedPanel())return null;
+    if(_idxRolTabletNormalizado()==='admin'||_idxRolTabletNormalizado()==='administrador')return null;
+    return'sin_modulos';
+  }catch(_){return null;}
+}
+function _idxSetSinAccesoPanel(motivo){
+  const sin=document.getElementById('panelSinAcceso');
+  const msg=document.getElementById('idxSinAccesoMsg');
+  if(!sin||!msg)return;
+  if(motivo==='rol_desconocido'){
+    msg.innerHTML='Tu sesión tiene un <strong>rol</strong> que no existe en el catálogo sincronizado, o el perfil no tiene rol asignado. Pulsa <strong>Sincronizar catálogo</strong> tras corregir datos en Admin/Supabase.';
+  }else if(motivo==='sin_modulos'){
+    msg.innerHTML='Tu rol está reconocido, pero <strong>no tiene ningún módulo de la barra inferior</strong> habilitado (Moldes, Túneles, Pesaje, General). Un administrador debe marcar esos permisos en la tabla de roles.';
+  }
+}
+/** Permiso de matriz (tablet). Con sesión Supabase y catálogo vacío aún → permisivo hasta el pull. Con sesión y catálogo sin fila → ya bloqueado arriba. */
 function _idxPerm(key){
   try{
+    const code=_idxRolTabletNormalizado();
+    if(code==='admin'||code==='administrador')return true;
+    if(_idxSesionBloqueadaPorRol())return false;
+    const roles=(window.DB&&DB.data&&Array.isArray(DB.data.roles))?DB.data.roles:[];
+    const hasCatalog=roles.length>0;
     const r=_idxRolRecordForSession();
+    if(typeof _tbUser!=='undefined'&&_tbUser){
+      if(!hasCatalog)return true;
+      if(!r||!r.permisos)return false;
+      return !!r.permisos[key];
+    }
     if(!r||!r.permisos)return true;
-    const a=String(r.codigo||'').trim().toLowerCase();
-    if(a==='admin'||a==='administrador')return true;
     return !!r.permisos[key];
   }catch(_){return true;}
 }
@@ -2924,10 +2982,22 @@ function _idxFirstAllowedPanel(){
   if(_idxPerm('tuneles'))return'panelTuneles';
   if(_idxPerm('pesaje'))return'panelPesaje';
   if(_idxPerm('general'))return'panelGeneral';
-  return'panelMoldes';
+  return null;
 }
 /** Oculta pestañas inferiores según permisos; si la vista activa queda prohibida, cambia a la primera permitida. */
 function _idxApplyModuleRestrictions(){
+  const motive=_idxSinAccesoMotivo();
+  document.body.classList.toggle('idx-rol-lock',!!motive);
+  const sin=document.getElementById('panelSinAcceso');
+  if(motive){
+    _idxSetSinAccesoPanel(motive);
+    document.querySelectorAll('.tab-nav').forEach(n=>n.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    if(sin)sin.classList.add('active');
+    if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+    return;
+  }
+  if(sin)sin.classList.remove('active');
   const pairs=[['tabnavMoldes','moldes'],['tabnavTuneles','tuneles'],['tabnavPesaje','pesaje'],['tabnavGeneral','general']];
   pairs.forEach(([id,key])=>{
     const el=document.getElementById(id);
@@ -2940,6 +3010,7 @@ function _idxApplyModuleRestrictions(){
   const curId=cur&&cur.id;
   if(curId&&map[curId]&&!_idxPerm(map[curId])){
     const first=_idxFirstAllowedPanel();
+    if(!first)return;
     const tabMap={panelMoldes:'tabnavMoldes',panelTuneles:'tabnavTuneles',panelPesaje:'tabnavPesaje',panelGeneral:'tabnavGeneral'};
     const tid=tabMap[first];
     const tabBtn=tid?document.getElementById(tid):null;
@@ -2966,6 +3037,10 @@ window._idxRefreshAdminTabNav=_idxRefreshAdminTabNav;
 let _tbUser=null;
 
 function navTo(el,panelId){
+  if(panelId!=='panelSinAcceso'&&typeof _idxSinAccesoMotivo==='function'&&_idxSinAccesoMotivo()){
+    showToast('Sin módulos disponibles con tu rol. Sincroniza o cierra sesión.','error');
+    return;
+  }
   const PANEL_PERM={panelMoldes:'moldes',panelTuneles:'tuneles',panelPesaje:'pesaje',panelGeneral:'general'};
   const pk=PANEL_PERM[panelId];
   if(pk&&typeof _idxPerm==='function'&&!_idxPerm(pk)){
@@ -3294,6 +3369,10 @@ const CFG_SUBS=['Presets','Trabajadores','Turnos','Equipos','Roles','Temas','IO'
 const CFG_RENDER={presets:renderPresets,trabajadores:renderTrabajadores,turnos:renderTurnos,equipos:renderEquiposCfg,roles:renderRoles,temas:renderTemas,io:()=>{}};
 
 function openCfg(key){
+  if(typeof _idxSinAccesoMotivo==='function'&&_idxSinAccesoMotivo()){
+    showToast('Sin acceso a configuración con tu sesión actual','error');
+    return;
+  }
   const permFor=k=>{
     if(k==='presets')return'presets';
     if(k==='trabajadores')return'trabajadores';

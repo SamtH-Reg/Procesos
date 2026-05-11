@@ -249,6 +249,18 @@ create policy "app_kv_select_authenticated" on app_kv for select to authenticate
 create policy "app_kv_insert_authenticated" on app_kv for insert to authenticated with check (true);
 create policy "app_kv_update_authenticated" on app_kv for update to authenticated using (true) with check (true);
 
+-- RLS `roles`: la tablet (index) lee esta tabla tras login; sin sesión JWT no hay SELECT.
+-- Ver también `supabase_migrate_roles_rls.sql` (misma lógica, idempotente).
+alter table if exists public.roles enable row level security;
+drop policy if exists "roles_select_authenticated" on public.roles;
+drop policy if exists "roles_insert_authenticated" on public.roles;
+drop policy if exists "roles_update_authenticated" on public.roles;
+drop policy if exists "roles_delete_authenticated" on public.roles;
+create policy "roles_select_authenticated" on public.roles for select to authenticated using (true);
+create policy "roles_insert_authenticated" on public.roles for insert to authenticated with check (true);
+create policy "roles_update_authenticated" on public.roles for update to authenticated using (true) with check (true);
+create policy "roles_delete_authenticated" on public.roles for delete to authenticated using (true);
+
 -- ═══════════════ REALTIME (index.html escucha cambios del admin) ══
 -- En Dashboard → Database → Publications → supabase_realtime, añadir tablas,
 -- o ejecutar (idempotente si ya están):
