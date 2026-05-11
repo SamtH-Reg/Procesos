@@ -37,8 +37,8 @@ returns text language sql stable security definer as $$
 $$;
 
 create or replace function is_admin()
-returns boolean language sql stable security definer as $$
-  select coalesce((select rol from user_profiles where id = auth.uid()) in ('admin'), false);
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(lower(trim((select rol from user_profiles where id = auth.uid()))) = 'admin', false);
 $$;
 
 create or replace function can_write()

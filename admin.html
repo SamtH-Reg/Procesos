@@ -3031,7 +3031,8 @@ function renderRoles(){
 async function refreshAuthUsersList(){
   const mount=document.getElementById('authUsersMount');if(!mount)return;
   if(!_sb){mount.innerHTML='<span style="color:var(--text-3);">Conectá Supabase para ver usuarios.</span>';return;}
-  if(!_currentUser||_currentUser.rol!=='admin'){mount.innerHTML='<span style="color:var(--text-3);">Solo un usuario con rol <strong>admin</strong> puede listar y editar cuentas.</span>';return;}
+  if(!_currentUser){mount.innerHTML='<span style="color:var(--text-3);">Esperando sesión de Supabase… <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button></span>';return;}
+  if(!isSbAdmin()){mount.innerHTML='<span style="color:var(--text-3);">Tu rol en la nube es «<strong>'+esc(_currentUser.rol)+'</strong>»; hace falta <strong>admin</strong> en <span class="mono">user_profiles.rol</span> (exacto o equivalente normalizado). Si ya sos admin y no ves la lista, pulsá <strong>Reintentar</strong> tras iniciar sesión.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';return;}
   mount.innerHTML='<span style="color:var(--text-3);">Cargando…</span>';
   try{
     const{data,error}=await _sb.from('user_profiles').select('id,email,rol,nombre,activo,created_at').order('created_at',{ascending:false});
@@ -3070,7 +3071,7 @@ async function refreshAuthUsersList(){
 }
 function openAuthUserCreateModal(){
   if(!_sb){toast('Conectá Supabase','err');return;}
-  if(!_currentUser||_currentUser.rol!=='admin'){toast('Solo administradores pueden crear usuarios','err');return;}
+  if(!isSbAdmin()){toast('Solo administradores pueden crear usuarios','err');return;}
   const codOpts=[...new Set((DB.data.roles||[]).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
   ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
   codOpts.sort();
@@ -3092,7 +3093,7 @@ function openAuthUserCreateModal(){
   });
 }
 function openAuthUserPasswordModal(userId,emailLabel){
-  if(!_sb||!_currentUser||_currentUser.rol!=='admin'){toast('Solo administradores','err');return;}
+  if(!_sb||!isSbAdmin()){toast('Solo administradores','err');return;}
   const body=`<p style="font-size:13px;color:var(--text-2);margin:0 0 12px;">${esc(emailLabel||userId)}</p>
   <div class="form-field"><label class="form-label">Nueva contraseña</label><input class="input" id="aupPass" type="password" autocomplete="new-password"></div>`;
   openModal('Cambiar contraseña',body,async()=>{
@@ -3106,7 +3107,7 @@ function openAuthUserPasswordModal(userId,emailLabel){
   });
 }
 async function authUserDelete(userId){
-  if(!_sb||!_currentUser||_currentUser.rol!=='admin'){toast('Solo administradores','err');return;}
+  if(!_sb||!isSbAdmin()){toast('Solo administradores','err');return;}
   if(userId===_currentUser.id){toast('No podés eliminar tu propia sesión','err');return;}
   if(!confirm('¿Eliminar este usuario de Supabase Auth? No se puede deshacer.'))return;
   try{
@@ -3199,6 +3200,13 @@ function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
 
 /* ════════════ AUTH ════════════ */
 let _currentUser=null;
+/** Alinea códigos de rol con la tablet y con is_admin() en SQL (minúsculas, sin espacios extremos). */
+function _normalizeSesionRol(r){
+  let x=String(r==null?'':r).trim().toLowerCase();
+  if(x==='administrador')x='admin';
+  return x||'operario';
+}
+function isSbAdmin(){return!!(_currentUser&&_normalizeSesionRol(_currentUser.rol)==='admin');}
 function showAuthOverlay(){document.getElementById('authOverlay').style.display='flex';}
 function hideAuthOverlay(){document.getElementById('authOverlay').style.display='none';}
 async function initAuth(){
@@ -3285,7 +3293,7 @@ async function applySession(session){
   try{
     const{data,error}=await _sb.from('user_profiles').select('*').eq('id',session.user.id).single();
     if(error)throw error;
-    _currentUser={id:session.user.id,email:session.user.email,rol:data.rol,nombre:data.nombre||session.user.email.split('@')[0]};
+    _currentUser={id:session.user.id,email:session.user.email,rol:_normalizeSesionRol(data.rol),nombre:data.nombre||session.user.email.split('@')[0]};
   }catch(e){_currentUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
   applyRolePermissions();
   updateUserBadge();
