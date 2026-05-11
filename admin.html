@@ -724,7 +724,7 @@ body[data-theme="dark"] .ie-ex-range .ie-ex-dt{color:#93c5fd;}
       <div class="form-field"><label class="form-label">URL del proyecto</label><input class="input" id="sbUrl" placeholder="https://xxx.supabase.co"></div>
       <div class="form-field"><label class="form-label">Anon key</label><input class="input" id="sbKey" placeholder="eyJ..."></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn" onclick="connectSupabase()">Conectar</button>
+        <button class="btn" type="button" onclick="void connectSupabase()">Conectar</button>
         <button class="btn ghost" onclick="testSupabase()">Probar</button>
         <button class="btn ghost" onclick="pushAll()">⬆ Subir todo a Supabase</button>
         <button type="button" class="btn ghost" onclick="pullAll()" title="Sobrescribe esta PC con lo que hay en el servidor. No hace falta para el uso diario.">⬇ Traer del servidor</button>
@@ -1019,9 +1019,19 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='trabajadores')renderTrabs();
     if(id==='turnos')renderTurnos();
     if(id==='equipos')renderEquipos();
-    if(id==='roles')renderRoles();
+    if(id==='roles'){renderRoles();void resyncAuthThenRefreshRoles();}
   });
 });
+/** Si el cliente se recreó antes de aplicar sesión, re-lee getSession al abrir Permisos y roles. */
+async function resyncAuthThenRefreshRoles(){
+  if(!_sb)return;
+  if(_currentUser)return;
+  try{
+    const{data:{session}}=await _sb.auth.getSession();
+    if(session)await applySession(session);
+  }catch(_){}
+  try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+}
 
 /* ─── Topbar context ──────────────────────── */
 function updateCtx(){
@@ -3031,7 +3041,16 @@ function renderRoles(){
 async function refreshAuthUsersList(){
   const mount=document.getElementById('authUsersMount');if(!mount)return;
   if(!_sb){mount.innerHTML='<span style="color:var(--text-3);">Conectá Supabase para ver usuarios.</span>';return;}
-  if(!_currentUser){mount.innerHTML='<span style="color:var(--text-3);">Esperando sesión de Supabase… <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button></span>';return;}
+  if(!_currentUser){
+    try{
+      const{data:{session}}=await _sb.auth.getSession();
+      if(session)await applySession(session);
+    }catch(_){}
+  }
+  if(!_currentUser){
+    mount.innerHTML='<span style="color:var(--text-3);">No hay sesión de usuario: usá el formulario de ingreso (overlay) o el chip arriba a la derecha <strong>Sin sesión · clic para ingresar</strong>. Después pulsá <strong>Reintentar</strong>.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
+    return;
+  }
   if(!isSbAdmin()){mount.innerHTML='<span style="color:var(--text-3);">Tu rol en la nube es «<strong>'+esc(_currentUser.rol)+'</strong>»; hace falta <strong>admin</strong> en <span class="mono">user_profiles.rol</span> (exacto o equivalente normalizado). Si ya sos admin y no ves la lista, pulsá <strong>Reintentar</strong> tras iniciar sesión.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';return;}
   mount.innerHTML='<span style="color:var(--text-3);">Cargando…</span>';
   try{
@@ -3071,7 +3090,8 @@ async function refreshAuthUsersList(){
 }
 function openAuthUserCreateModal(){
   if(!_sb){toast('Conectá Supabase','err');return;}
-  if(!isSbAdmin()){toast('Solo administradores pueden crear usuarios','err');return;}
+  if(!_currentUser){toast('Iniciá sesión con tu usuario Supabase (email y contraseña del overlay).','err');return;}
+  if(!isSbAdmin()){toast('Tu rol en la nube no es admin; solo admin puede crear usuarios.','err');return;}
   const codOpts=[...new Set((DB.data.roles||[]).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
   ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
   codOpts.sort();
@@ -3093,7 +3113,9 @@ function openAuthUserCreateModal(){
   });
 }
 function openAuthUserPasswordModal(userId,emailLabel){
-  if(!_sb||!isSbAdmin()){toast('Solo administradores','err');return;}
+  if(!_sb){toast('Conectá Supabase','err');return;}
+  if(!_currentUser){toast('Iniciá sesión primero.','err');return;}
+  if(!isSbAdmin()){toast('Solo el rol admin puede cambiar contraseñas.','err');return;}
   const body=`<p style="font-size:13px;color:var(--text-2);margin:0 0 12px;">${esc(emailLabel||userId)}</p>
   <div class="form-field"><label class="form-label">Nueva contraseña</label><input class="input" id="aupPass" type="password" autocomplete="new-password"></div>`;
   openModal('Cambiar contraseña',body,async()=>{
@@ -3107,7 +3129,9 @@ function openAuthUserPasswordModal(userId,emailLabel){
   });
 }
 async function authUserDelete(userId){
-  if(!_sb||!isSbAdmin()){toast('Solo administradores','err');return;}
+  if(!_sb){toast('Conectá Supabase','err');return;}
+  if(!_currentUser){toast('Iniciá sesión primero.','err');return;}
+  if(!isSbAdmin()){toast('Solo el rol admin puede eliminar usuarios.','err');return;}
   if(userId===_currentUser.id){toast('No podés eliminar tu propia sesión','err');return;}
   if(!confirm('¿Eliminar este usuario de Supabase Auth? No se puede deshacer.'))return;
   try{
@@ -3196,7 +3220,7 @@ function importExcel(e){
 let _sb=null;
 function loadSbCreds(){try{const c=JSON.parse(localStorage.getItem(SB_KEY))||{};if(!c.url&&SB_DEFAULT.url){return{...SB_DEFAULT,connected:true};}return c;}catch(e){return{...SB_DEFAULT,connected:true};}}
 function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
-(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{connectSupabase(true);setTimeout(initAuth,500);sbMsgEconomyInitCheckbox();},300);})();
+(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();}catch(_){}});},300);})();
 
 /* ════════════ AUTH ════════════ */
 let _currentUser=null;
@@ -3209,21 +3233,38 @@ function _normalizeSesionRol(r){
 function isSbAdmin(){return!!(_currentUser&&_normalizeSesionRol(_currentUser.rol)==='admin');}
 function showAuthOverlay(){document.getElementById('authOverlay').style.display='flex';}
 function hideAuthOverlay(){document.getElementById('authOverlay').style.display='none';}
-async function initAuth(){
+/** Suscripción Auth del cliente actual (tras cada connectSupabase). Evita quedar sin sesión con cliente nuevo. */
+let _authSub=null;
+async function bindSupabaseAuth(){
   if(!_sb)return;
-  let sessionApplied=false;
-  const{data:{session}}=await _sb.auth.getSession();
-  if(session){await applySession(session);sessionApplied=true;}
-  else{showAuthOverlay();}
-  _sb.auth.onAuthStateChange(async(event,sess)=>{
-    if(event==='INITIAL_SESSION'){
-      if(sess&&!sessionApplied){await applySession(sess);sessionApplied=true;}
-      else if(!sess&&!sessionApplied){showAuthOverlay();}
-      return;
-    }
-    if(event==='SIGNED_OUT'){_currentUser=null;showAuthOverlay();return;}
-    if(event==='SIGNED_IN'&&sess){await applySession(sess);}
+  if(_authSub){
+    try{_authSub.unsubscribe();}catch(e){}
+    _authSub=null;
+  }
+  const{data:{subscription}}=_sb.auth.onAuthStateChange(async(event,sess)=>{
+    try{
+      if(event==='SIGNED_OUT'){
+        _currentUser=null;
+        try{applyRolePermissions();}catch(_){}
+        try{updateUserBadge();}catch(_){}
+        showAuthOverlay();
+        try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+        return;
+      }
+      if(event==='SIGNED_IN'&&sess)await applySession(sess);
+      if(event==='TOKEN_REFRESHED'&&sess)await applySession(sess);
+    }catch(err){try{sbLog('auth listener: '+(err&&err.message?err.message:String(err)),false);}catch(_){}}
   });
+  _authSub=subscription;
+  const{data:{session}}=await _sb.auth.getSession();
+  if(session){await applySession(session);}
+  else{
+    _currentUser=null;
+    try{applyRolePermissions();}catch(_){}
+    try{updateUserBadge();}catch(_){}
+    showAuthOverlay();
+    try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+  }
 }
 /** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
 function dashRefreshKgSummary(opts){
@@ -3329,6 +3370,9 @@ async function doLogout(){
   if(typeof sbStopPoll==='function')sbStopPoll();
   await _sb.auth.signOut();
   _currentUser=null;
+  try{applyRolePermissions();}catch(_){}
+  try{updateUserBadge();}catch(_){}
+  try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   toast('Sesión cerrada','success');
 }
 function updateUserBadge(){
@@ -3337,13 +3381,16 @@ function updateUserBadge(){
     const top=document.querySelector('.topbar-right, .topbar-actions, .topbar')||document.body;
     badge=document.createElement('div');badge.id='userBadge';
     badge.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(255,255,255,.1);border-radius:20px;font-size:12px;color:#fff;margin-left:12px;cursor:pointer;';
-    badge.onclick=()=>{if(confirm('¿Cerrar sesión?'))doLogout();};
+    badge.onclick=()=>{if(_currentUser){if(confirm('¿Cerrar sesión?'))doLogout();}else{showAuthOverlay();}};
     top.appendChild(badge);
   }
   if(_currentUser){
     const rolColor={admin:'#dc2626',supervisor:'#f59e0b',planillero:'#3b6fb8',operario:'#64748b'}[_currentUser.rol]||'#64748b';
     badge.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+rolColor+';"></span><span><strong>'+esc(_currentUser.nombre)+'</strong> · '+esc(_currentUser.rol)+'</span><span style="opacity:.6;font-size:10px;">⎋</span>';
     badge.title='Clic para cerrar sesión';
+  }else{
+    badge.innerHTML='<span style="opacity:.9;font-size:11px;">Sin sesión · clic para ingresar</span>';
+    badge.title='Iniciá sesión con tu usuario Supabase';
   }
 }
 function applyRolePermissions(){
@@ -3365,13 +3412,14 @@ function applyRolePermissions(){
   });
 }
 function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
-function connectSupabase(silent){
+async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){toast('Ingresa URL y key','err');return;}
   try{
     const authOpts={auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined}};
     _sb=window.supabase.createClient(url,key,authOpts);
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}sbSubscribeRealtime();if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
+    await bindSupabaseAuth();
   }
   catch(e){toast('Error al conectar','err');sbLog('Error: '+e.message,false);}
 }
