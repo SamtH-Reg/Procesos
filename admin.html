@@ -53,6 +53,65 @@ button,input,select,textarea{font-family:inherit;color:inherit;}
 .topbar-user-meta{font-size:11px;color:#9fb4d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .roles-legend{font-size:12px;color:var(--text-3);margin:0 0 12px;line-height:1.5;max-width:900px;}
 .roles-table-cap{font-size:11px;color:var(--text-3);font-weight:500;padding:4px 2px 8px;}
+/* ── Permisos y roles (minimal) ── */
+.roles-page-host{min-height:80px;}
+.roles-stack{display:flex;flex-direction:column;gap:18px;}
+.roles-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);}
+.roles-card-hd{padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-alt);}
+.roles-card-hd--row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+.roles-card-hd h2{margin:0;font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--text);}
+.roles-card-hd p{margin:6px 0 0;font-size:12px;color:var(--text-3);line-height:1.45;max-width:640px;}
+.roles-users-hint{margin:4px 0 0!important;}
+.roles-card-actions{display:flex;gap:8px;flex-shrink:0;align-items:center;}
+.roles-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+.roles-matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+.roles-matrix thead th{
+  text-align:center;padding:10px 6px;font-size:11px;font-weight:600;color:var(--text-2);
+  text-transform:none;letter-spacing:0;background:var(--surface);border-bottom:1px solid var(--border-strong);
+  white-space:nowrap;max-width:100px;line-height:1.25;vertical-align:bottom;
+}
+.roles-matrix thead th.roles-col-role{text-align:left;padding-left:16px;position:sticky;left:0;z-index:2;background:var(--surface);}
+.roles-matrix thead th.roles-th-act{width:44px;padding:10px 8px;}
+.roles-matrix tbody td{padding:10px 6px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.roles-matrix tbody tr:last-child td{border-bottom:none;}
+.roles-matrix tbody td.roles-col-role{
+  text-align:left;padding-left:16px;position:sticky;left:0;z-index:1;background:var(--surface);
+  box-shadow:6px 0 12px -8px rgba(15,23,42,.15);min-width:132px;
+}
+.roles-matrix tbody td.roles-cb-cell{text-align:center;background:var(--surface);}
+.roles-matrix tbody tr:hover td{background:var(--surface-alt);}
+.roles-matrix tbody tr:hover td.roles-col-role{background:var(--surface-alt);}
+.roles-matrix input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--brand);vertical-align:middle;}
+.roles-role-name{font-weight:600;font-size:13px;color:var(--text);}
+.roles-role-code{font-size:11px;color:var(--text-3);font-family:var(--mono);margin-top:2px;}
+.roles-th-resumen{font-size:11px;font-weight:600;color:var(--text-2);text-align:left!important;padding-left:12px!important;min-width:120px;max-width:200px;}
+.roles-resumen-cell{font-size:12px;color:var(--text-3);line-height:1.35;padding-left:12px!important;max-width:220px;}
+.roles-icon-btn{
+  width:34px;height:34px;padding:0;border-radius:10px;border:1px solid var(--border);background:transparent;
+  color:var(--text-3);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+}
+.roles-icon-btn:hover{background:var(--surface-alt);color:var(--text);}
+.roles-icon-btn.danger:hover{border-color:var(--err);color:var(--err);background:rgba(220,38,38,.06);}
+.roles-users-mount{padding:0 18px 18px;font-family:inherit;font-size:13px;}
+.roles-users-table{width:100%;border-collapse:separate;border-spacing:0;margin-top:4px;}
+.roles-users-table thead th{
+  text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-3);background:transparent;border-bottom:1px solid var(--border);
+}
+.roles-users-table tbody td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.roles-users-table tbody tr:last-child td{border-bottom:none;}
+.roles-users-table tbody tr:hover{background:var(--surface-alt);}
+.roles-user-email{font-weight:600;color:var(--text);font-size:13px;}
+.roles-user-meta{font-size:10px;color:var(--text-3);font-family:var(--mono);margin-top:4px;word-break:break-all;max-width:280px;}
+.roles-user-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;align-items:center;}
+.roles-user-actions .btn.sm{padding:6px 10px;font-size:11px;}
+.roles-users-empty{margin:0;padding:4px 0 8px;font-size:13px;color:var(--text-3);line-height:1.55;}
+.roles-users-empty strong{color:var(--text-2);}
+.input.roles-input-sm{min-height:36px;padding:6px 10px;font-size:13px;}
+.select.roles-input-sm{min-height:36px;padding:6px 10px;font-size:13px;}
+@media (max-width:900px){
+  .roles-matrix thead th.roles-th-mod{max-width:72px;font-size:10px;padding:8px 4px;}
+}
 .top-btn{background:transparent;border:1px solid rgba(255,255,255,.14);color:#fff;padding:8px 14px;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
 .top-btn:hover{background:rgba(255,255,255,.08);}
 .top-btn.primary{background:#3b6fb8;border-color:#3b6fb8;}
@@ -664,13 +723,10 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <!-- ═══ ROLES ═══ -->
 <div class="page" id="page-roles">
   <div class="page-hdr">
-    <div><h1 class="page-title">Permisos y roles</h1><div class="page-sub">Módulos de esta consola y pestañas del index (tablet) por rol; abajo, usuarios Supabase (correo, contraseña y permisos en la nube).</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button type="button" class="btn" onclick="openRolModal()">+ Nuevo rol</button>
-      <button type="button" class="btn ghost" onclick="openAuthUserCreateModal()">+ Nuevo usuario</button>
-    </div>
+    <div><h1 class="page-title">Permisos y roles</h1><div class="page-sub">Accesos de consola, tablet y cuentas en la nube.</div></div>
+    <button type="button" class="btn" onclick="openRolModal()">+ Nuevo rol</button>
   </div>
-  <div class="tbl-wrap" id="rolesTablesHost"></div>
+  <div id="rolesTablesHost" class="roles-page-host"></div>
 </div>
 
 <!-- ═══ IMPORT / EXPORT ═══ -->
@@ -3054,38 +3110,71 @@ function _rolTabletResumen(r){
 function renderRoles(){
   const host=document.getElementById('rolesTablesHost');if(!host)return;
   const rolesArr=Array.isArray(DB.data&&DB.data.roles)?DB.data.roles:[];
-  const head0=`<p class="roles-legend"><strong>Consola admin:</strong> cada casilla es un ítem del menú lateral que ese <em>código de rol</em> puede ver en <code>admin.html</code>. <strong>Tablet (index):</strong> controla qué botones de la barra inferior ve en <code>index.html</code> y si puede eliminar; el texto «Resumen tablet» lista lo habilitado.</p>`;
-  const head1=`<table style="width:100%;border-collapse:collapse;margin-bottom:20px;"><caption style="caption-side:top;text-align:left;font-weight:700;padding:8px 0;color:var(--text-2);">Consola admin — módulos del menú por rol</caption>
-  <thead><tr><th style="text-align:left;">Rol</th>${CONSOLE_MODULES.map(m=>`<th style="text-align:center;max-width:72px;"><div class="mono" style="font-size:10px;">${esc(m)}</div><div class="roles-table-cap">${esc(CONSOLE_MODULE_LABELS[m]||m)}</div></th>`).join('')}<th></th></tr></thead><tbody>
-  ${rolesArr.map(r=>`<tr>
-    <td><strong>${esc(r.nombre)}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(r.codigo||'')}</div></td>
-    ${CONSOLE_MODULES.map(m=>`<td style="text-align:center;"><input type="checkbox" title="${esc(CONSOLE_MODULE_LABELS[m]||m)}" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
-    <td><button type="button" class="btn sm ghost" onclick="delRol(${r.id})" title="Eliminar rol del catálogo">✕</button></td>
-  </tr>`).join('')}
-  </tbody></table>`;
-  const head2=`<table style="width:100%;border-collapse:collapse;"><caption style="caption-side:top;text-align:left;font-weight:700;padding:8px 0;color:var(--text-2);">Vista tablet (index.html) — barra inferior y permisos</caption>
-  <thead><tr><th style="text-align:left;">Rol</th>${TABLET_TAB_KEYS.map(m=>`<th style="text-align:center;max-width:88px;"><div class="mono" style="font-size:10px;">${esc(m)}</div><div class="roles-table-cap">${esc(TABLET_TAB_LABELS[m]||m)}</div></th>`).join('')}<th style="text-align:left;min-width:140px;">Resumen tablet</th><th></th></tr></thead><tbody>
-  ${rolesArr.map(r=>`<tr>
-    <td><strong>${esc(r.nombre)}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(r.codigo||'')}</div></td>
-    ${TABLET_TAB_KEYS.map(m=>`<td style="text-align:center;"><input type="checkbox" title="${esc(TABLET_TAB_LABELS[m]||m)}" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
-    <td style="font-size:11px;color:var(--text-2);">${esc(_rolTabletResumen(r))}</td>
-    <td><button type="button" class="btn sm ghost" onclick="delRol(${r.id})" title="Eliminar rol del catálogo">✕</button></td>
-  </tr>`).join('')}
-  </tbody></table>
-  <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
-    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div>
-        <div style="font-weight:700;color:var(--text-2);">Usuarios (Supabase Auth)</div>
-        <div style="font-size:12px;color:var(--text-3);max-width:640px;">Alta de correo + contraseña inicial, cambio de clave y baja (RPC <span class="mono">rpc_admin_*</span>). Solo rol <strong>admin</strong> en la nube. Podés <strong>generar contraseña</strong> en el modal y <strong>copiar correo</strong> desde la tabla. Las claves no se guardan en texto claro en la lista.</div>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button type="button" class="btn ghost sm" onclick="refreshAuthUsersList()">↻ Actualizar lista</button>
-        <button type="button" class="btn sm" onclick="openAuthUserCreateModal()">+ Nuevo usuario</button>
-      </div>
+  const emptyRow=(cols)=>`<tr><td colspan="${cols}" style="padding:28px;text-align:center;color:var(--text-3);font-size:13px;">No hay roles. Usá <strong>+ Nuevo rol</strong> arriba.</td></tr>`;
+  const consoleHead=CONSOLE_MODULES.map(m=>{
+    const lab=CONSOLE_MODULE_LABELS[m]||m;
+    return`<th class="roles-th-mod" title="${esc(lab)}">${esc(lab)}</th>`;
+  }).join('');
+  const consoleBody=rolesArr.length?rolesArr.map(r=>`<tr>
+    <td class="roles-col-role"><div class="roles-role-name">${esc(r.nombre)}</div><div class="roles-role-code">${esc(r.codigo||'')}</div></td>
+    ${CONSOLE_MODULES.map(m=>`<td class="roles-cb-cell"><input type="checkbox" aria-label="${esc((CONSOLE_MODULE_LABELS[m]||m)+' · '+r.nombre)}" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
+    <td class="roles-cb-cell"><button type="button" class="roles-icon-btn danger" onclick="delRol(${r.id})" title="Eliminar rol" aria-label="Eliminar rol">✕</button></td>
+  </tr>`).join(''):emptyRow(CONSOLE_MODULES.length+2);
+  const tabletHead=TABLET_TAB_KEYS.map(m=>{
+    const short={moldes:'Moldes',tuneles:'Túneles',pesaje:'Pesaje',general:'General',eliminar:'Borrar'}[m]||m;
+    const full=TABLET_TAB_LABELS[m]||m;
+    return`<th class="roles-th-mod" title="${esc(full)}">${esc(short)}</th>`;
+  }).join('');
+  const tabletBody=rolesArr.length?rolesArr.map(r=>`<tr>
+    <td class="roles-col-role"><div class="roles-role-name">${esc(r.nombre)}</div><div class="roles-role-code">${esc(r.codigo||'')}</div></td>
+    ${TABLET_TAB_KEYS.map(m=>`<td class="roles-cb-cell"><input type="checkbox" aria-label="${esc((TABLET_TAB_LABELS[m]||m)+' · '+r.nombre)}" ${r.permisos&&r.permisos[m]?'checked':''} onchange="togglePerm(${r.id},'${m}',this.checked)"></td>`).join('')}
+    <td class="roles-resumen-cell">${esc(_rolTabletResumen(r))}</td>
+    <td class="roles-cb-cell"><button type="button" class="roles-icon-btn danger" onclick="delRol(${r.id})" title="Eliminar rol" aria-label="Eliminar rol">✕</button></td>
+  </tr>`).join(''):emptyRow(TABLET_TAB_KEYS.length+3);
+  host.innerHTML=`<div class="roles-stack">
+  <section class="roles-card" aria-labelledby="roles-h-admin">
+    <header class="roles-card-hd" id="roles-h-admin">
+      <h2>Menú de esta consola</h2>
+      <p>Secciones del lateral en <span class="mono">admin.html</span> visibles por cada rol.</p>
+    </header>
+    <div class="roles-table-wrap">
+      <table class="roles-matrix">
+        <thead><tr>
+          <th class="roles-col-role">Rol</th>${consoleHead}
+          <th class="roles-th-act"></th>
+        </tr></thead><tbody>${consoleBody}</tbody>
+      </table>
     </div>
-    <div id="authUsersMount" class="mono" style="font-size:13px;">Cargando usuarios…</div>
-  </div>`;
-  host.innerHTML=head0+head1+head2;
+  </section>
+  <section class="roles-card" aria-labelledby="roles-h-tablet">
+    <header class="roles-card-hd" id="roles-h-tablet">
+      <h2>Barra inferior (tablet)</h2>
+      <p>Pestañas y permisos en <span class="mono">index.html</span>. La columna «Resumen» es solo referencia.</p>
+    </header>
+    <div class="roles-table-wrap">
+      <table class="roles-matrix">
+        <thead><tr>
+          <th class="roles-col-role">Rol</th>${tabletHead}
+          <th class="roles-th-resumen">Resumen</th>
+          <th class="roles-th-act"></th>
+        </tr></thead><tbody>${tabletBody}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="roles-card roles-card--users">
+    <header class="roles-card-hd roles-card-hd--row">
+      <div>
+        <h2 id="roles-h-users">Usuarios</h2>
+        <p class="roles-users-hint">Supabase · correo, nombre, rol y contraseña (RPC admin). Requiere sesión admin.</p>
+      </div>
+      <div class="roles-card-actions">
+        <button type="button" class="btn ghost sm" onclick="refreshAuthUsersList()">Actualizar</button>
+        <button type="button" class="btn sm" onclick="openAuthUserCreateModal()">Nuevo usuario</button>
+      </div>
+    </header>
+    <div id="authUsersMount" class="roles-users-mount">Cargando…</div>
+  </section>
+</div>`;
   void refreshAuthUsersList();
 }
 function authSuggestPassword(){
@@ -3120,7 +3209,7 @@ function authCopyText(t){
 async function refreshAuthUsersList(){
   const mount=document.getElementById('authUsersMount');if(!mount)return;
   try{
-  if(!_sb){mount.innerHTML='<span style="color:var(--text-3);">Conectá Supabase para ver usuarios.</span>';return;}
+  if(!_sb){mount.innerHTML='<p class="roles-users-empty">Conectá Supabase para ver usuarios.</p>';return;}
   if(!_currentUser){
     try{
       const{data:{session}}=await _sb.auth.getSession();
@@ -3128,11 +3217,11 @@ async function refreshAuthUsersList(){
     }catch(_){}
   }
   if(!_currentUser){
-    mount.innerHTML='<span style="color:var(--text-3);">No hay sesión: pulsá <strong>Ingresar</strong> en la barra superior, completá email y contraseña, y luego <strong>Reintentar</strong>. Si el ingreso falla siempre, en el panel usá <strong>Borrar sesión guardada en este navegador</strong>.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
+    mount.innerHTML='<p class="roles-users-empty">Iniciá sesión con <strong>Ingresar</strong> en la barra superior. <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button></p>';
     return;
   }
-  if(!isSbAdmin()){mount.innerHTML='<span style="color:var(--text-3);">Tu rol en la nube es «<strong>'+esc(_currentUser.rol)+'</strong>»; hace falta <strong>admin</strong> en <span class="mono">user_profiles.rol</span> (exacto o equivalente normalizado). Si ya sos admin y no ves la lista, pulsá <strong>Reintentar</strong> tras iniciar sesión.</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';return;}
-  mount.innerHTML='<span style="color:var(--text-3);">Cargando…</span>';
+  if(!isSbAdmin()){mount.innerHTML='<p class="roles-users-empty">Hace falta rol <strong>admin</strong> en la nube. <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button></p>';return;}
+  mount.innerHTML='<p class="roles-users-empty" style="margin:0;">Cargando…</p>';
   try{
     const{data,error}=await _sb.from('user_profiles').select('id,email,rol,nombre,activo,created_at').order('created_at',{ascending:false});
     if(error)throw error;
@@ -3140,35 +3229,39 @@ async function refreshAuthUsersList(){
     const codOpts=[...new Set((((DB.data&&DB.data.roles)||[])).map(r=>String(r.codigo||'').trim()).filter(Boolean))];
     ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
     codOpts.sort();
-    mount.innerHTML=`<table style="width:100%;border-collapse:collapse;font-family:inherit;"><thead><tr>
-      <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);">Correo</th>
-      <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);">Nombre</th>
-      <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);">Rol</th>
-      <th style="text-align:center;padding:6px 8px;border-bottom:1px solid var(--border);">Activo</th>
-      <th style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);">Acciones</th>
+    mount.innerHTML=`<table class="roles-users-table"><thead><tr>
+      <th>Correo</th>
+      <th>Nombre</th>
+      <th style="width:140px;">Rol</th>
+      <th style="width:72px;text-align:center;">Activo</th>
+      <th style="width:200px;text-align:right;">Acciones</th>
     </tr></thead><tbody>
     ${rows.map(u=>{
       const self=u.id===_currentUser.id;
       const sel=codOpts.map(c=>`<option value="${esc(c)}" ${String(u.rol)===c?'selected':''}>${esc(c)}</option>`).join('');
       return `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><strong>${esc(u.email||'')}</strong><div class="mono" style="font-size:10px;color:var(--text-3);">${esc(u.id)}</div><button type="button" class="btn ghost sm" style="margin-top:4px;font-size:11px;padding:2px 8px;" onclick='authCopyText(${JSON.stringify(u.email||'')})'>Copiar correo</button></td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><input class="input" data-auth-nombre="${esc(u.id)}" value="${esc(u.nombre||'')}" style="min-width:120px;font-size:12px;padding:4px 8px;"></td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border);"><select class="input" onchange="authUserPatchRol('${u.id}',this.value)" style="font-size:12px;padding:4px 8px;">${sel}</select></td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;"><input type="checkbox" ${u.activo!==false?'checked':''} onchange="authUserPatchActivo('${u.id}',this.checked)"></td>
-        <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
-          <button type="button" class="btn sm ghost" onclick="authUserSaveNombre('${u.id}')">Guardar nombre</button>
-          <button type="button" class="btn sm" onclick='openAuthUserPasswordModal(${JSON.stringify(u.id)},${JSON.stringify(u.email||'')})'>Contraseña</button>
-          <button type="button" class="btn sm ghost" onclick="authUserDelete('${u.id}')" ${self?'disabled':''} style="${self?'opacity:.4':''}">Eliminar</button>
+        <td>
+          <div class="roles-user-email">${esc(u.email||'')}</div>
+          <div class="roles-user-meta" title="UUID">${esc(u.id)}</div>
+          <button type="button" class="btn ghost sm" style="margin-top:8px;font-size:11px;padding:4px 10px;" onclick='authCopyText(${JSON.stringify(u.email||'')})'>Copiar correo</button>
         </td>
+        <td><input class="input roles-input-sm" data-auth-nombre="${esc(u.id)}" value="${esc(u.nombre||'')}"></td>
+        <td><select class="select roles-input-sm" onchange="authUserPatchRol('${u.id}',this.value)">${sel}</select></td>
+        <td style="text-align:center;"><input type="checkbox" ${u.activo!==false?'checked':''} onchange="authUserPatchActivo('${u.id}',this.checked)" aria-label="Activo"></td>
+        <td><div class="roles-user-actions">
+          <button type="button" class="btn sm ghost" onclick="authUserSaveNombre('${u.id}')">Guardar</button>
+          <button type="button" class="btn sm" onclick='openAuthUserPasswordModal(${JSON.stringify(u.id)},${JSON.stringify(u.email||'')})'>Clave</button>
+          <button type="button" class="btn sm ghost danger" onclick="authUserDelete('${u.id}')" ${self?'disabled':''} style="${self?'opacity:.45;pointer-events:none':''}">Eliminar</button>
+        </div></td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
-    if(!rows.length)mount.innerHTML='<span style="color:var(--text-3);">No hay filas en user_profiles.</span>';
+    if(!rows.length)mount.innerHTML='<p class="roles-users-empty">No hay filas en <span class="mono">user_profiles</span>.</p>';
   }catch(e){
-    mount.innerHTML='<span style="color:var(--err);">'+esc(e.message||String(e))+'</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
+    mount.innerHTML='<p class="roles-users-empty" style="color:var(--err);">'+esc(e.message||String(e))+' <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button></p>';
   }
   }catch(err){
-    mount.innerHTML='<span style="color:var(--err);">'+esc(err&&err.message?err.message:String(err))+'</span> <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button>';
+    mount.innerHTML='<p class="roles-users-empty" style="color:var(--err);">'+esc(err&&err.message?err.message:String(err))+' <button type="button" class="btn sm ghost" onclick="refreshAuthUsersList()">Reintentar</button></p>';
   }
 }
 function openAuthUserCreateModal(){
