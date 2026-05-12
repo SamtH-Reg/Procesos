@@ -2967,7 +2967,20 @@ function _idxSetSinAccesoPanel(motivo){
     msg.innerHTML='Tu rol está reconocido, pero <strong>no tiene ningún módulo de la barra inferior</strong> habilitado (Moldes, Túneles, Pesaje, General). Un administrador debe marcar esos permisos en la tabla de roles.';
   }
 }
-/** Permiso de matriz (tablet). Con sesión Supabase y catálogo vacío aún → permisivo hasta el pull. Con sesión y catálogo sin fila → ya bloqueado arriba. */
+/** Convierte flags de permisos (jsonb / strings) a booleano estricto. Evita `!!"false"===true`. */
+function _idxNormalizePermValue(v){
+  if(v===true)return true;
+  if(v===false||v===null||v===undefined)return false;
+  if(typeof v==='number')return v!==0;
+  if(typeof v==='string'){
+    const s=v.trim().toLowerCase();
+    if(s==='true'||s==='1'||s==='yes'||s==='si'||s==='sí')return true;
+    if(s==='false'||s==='0'||s==='no'||s===''||s==='null'||s==='undefined')return false;
+    return false;
+  }
+  return false;
+}
+/** Permiso de matriz (tablet). Con sesión: nunca permisivo por catálogo vacío (evita pestañas visibles hasta sync). */
 function _idxPerm(key){
   try{
     const code=_idxRolTabletNormalizado();
@@ -2977,12 +2990,12 @@ function _idxPerm(key){
     const hasCatalog=roles.length>0;
     const r=_idxRolRecordForSession();
     if(typeof _tbUser!=='undefined'&&_tbUser){
-      if(!hasCatalog)return true;
+      if(!hasCatalog)return false;
       if(!r||!r.permisos)return false;
-      return !!r.permisos[key];
+      return _idxNormalizePermValue(r.permisos[key]);
     }
     if(!r||!r.permisos)return true;
-    return !!r.permisos[key];
+    return _idxNormalizePermValue(r.permisos[key]);
   }catch(_){return true;}
 }
 function _idxFirstAllowedPanel(){
@@ -3352,6 +3365,7 @@ const DB={
       if(seed&&seed.permisos){
         Object.keys(seed.permisos).forEach(k=>{if(r.permisos[k]===undefined)r.permisos[k]=seed.permisos[k];});
       }
+      Object.keys(r.permisos).forEach(k=>{r.permisos[k]=_idxNormalizePermValue(r.permisos[k]);});
     });
   },
   addDictValue(field,value){
@@ -9772,7 +9786,9 @@ function _tbMapRoleFromSb(row){
   if(!p||typeof p!=='object')p={};
   const nombre=String(row.nombre||'').trim()||'Rol';
   const codigo=String(row.codigo||'').trim().toLowerCase()||_slugCodigoRol(nombre);
-  return{id:+row.id,nombre,codigo,permisos:p};
+  const permisos={};
+  Object.keys(p).forEach(k=>{permisos[k]=_idxNormalizePermValue(p[k]);});
+  return{id:+row.id,nombre,codigo,permisos};
 }
 
 /** Firma estable del blob eqState+eqHist para push incremental a `app_kv`. */
