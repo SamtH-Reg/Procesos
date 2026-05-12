@@ -2922,15 +2922,24 @@ function _idxRolTabletNormalizado(){
   if(x==='administrador'||x==='admin')return'admin';
   return x;
 }
-/** Busca definición de rol en catálogo local (por codigo o nombre). */
+/** Busca definición de rol en catálogo local (por codigo o nombre). Si hay duplicados de `codigo`, usa la última fila (más reciente en pull típico). */
 function _idxRolRecordForSession(){
   const code=_idxRolTabletNormalizado();
   if(!code)return null;
   const roles=(window.DB&&DB.data&&Array.isArray(DB.data.roles))?DB.data.roles:[];
-  let r=roles.find(x=>String(x.codigo||'').trim().toLowerCase()===code);
-  if(!r)r=roles.find(x=>_slugCodigoRol(x.nombre)===code);
-  if(!r)r=roles.find(x=>String(x.nombre||'').trim().toLowerCase()===code);
-  return r||null;
+  for(let i=roles.length-1;i>=0;i--){
+    const x=roles[i];
+    if(x&&String(x.codigo||'').trim().toLowerCase()===code)return x;
+  }
+  for(let i=roles.length-1;i>=0;i--){
+    const x=roles[i];
+    if(x&&_slugCodigoRol(x.nombre)===code)return x;
+  }
+  for(let i=roles.length-1;i>=0;i--){
+    const x=roles[i];
+    if(x&&String(x.nombre||'').trim().toLowerCase()===code)return x;
+  }
+  return null;
 }
 /**
  * Sesión Supabase activa y catálogo con roles, pero el perfil no coincide con ninguna fila (o falta rol en perfil).
@@ -2980,6 +2989,23 @@ function _idxNormalizePermValue(v){
   }
   return false;
 }
+/** Lee permiso barra «túneles» con alias legacy en jsonb (`túneles`, mayúsculas). */
+function _idxPermTunelesFromObj(p){
+  if(!p||typeof p!=='object')return false;
+  if(Object.prototype.hasOwnProperty.call(p,'tuneles'))return _idxNormalizePermValue(p.tuneles);
+  if(Object.prototype.hasOwnProperty.call(p,'túneles'))return _idxNormalizePermValue(p['túneles']);
+  const hit=Object.keys(p).find(kk=>{
+    const nk=String(kk||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return nk==='tuneles';
+  });
+  return hit!=null?_idxNormalizePermValue(p[hit]):false;
+}
+/** Valor efectivo de un permiso de rol para la tablet (barra y checks). */
+function _idxPermValueForRole(r,key){
+  if(!r||!r.permisos)return false;
+  if(key==='tuneles')return _idxPermTunelesFromObj(r.permisos);
+  return _idxNormalizePermValue(r.permisos[key]);
+}
 /** Permiso de matriz (tablet). Con sesión: nunca permisivo por catálogo vacío (evita pestañas visibles hasta sync). */
 function _idxPerm(key){
   try{
@@ -2992,11 +3018,15 @@ function _idxPerm(key){
     if(typeof _tbUser!=='undefined'&&_tbUser){
       if(!hasCatalog)return false;
       if(!r||!r.permisos)return false;
-      return _idxNormalizePermValue(r.permisos[key]);
+      return _idxPermValueForRole(r,key);
     }
     if(!r||!r.permisos)return true;
-    return _idxNormalizePermValue(r.permisos[key]);
-  }catch(_){return true;}
+    return _idxPermValueForRole(r,key);
+  }catch(e){
+    console.warn('[idxPerm]',key,e);
+    try{if(typeof _tbUser!=='undefined'&&_tbUser)return false;}catch(_){}
+    return true;
+  }
 }
 function _idxFirstAllowedPanel(){
   if(_idxPerm('moldes'))return'panelMoldes';
@@ -3366,6 +3396,12 @@ const DB={
         Object.keys(seed.permisos).forEach(k=>{if(r.permisos[k]===undefined)r.permisos[k]=seed.permisos[k];});
       }
       Object.keys(r.permisos).forEach(k=>{r.permisos[k]=_idxNormalizePermValue(r.permisos[k]);});
+      const tEff=_idxPermTunelesFromObj(r.permisos);
+      r.permisos.tuneles=tEff;
+      Object.keys(r.permisos).slice().forEach(k=>{
+        const nk=String(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        if(nk==='tuneles'&&k!=='tuneles')delete r.permisos[k];
+      });
     });
   },
   addDictValue(field,value){
@@ -5646,7 +5682,13 @@ function _eqModalHistorialDescargasHtml(codigo){
   </div>`;
 }
 let _eqModalCode=null;
+function _idxGuardTunelesInteract(actionLabel){
+  if(typeof _idxPerm!=='function'||_idxPerm('tuneles'))return true;
+  if(typeof showToast==='function')showToast('Sin permiso para '+actionLabel+' en Túneles/Placas','error');
+  return false;
+}
 function openEqModal(codigo){
+  if(!_idxGuardTunelesInteract('operar equipos'))return;
   _eqModalCode=codigo;
   const eq=DB.data.equipos.find(e=>e.codigo===codigo);if(!eq)return;
   const rt=getEqRT(codigo);
@@ -5749,6 +5791,7 @@ function openEqModal(codigo){
 }
 function closeEqModal(){closeModal();_eqModalCode=null;}
 function addEqItem(){
+  if(!_idxGuardTunelesInteract('cargar productos'))return;
   const rt=getEqRT(_eqModalCode);
   const pid=parseInt(document.getElementById('eqAddPreset').value);
   const p=DB.data.presets.find(x=>x.id===pid);
@@ -5791,6 +5834,7 @@ function consumirPendientes(presetId,cant){
   return {consumido:cant-rest,guias:Array.from(guias)};
 }
 function cargarDesdeConteo(presetId){
+  if(!_idxGuardTunelesInteract('cargar desde conteo'))return;
   const eq=DB.data.equipos.find(e=>e.codigo===_eqModalCode);if(!eq)return;
   const p=DB.data.presets.find(x=>x.id===presetId);if(!p)return;
   const rt=getEqRT(_eqModalCode);
@@ -5821,6 +5865,7 @@ function cargarDesdeConteo(presetId){
 }
 window.cargarDesdeConteo=cargarDesdeConteo;
 function removeEqItem(idx){
+  if(!_idxGuardTunelesInteract('quitar productos'))return;
   const rt=getEqRT(_eqModalCode);
   const it=rt.items[idx];
   if(it&&it.fuente==='conteo'&&it.presetId){
@@ -5843,6 +5888,7 @@ function removeEqItem(idx){
   if(it&&it.fuente==='conteo'&&it.presetId){try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}}
 }
 function iniciarCongelacion(){
+  if(!_idxGuardTunelesInteract('iniciar congelación'))return;
   const rt=getEqRT(_eqModalCode);
   if(!rt.items||!rt.items.length){showToast('Carga productos primero','error');return;}
   delete rt.cierreAnticipado;
@@ -5874,6 +5920,7 @@ function _finalizarCongelacionAplicar(cod,meta){
   showToast(meta&&meta.anticipado?'Frío finalizado (cierre anticipado registrado)':'Frío finalizado','success');
 }
 function finalizarCongelacion(){
+  if(!_idxGuardTunelesInteract('finalizar congelación'))return;
   const cod=_eqModalCode;
   if(!cod){showToast('Abre de nuevo el equipo','error');return;}
   const rt=getEqRT(cod);
@@ -5908,6 +5955,7 @@ function finalizarCongelacion(){
   _finalizarCongelacionAplicar(cod,null);
 }
 function descargarEq(){
+  if(!_idxGuardTunelesInteract('descargar equipo'))return;
   const rt=getEqRT(_eqModalCode);
   const eq=DB.data.equipos.find(e=>e.codigo===_eqModalCode);
   // Log historial por equipo + mover a empacados
@@ -9164,9 +9212,14 @@ window.eRegStep=eRegStep;window.eRegCalcKg=eRegCalcKg;window.regEmpaque=regEmpaq
 /* ═══ ANÁLISIS ═════════════════════════════════════════════════ */
 const ANAL_IDS={general:'analGeneral',hora:'analHora',moldes:'analMoldes',tuneles:'analTuneles',pesaje:'analPesaje',consol:'analConsol'};
 function navAnal(key){
+  let k=key;
+  if(k==='tuneles'&&typeof _idxPerm==='function'&&!_idxPerm('tuneles')){
+    if(typeof showToast==='function')showToast('Sin permiso para ver Túneles/Placas','error');
+    k='general';
+  }
   Object.values(ANAL_IDS).forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add('hidden');});
-  const sel=document.getElementById(ANAL_IDS[key]);if(sel)sel.classList.remove('hidden');
-  document.querySelectorAll('#analTabs .tab').forEach(b=>b.classList.toggle('active',b.dataset.anal===key));
+  const sel=document.getElementById(ANAL_IDS[k]);if(sel)sel.classList.remove('hidden');
+  document.querySelectorAll('#analTabs .tab').forEach(b=>b.classList.toggle('active',b.dataset.anal===k));
   renderAnalisis();
 }
 function _hourOf(hhmm){const m=(hhmm||'').match(/^(\d{1,2}):/);return m?parseInt(m[1]):null;}
@@ -9788,6 +9841,12 @@ function _tbMapRoleFromSb(row){
   const codigo=String(row.codigo||'').trim().toLowerCase()||_slugCodigoRol(nombre);
   const permisos={};
   Object.keys(p).forEach(k=>{permisos[k]=_idxNormalizePermValue(p[k]);});
+  const tEff=_idxPermTunelesFromObj(p);
+  permisos.tuneles=tEff;
+  Object.keys(permisos).slice().forEach(k=>{
+    const nk=String(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(nk==='tuneles'&&k!=='tuneles')delete permisos[k];
+  });
   return{id:+row.id,nombre,codigo,permisos};
 }
 
