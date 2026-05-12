@@ -3189,13 +3189,44 @@ function authSuggestPassword(){
   }
   return out.join('')+'9a!';
 }
-function authFillSuggestedPassword(inputId){
+function authFillSuggestedPassword(inputId, opts){
+  opts=opts||{};
   const el=document.getElementById(inputId);
   if(!el)return;
   el.value=authSuggestPassword();
+  if(opts.keepVisible){
+    el.type='text';
+    const showId=inputId==='aupPass'?'aupShow':(inputId==='aucPass'?'aucShow':null);
+    const cb=showId?document.getElementById(showId):null;
+    if(cb)cb.checked=true;
+    toast('Contraseña generada (visible para copiar en la tablet)','info');
+    return;
+  }
   el.type='text';
-  setTimeout(()=>{try{el.type='password';}catch(_){}},600);
-  toast('Contraseña generada (se oculta de nuevo en un instante)','info');
+  setTimeout(()=>{
+    try{
+      el.type='password';
+      const showId=inputId==='aupPass'?'aupShow':(inputId==='aucPass'?'aucShow':null);
+      const c=showId?document.getElementById(showId):null;
+      if(c)c.checked=false;
+    }catch(_){}
+  },opts.rehideMs!=null?+opts.rehideMs:900);
+  toast('Contraseña generada (visible un momento; marcá «Mostrar» para dejarla visible)','info');
+}
+function authSetPassInputType(inputId, showPlain){
+  const el=document.getElementById(inputId);
+  if(!el)return;
+  el.type=showPlain?'text':'password';
+}
+function authCopyPasswordFrom(inputId){
+  const el=document.getElementById(inputId);
+  const t=el?String(el.value||'').trim():'';
+  if(!t){toast('No hay contraseña para copiar','warn');return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    void navigator.clipboard.writeText(t).then(()=>toast('Contraseña copiada al portapapeles','success')).catch(()=>toast('No se pudo copiar (permiso del navegador)','err'));
+    return;
+  }
+  toast('Portapapeles no disponible en este navegador','err');
 }
 function authCopyText(t){
   const s=String(t==null?'':t);
@@ -3272,12 +3303,12 @@ function openAuthUserCreateModal(){
   ['admin','supervisor','planillero','operario'].forEach(c=>{if(codOpts.indexOf(c)<0)codOpts.push(c);});
   codOpts.sort();
   const body=`<div class="form-field"><label class="form-label">Correo (login en tablet y admin)</label><input class="input" id="aucEmail" type="email" autocomplete="off" placeholder="usuario@empresa.cl"></div>
-  <div class="form-field"><label class="form-label">Contraseña inicial (mín. 6 caracteres)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input class="input" id="aucPass" type="password" autocomplete="new-password" style="flex:1;min-width:160px;"><button type="button" class="btn ghost sm" onclick="authFillSuggestedPassword('aucPass')">Generar</button></div></div>
+  <div class="form-field"><label class="form-label">Contraseña inicial (mín. 6 caracteres)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input class="input" id="aucPass" type="password" autocomplete="new-password" style="flex:1;min-width:160px;"><button type="button" class="btn ghost sm" onclick="authFillSuggestedPassword('aucPass',{keepVisible:true})">Generar</button><button type="button" class="btn ghost sm" onclick="authCopyPasswordFrom('aucPass')">Copiar</button></div><label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--text-3);cursor:pointer;"><input type="checkbox" id="aucShow" onchange="authSetPassInputType('aucPass',this.checked)">Mostrar contraseña</label></div>
   <div class="form-field"><label class="form-label">Nombre mostrado (ej. Administrador)</label><input class="input" id="aucNom" placeholder="opcional"></div>
   <div class="form-field"><label class="form-label">Rol en la nube (código = columna catálogo)</label><select class="input" id="aucRol">${codOpts.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></div>`;
   openModal('Nuevo usuario',body,async()=>{
     const email=(document.getElementById('aucEmail')||{}).value.trim();
-    const pw=(document.getElementById('aucPass')||{}).value||'';
+    const pw=String((document.getElementById('aucPass')||{}).value||'').trim();
     const nom=(document.getElementById('aucNom')||{}).value.trim();
     const rol=(document.getElementById('aucRol')||{}).value||'operario';
     if(!email||!pw){toast('Correo y contraseña obligatorios','err');return false;}
@@ -3293,14 +3324,16 @@ function openAuthUserPasswordModal(userId,emailLabel){
   if(!_currentUser){toast('Pulsa Ingresar arriba e inicia sesión.','err');openAuthLoginPanel();return;}
   if(!isSbAdmin()){toast('Solo el rol admin puede cambiar contraseñas.','err');return;}
   const body=`<p style="font-size:13px;color:var(--text-2);margin:0 0 12px;">${esc(emailLabel||userId)}</p>
-  <div class="form-field"><label class="form-label">Nueva contraseña (mín. 6)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input class="input" id="aupPass" type="password" autocomplete="new-password" style="flex:1;min-width:160px;"><button type="button" class="btn ghost sm" onclick="authFillSuggestedPassword('aupPass')">Generar</button></div></div>`;
+  <div class="form-field"><label class="form-label">Nueva contraseña (mín. 6)</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input class="input" id="aupPass" type="password" autocomplete="new-password" style="flex:1;min-width:160px;"><button type="button" class="btn ghost sm" onclick="authFillSuggestedPassword('aupPass',{keepVisible:true})">Generar</button><button type="button" class="btn ghost sm" onclick="authCopyPasswordFrom('aupPass')">Copiar</button></div><label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--text-3);cursor:pointer;"><input type="checkbox" id="aupShow" onchange="authSetPassInputType('aupPass',this.checked)">Mostrar contraseña</label></div>`;
   openModal('Cambiar contraseña',body,async()=>{
-    const pw=(document.getElementById('aupPass')||{}).value||'';
+    const pw=String((document.getElementById('aupPass')||{}).value||'').trim();
+    const uid=String(userId||'').trim();
     if(pw.length<6){toast('Mínimo 6 caracteres','err');return false;}
-    const{error}=await _sb.rpc('rpc_admin_set_user_password',{p_user_id:userId,p_password:pw});
+    if(!uid){toast('Usuario inválido (sin id)','err');return false;}
+    const{error}=await _sb.rpc('rpc_admin_set_user_password',{p_user_id:uid,p_password:pw});
     if(error)throw new Error(error.message);
     toast('Contraseña actualizada','success');
-    await refreshAuthUsersList();
+    try{await refreshAuthUsersList();}catch(e2){console.warn(e2);}
     return true;
   });
 }
@@ -4045,9 +4078,17 @@ function openModal(title,body,cb){
 function closeModal(){const m=document.getElementById('__modal');if(m)m.remove();_modalCallback=null;}
 function confirmModal(){
   if(!_modalCallback){closeModal();return;}
+  const root=document.getElementById('__modal');
+  const btn=root?root.querySelector('.modal-ftr .btn:not(.ghost)'):null;
+  const lab=btn?btn.textContent:'';
   const ret=_modalCallback();
   if(ret&&typeof ret.then==='function'){
-    ret.then(ok=>{if(ok!==false)closeModal();}).catch(e=>{
+    if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+    ret.then(ok=>{
+      if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
+      if(ok!==false)closeModal();
+    }).catch(e=>{
+      if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
       const m=e&&e.message?e.message:String(e);
       toast('Error al guardar: '+m,'err');
       sbLog('Modal async: '+m,false);

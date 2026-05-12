@@ -129,6 +129,8 @@ language plpgsql
 security definer
 set search_path = public, auth, extensions
 as $$
+declare
+  n int;
 begin
   if not public.is_admin() then
     raise exception 'forbidden';
@@ -140,7 +142,8 @@ begin
   set encrypted_password = extensions.crypt(trim(p_password), extensions.gen_salt('bf'::text)),
       updated_at = now()
   where id = p_user_id;
-  if not found then
+  get diagnostics n = row_count;
+  if n = 0 then
     raise exception 'Usuario no encontrado';
   end if;
 end;
@@ -151,6 +154,8 @@ language plpgsql
 security definer
 set search_path = public, auth, extensions
 as $$
+declare
+  n int;
 begin
   if not public.is_admin() then
     raise exception 'forbidden';
@@ -159,7 +164,8 @@ begin
     raise exception 'No podés eliminar tu propia cuenta';
   end if;
   delete from auth.users where id = p_user_id;
-  if not found then
+  get diagnostics n = row_count;
+  if n = 0 then
     raise exception 'Usuario no encontrado';
   end if;
 end;
