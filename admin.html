@@ -3370,19 +3370,30 @@ async function authUserSaveNombre(id){
   if(error){toast(error.message,'err');await refreshAuthUsersList();return;}
   toast('Nombre guardado','success');
 }
-function togglePerm(rid,mod,val){const r=DB.data.roles.find(x=>x.id===rid);if(!r)return;r.permisos=r.permisos||{};r.permisos[mod]=val;DB.save();toast('Permiso actualizado','info');if(document.getElementById('page-roles')&&document.getElementById('page-roles').classList.contains('active'))renderRoles();}
+function togglePerm(rid,mod,val){const r=DB.data.roles.find(x=>x.id===rid);if(!r)return;r.permisos=r.permisos||{};r.permisos[mod]=val;DB.save();toast('Permiso actualizado','info');if(document.getElementById('page-roles')&&document.getElementById('page-roles').classList.contains('active'))renderRoles();void adminSyncRoleRowToSupabase(rid);}
 function openRolModal(){
   const n=prompt('Nombre del nuevo rol:');if(!n||!String(n).trim())return;
   const c=prompt('Código interno (minúsculas; debe coincidir con user_profiles.rol en Supabase):',_slugCodigoRol(n));
   if(c===null)return;
   const codigo=_slugCodigoRol(c||n);
   if((DB.data.roles||[]).some(r=>String(r.codigo||'').toLowerCase()===codigo)){toast('Ya existe un rol con ese código','err');return;}
-  DB.data.roles.push({id:Date.now(),nombre:String(n).trim(),codigo,permisos:{}});DB.save();renderRoles();toast('Rol creado','success');
+  const nid=Date.now();
+  DB.data.roles.push({id:nid,nombre:String(n).trim(),codigo,permisos:{}});DB.save();renderRoles();toast('Rol creado','success');
+  void adminSyncRoleRowToSupabase(nid);
 }
 function delRol(id){
   const r=DB.data.roles.find(x=>x.id===id);
   if(r&&String(r.codigo||'')==='admin'){toast('No se puede eliminar el rol admin','err');return;}
-  if(!confirm('¿Eliminar rol?'))return;DB.data.roles=DB.data.roles.filter(x=>x.id!==id);DB.save();renderRoles();
+  if(!confirm('¿Eliminar rol?'))return;
+  void (async()=>{
+    try{
+      if(_sb&&_currentUser&&isSbAdmin()){
+        const{error}=await _sb.from('roles').delete().eq('id',id);
+        if(error)throw error;
+      }
+    }catch(e){toast('No se pudo borrar el rol en Supabase: '+(e.message||String(e)),'err');return;}
+    DB.data.roles=DB.data.roles.filter(x=>x.id!==id);DB.save();renderRoles();
+  })();
 }
 
 /* ════════════ IMPORT / EXPORT ════════════ */
@@ -3944,7 +3955,7 @@ function sbStartPoll(){
     }
     sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes+' generales='+_pollCounts.generales);
   })();
-  _pollInterval=setInterval(_pollFresh,30000);
+  _pollInterval=setInterval(_pollFresh,60000);
 }
 function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
@@ -3994,6 +4005,18 @@ const SB_MAP={
 };
 function _sbRows(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.out);}
 function _sbParse(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.in);}
+
+/** Tras cambiar permisos en Admin: sube la fila a Supabase para que index (pull/Realtime) reciba la misma matriz. */
+async function adminSyncRoleRowToSupabase(rid){
+  try{
+    if(!_sb||!_currentUser||!isSbAdmin())return;
+    const r=(DB.data.roles||[]).find(x=>x.id===rid);
+    if(!r)return;
+    const mapped=_sbRows('roles',[r]);
+    const{error}=await _sb.from('roles').upsert(mapped,{onConflict:'id'});
+    if(error)throw error;
+  }catch(e){toast('No se pudo guardar el rol en Supabase: '+(e.message||String(e)),'err');}
+}
 
 async function sbUpsertPresets(rows){
   if(!_sb)return{error:new Error('Sin Supabase')};

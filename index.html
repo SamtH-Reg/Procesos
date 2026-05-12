@@ -9511,7 +9511,8 @@ function syncCatalogFromStorage(opts){
   opts=opts||{};
   const raw=localStorage.getItem(STORE_KEY)||'';
   if(!raw)return false;
-  if(!opts.force&&opts.source!=='storage'&&raw===_catalogSnap)return false;
+  /* Misma cadena que ya tenemos: no re-parsear ni repintar (evita parpadeo entre pestañas). */
+  if(!opts.force&&raw===_catalogSnap)return false;
   try{
     DB.data=JSON.parse(raw);
     DB._heal();
@@ -9519,7 +9520,13 @@ function syncCatalogFromStorage(opts){
   }catch(e){console.warn('[syncCatalog]',e);return false;}
   _bumpCatalogSnap();
   refreshOperateUiAfterCatalogChange();
-  if(opts.source==='storage'&&typeof showToast==='function')showToast('Catálogo actualizado (admin u otra pestaña)','info');
+  if(opts.source==='storage'&&typeof showToast==='function'){
+    const now=Date.now();
+    if(!window._idxCatalogToastAt||now-window._idxCatalogToastAt>8000){
+      window._idxCatalogToastAt=now;
+      showToast('Catálogo actualizado (admin u otra pestaña)','info');
+    }
+  }
   return true;
 }
 window.refreshOperateUiAfterCatalogChange=refreshOperateUiAfterCatalogChange;
@@ -9570,9 +9577,14 @@ function schedulePeerRtApply(jsonStr){
   _peerRtSyncTimer=setTimeout(()=>{_peerRtSyncTimer=null;applyRtFromPeerJson(jsonStr);},120);
 }
 
+let _catalogStorageDebounce=null;
 window.addEventListener('storage',e=>{
   if(e.key===STORE_KEY&&e.newValue!=null){
-    syncCatalogFromStorage({source:'storage',force:true});
+    if(_catalogStorageDebounce)clearTimeout(_catalogStorageDebounce);
+    _catalogStorageDebounce=setTimeout(()=>{
+      _catalogStorageDebounce=null;
+      syncCatalogFromStorage({source:'storage'});
+    },320);
     return;
   }
   if(e.key===RT_KEY&&e.newValue!=null)schedulePeerRtApply(e.newValue);
@@ -9583,13 +9595,18 @@ document.addEventListener('visibilitychange',()=>{
   syncCatalogFromStorage({source:'visibility'});
   if(!_tbSb||typeof TBSync==='undefined'||!TBSync.pullCatalogs)return;
   const now=Date.now();
-  if(now-_lastSbVisiblePull<15000)return;
+  if(now-_lastSbVisiblePull<45000)return;
   _lastSbVisiblePull=now;
   TBSync.pullCatalogs();
 });
 
-// Re-render equipos cada minuto para progreso en vivo
-setInterval(()=>{renderEquipos();},60000);
+// Re-render equipos cada minuto (solo si el rol puede ver Túneles; evita trabajo y repaints innecesarios)
+setInterval(()=>{
+  try{
+    if(typeof _idxPerm==='function'&&!_idxPerm('tuneles'))return;
+  }catch(_){}
+  renderEquipos();
+},60000);
 
 /* ══════════════════════════════════════════════════════════════
    SUPABASE SYNC · Tablet
