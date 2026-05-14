@@ -397,16 +397,37 @@ body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
 .tab svg{width:18px;height:18px;stroke-width:2;}
 .tab:active{background:var(--surface-alt);}
 .tab.active{background:var(--brand);color:white;box-shadow:0 2px 8px rgba(0,0,0,.2);}
-/* Pesaje — color teal diferenciado del módulo Moldes (verde) */
-#panelPesaje .tab.active{background:#0891b2;box-shadow:0 2px 8px rgba(8,145,178,.32);}
+/* Moldes = verde esmeralda (bloques / plancha). Pesaje = violeta (balanza / otro flujo). Barras claramente distintas. */
+#panelMoldes .tabs{
+  border-color:color-mix(in srgb,#059669 30%,var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,#059669 8%,var(--surface)) 0%,var(--surface) 100%);
+}
+#panelMoldes .tab.active{
+  background:linear-gradient(135deg,#047857 0%,#10b981 100%);
+  color:#fff;
+  box-shadow:0 3px 14px rgba(16,185,129,.45);
+}
+#panelMoldes .tab.active svg{color:#fff;}
+#panelPesaje .tabs{
+  border-color:color-mix(in srgb,#7c3aed 34%,var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,#7c3aed 10%,var(--surface)) 0%,var(--surface) 100%);
+}
+#panelPesaje .tab.active{
+  background:linear-gradient(135deg,#5b21b6 0%,#8b5cf6 100%);
+  color:#fff;
+  box-shadow:0 3px 14px rgba(124,58,237,.42);
+}
+#panelPesaje .tab.active svg{color:#fff;}
 /* Registro general — acento slate (sin operario) */
 #panelGeneral .tab.active{background:#64748b;box-shadow:0 2px 8px rgba(100,116,139,.35);}
-.tab-nav.tab-nav-pesaje.active{color:#0891b2;}
-.tab-nav.tab-nav-pesaje.active::before{background:#0891b2;}
+#tabnavMoldes.tab-nav.active{color:#059669;}
+#tabnavMoldes.tab-nav.active::before{background:linear-gradient(90deg,#047857,#10b981);}
+.tab-nav.tab-nav-pesaje.active{color:#7c3aed;}
+.tab-nav.tab-nav-pesaje.active::before{background:linear-gradient(90deg,#5b21b6,#8b5cf6);}
 .tab-nav.tab-nav-general.active{color:#64748b;}
 .tab-nav.tab-nav-general.active::before{background:#64748b;}
-.btn.teal{background:#0891b2;color:#fff;border:1.5px solid #0891b2;}
-.btn.teal:active{background:#0e7490;}
+.btn.teal{background:#7c3aed;color:#fff;border:1.5px solid #6d28d9;}
+.btn.teal:active{background:#5b21b6;}
 .tab .tab-badge{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:22px;height:22px;padding:0 6px;
@@ -1001,7 +1022,7 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
   gap:12px;
 }
 .p-reg-kg-stack .p-reg-save-pesaje{width:100%;margin:0;}
-/* Teclado: tarjeta más estrecha que el botón teal, sombra suave, teclas blancas */
+/* Teclado: tarjeta más estrecha que el botón Guardar (violeta pesaje), sombra suave, teclas blancas */
 #pRegKgPadCard{
   max-width:min(352px,100%);
   width:100%;
