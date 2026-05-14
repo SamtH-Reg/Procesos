@@ -605,8 +605,16 @@ body[data-theme="dark"] .preset-card.selected .preset-meta strong{color:#4ade80 
   box-shadow:0 2px 6px rgba(22,163,74,.5);
 }
 .preset-name{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
-.preset-meta{font-size:12px;color:var(--text-3);display:flex;gap:10px;align-items:center;}
+.preset-meta{font-size:12px;color:var(--text-3);display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 .preset-meta strong{color:var(--brand);font-family:var(--mono);font-weight:600;}
+.preset-details{
+  font-size:11px;font-weight:500;color:var(--text-2);
+  line-height:1.35;margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100%;
+}
+.preset-card.selected .preset-details{color:#166534;}
+body[data-theme="dark"] .preset-card.selected .preset-details{color:#86efac;}
 .preset-tag{
   display:inline-block;font-size:10px;font-weight:700;
   padding:3px 8px;border-radius:4px;
@@ -4856,6 +4864,14 @@ function _getMRegEspecie(){
   }
   return '';
 }
+/** Línea secundaria en tarjetas de preset (tablet): destino · calibre · especie. */
+function _presetCardDetailHtml(p){
+  if(!p||typeof p!=='object')return '';
+  const bits=[p.destino,p.calibre,p.especie].map(x=>String(x==null?'':x).trim()).filter(Boolean);
+  if(!bits.length)return '';
+  const txt=bits.join(' · ');
+  return `<div class="preset-details" title="${esc(txt)}">${esc(txt)}</div>`;
+}
 function renderMRegPresets(){
   const grid=document.getElementById('mRegPresetGrid');if(!grid)return;
   const allPresets=DB.data.presets.filter(p=>p.activo);
@@ -4876,6 +4892,7 @@ function renderMRegPresets(){
   grid.innerHTML=presets.map(p=>`
     <button type="button" class="preset-card ${String(RT.selPresetM)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetM(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
+      ${_presetCardDetailHtml(p)}
       <div class="preset-meta"><span class="preset-tag ${p.tipo==='molde'?'molde':'bandeja'}">${({molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
 }
@@ -5194,6 +5211,7 @@ function renderGRegPresets(){
   grid.innerHTML=presets.map(p=>`
     <button type="button" class="preset-card ${String(RT.selPresetG)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetG(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
+      ${_presetCardDetailHtml(p)}
       <div class="preset-meta"><span class="preset-tag ${p.tipo}">${({pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
 }
