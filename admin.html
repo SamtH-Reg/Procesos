@@ -812,6 +812,10 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
           <input type="checkbox" id="sbMsgEconomy" onchange="sbMsgEconomyOnChange()" style="margin-top:3px;">
           <span><strong>Modo ahorro de mensajes</strong> (activado por defecto para no agotar la cuota Realtime del plan Free): sin WS ni polling automático sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span>. El <strong>armado de línea</strong> sigue en vivo. Usa <strong>Traer moldes y pesajes</strong> para actualizar registros. <em>Desmarca</em> esta casilla solo si necesitas ver moldes/pesajes al instante (gasta muchos mensajes).</span>
         </label>
+        <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer;font-size:13px;line-height:1.45;">
+          <input type="checkbox" id="sbRtCatalog" onchange="sbRtCatalogOnChange()" style="margin-top:3px;">
+          <span><strong>Realtime en catálogo</strong> (presets, turnos, equipos): <strong>desactivado por defecto</strong> para no quedarte sin cuota por cambios masivos (p. ej. trabajadores desde Asistencia). Marcá solo si necesitás ver esos cambios al instante. Sin esto: <strong>Traer del servidor</strong> o volver a esta pestaña tras unos segundos refresca catálogo por HTTP.</span>
+        </label>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:12px;">
         Al iniciar sesión se descargan moldes, pesajes y armado (HTTP). En modo ahorro, pulsa <strong>Traer moldes y pesajes</strong> para actualizar registros.
@@ -916,6 +920,17 @@ function sbMsgEconomyOnChange(){
   if(sbMsgEconomyEnabled())sbLog('Modo ahorro: moldes/pesajes solo manual (botón Traer).');
   else sbStartPoll();
   toast(sbMsgEconomyEnabled()?'Modo ahorro activo':'Modo vivo: Realtime + poll en moldes/pesajes','info');
+}
+/** Realtime sobre catálogo DB (presets/turnos/equipos): por defecto OFF — solo `localStorage friosur_admin_rt_catalog === '1'` lo activa (ahorra muchísimos mensajes; trabajadores nunca va por RT aquí). */
+const SB_RT_CATALOG_KEY='friosur_admin_rt_catalog';
+function sbRtCatalogRealtimeEnabled(){try{return localStorage.getItem(SB_RT_CATALOG_KEY)==='1';}catch(e){return false;}}
+function sbRtCatalogSet(on){try{localStorage.setItem(SB_RT_CATALOG_KEY,on?'1':'0');}catch(e){}}
+function sbRtCatalogInitCheckbox(){const el=document.getElementById('sbRtCatalog');if(el)el.checked=sbRtCatalogRealtimeEnabled();}
+function sbRtCatalogOnChange(){
+  const el=document.getElementById('sbRtCatalog');
+  sbRtCatalogSet(!!(el&&el.checked));
+  sbSubscribeRealtime();
+  toast(sbRtCatalogRealtimeEnabled()?'Realtime catálogo: ON (cuota)':'Realtime catálogo: OFF — usa «Traer del servidor» o volver a esta pestaña','info');
 }
 const SB_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3453,7 +3468,7 @@ function importExcel(e){
 let _sb=null;
 function loadSbCreds(){try{const c=JSON.parse(localStorage.getItem(SB_KEY))||{};if(!c.url&&SB_DEFAULT.url){return{...SB_DEFAULT,connected:true};}return c;}catch(e){return{...SB_DEFAULT,connected:true};}}
 function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
-(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();}catch(_){}});},0);})();
+(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();sbRtCatalogInitCheckbox();}catch(_){}});},0);})();
 
 /* ════════════ AUTH ════════════ */
 let _currentUser=null;
@@ -3904,12 +3919,14 @@ function sbSubscribeRealtime(){
   if(!_sb)return;
   _sbChannels.forEach(ch=>{try{_sb.removeChannel(ch);}catch(e){}});_sbChannels=[];
   const liveRt=!sbMsgEconomyEnabled();
+  const catRt=sbRtCatalogRealtimeEnabled();
   const subs=[
     ...(liveRt?[{tbl:'moldes',     target:'RT',  key:'moldes'},{tbl:'pesajes',    target:'RT',  key:'pesajes'}]:[]),
-    {tbl:'presets',    target:'DB',  key:'presets',    render:()=>typeof renderPresets==='function'&&renderPresets()},
-    {tbl:'trabajadores',target:'DB', key:'trabajadores',render:()=>typeof renderTrabs==='function'&&renderTrabs()},
-    {tbl:'turnos',     target:'DB',  key:'turnos',     render:()=>typeof renderTurnos==='function'&&renderTurnos()},
-    {tbl:'equipos',    target:'DB',  key:'equipos',    render:()=>typeof renderEquipos==='function'&&renderEquipos()}
+    ...(catRt?[
+      {tbl:'presets',    target:'DB',  key:'presets',    render:()=>typeof renderPresets==='function'&&renderPresets()},
+      {tbl:'turnos',     target:'DB',  key:'turnos',     render:()=>typeof renderTurnos==='function'&&renderTurnos()},
+      {tbl:'equipos',    target:'DB',  key:'equipos',    render:()=>typeof renderEquipos==='function'&&renderEquipos()}
+    ]:[])
   ];
   subs.forEach(s=>{
     const ch=_sb.channel('rt-'+s.tbl).on('postgres_changes',{event:'*',schema:'public',table:s.tbl},(p)=>{
@@ -3920,9 +3937,6 @@ function sbSubscribeRealtime(){
       const arr=tgt.data[s.key];
       const mapper=SB_MAP[s.tbl]?SB_MAP[s.tbl].in:(x=>x);
       const pkCol=(s.tbl==='turnos'||s.tbl==='equipos')?'codigo':'id';
-      // Trabajadores vienen de Asistencia (sync externo) — ignorar eventos RT de Procesos
-      // para no sobreescribir centro_costo/contrato que Procesos no tiene en su schema
-      if(s.tbl==='trabajadores'){sbLog('↻ trabajadores RT ignorado (datos de Asistencia)');sbRerenderCurrent(s.tbl);return;}
       if(p.eventType==='INSERT'||p.eventType==='UPDATE'){
         const rec=mapper(p.new);
         const pkVal=(p.new||{})[pkCol];
@@ -3956,7 +3970,8 @@ function sbSubscribeRealtime(){
     _sbChannels.push(chArm);
   }catch(e){sbLog('Realtime armado_lineas: '+(e&&e.message?e.message:String(e)),false);}
   try{
-    const chKv=_sb.channel('rt-app-kv').on('postgres_changes',{event:'*',schema:'public',table:'app_kv'},(p)=>{
+    const chKv=_sb.channel('rt-app-kv');
+    chKv.on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+DASH_CLOUD_KEY},(p)=>{
       const row=p.new||p.old;
       if(!row||p.eventType==='DELETE')return;
       if(row.key===DASH_CLOUD_KEY){
@@ -3966,15 +3981,26 @@ function sbSubscribeRealtime(){
           if(typeof renderDashGrid==='function')renderDashGrid();
           rtPulse('dashboard');
         }
-        return;
       }
+    }).on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+EQ_RUNTIME_CLOUD_KEY},(p)=>{
+      const row=p.new||p.old;
+      if(!row||p.eventType==='DELETE')return;
       if(row.key===EQ_RUNTIME_CLOUD_KEY&&row.value){
         _adminApplyEqRuntimeFromCloud(row.value);
       }
     }).subscribe((status)=>{sbLog('canal app_kv: '+status);});
     _sbChannels.push(chKv);
   }catch(e){sbLog('Realtime app_kv: '+(e&&e.message?e.message:String(e)),false);}
-  sbLog('Realtime: '+(subs.length+2)+' canal(es)'+(liveRt?'':' (ahorro: sin moldes/pesajes; armado_lineas sí)'));
+  sbLog('Realtime: '+_sbChannels.length+' canal(es)'+(liveRt?'':' (ahorro moldes/pesajes)')+(catRt?'':' (ahorro catálogo DB)')+'. Trabajadores: solo HTTP (Asistencia).');
+  if(!catRt&&!window._sbCatVisHook){
+    window._sbCatVisHook=true;
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState!=='visible'||sbRtCatalogRealtimeEnabled())return;
+      if(!_sb||!_currentUser||!isSbAdmin())return;
+      clearTimeout(window._sbCatVisT);
+      window._sbCatVisT=setTimeout(()=>{void sbPullDbCatalogOnly();},2800);
+    });
+  }
 }
 /* ── Re-render reactivo con debounce corto + indicador RT ── */
 let _rerenderTimer=null;
@@ -4215,6 +4241,19 @@ async function pushAll(){
   }catch(e3){sbLog('push eq_runtime: '+(e3&&e3.message?e3.message:String(e3)),false);}
   document.getElementById('sbDot').className='status-dot online';
   toast('Push: '+ok+' OK, '+err+' err',err?'warn':'success');
+}
+/** Solo catálogo DB por HTTP (sin moldes/pesajes) — refresco cuando Realtime catálogo está apagado. */
+async function sbPullDbCatalogOnly(){
+  if(!_sb||!_currentUser||!isSbAdmin())return;
+  try{
+    for(const t of['presets','trabajadores','turnos','equipos','roles']){
+      const{data,error}=await _sb.from(t).select('*');
+      if(error)throw error;
+      DB.data[t]=_sbParse(t,data||[]);
+    }
+    DB.save();
+    renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
+  }catch(e){sbLog('pull catálogo silencioso: '+(e&&e.message?e.message:String(e)),false);}
 }
 async function pullAll(){
   if(!_sb){toast('Conecta primero','warn');return;}

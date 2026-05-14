@@ -9672,7 +9672,7 @@ setInterval(()=>{
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
    - Push a Supabase: upsert incremental (solo filas nuevas/cambiadas + DELETE de borrados) para moldes/pesajes/generales y armado_lineas (clave compuesta) — evita tormentas Realtime al re-subir todo en cada rtSave
    - Tras «Traer» o aplicar armado remoto se alinean firmas locales (refresh / refreshArmadoSigFromLocal) para no re-tocar la nube al siguiente guardado
-   - Realtime: catálogos + moldes/pesajes (un canal) + armado_lineas + app_kv (`friosur_eq_runtime`); generales solo REST si no están en publication
+   - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por clave `friosur_eq_runtime`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
@@ -9703,6 +9703,8 @@ try{
 }catch(e){console.warn('[sb] init',e);}
 /** Ahorro de cuota Realtime: por defecto activo. Solo `localStorage friosur_tb_msg_economy === '0'` activa WS moldes/pesajes (vivo). `armado_lineas` sigue en vivo salvo que cambies la suscripción en código. */
 function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')!=='0';}catch(e){return true;}}
+/** Catálogo (presets, turnos, equipos, roles) por Realtime: solo si `friosur_tb_rt_catalog==='1'`; por defecto OFF (ahorra mensajes; pull en login / Sincronizar / al volver a la pestaña). */
+function tbRtCatalogRealtime(){try{return localStorage.getItem('friosur_tb_rt_catalog')==='1';}catch(e){return false;}}
 /** Valor `fecha` tal como lo espera .eq() contra Postgres (AAAA-MM-DD o prefijo ISO). */
 function _tbFechaEqFromRow(v){
   if(v==null||v==='')return'';
@@ -10228,13 +10230,22 @@ const TBSync={
       clearTimeout(this._debRemoteCat);
       this._debRemoteCat=setTimeout(()=>{this.pullCatalogs();},500);
     };
-    _tbSb.channel('tb-catalog-sync')
-      .on('postgres_changes',{event:'*',schema:'public',table:'presets'},bumpRemoteCatalog)
-      .on('postgres_changes',{event:'*',schema:'public',table:'trabajadores'},bumpRemoteCatalog)
-      .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
-      .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
-      .on('postgres_changes',{event:'*',schema:'public',table:'roles'},bumpRemoteCatalog)
-      .subscribe();
+    if(tbRtCatalogRealtime()){
+      _tbSb.channel('tb-catalog-sync')
+        .on('postgres_changes',{event:'*',schema:'public',table:'presets'},bumpRemoteCatalog)
+        .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
+        .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
+        .on('postgres_changes',{event:'*',schema:'public',table:'roles'},bumpRemoteCatalog)
+        .subscribe();
+    }else if(!this._catalogVisHook){
+      this._catalogVisHook=true;
+      document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState!=='visible'||tbRtCatalogRealtime())return;
+        if(!_tbSb||!_tbUser)return;
+        clearTimeout(this._catVisT);
+        this._catVisT=setTimeout(()=>{try{this.pullCatalogs();}catch(_){}},2800);
+      });
+    }
     /* moldes + pesajes: un solo canal Realtime (menos suscripciones WS que dos canales).
        Registro general (generales) no usa Realtime: solo REST push/pull → ahorro de mensajes.
        Modo ahorro por defecto; friosur_tb_msg_economy='0' fuerza WS moldes/pesajes (vivo). */
@@ -10320,7 +10331,7 @@ const TBSync={
       if(typeof _updatePArmScopeStatus==='function')_updatePArmScopeStatus();
     }).subscribe();
     _tbSb.channel('tb-eq-runtime-kv')
-      .on('postgres_changes',{event:'*',schema:'public',table:'app_kv'},(p)=>{
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+TB_EQ_CLOUD_KEY},(p)=>{
         const row=p.new||p.old;if(!row)return;
         if(String(row.key||'')!==TB_EQ_CLOUD_KEY)return;
         if(p.eventType==='DELETE')return;
