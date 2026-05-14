@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Friosur Admin · Consola de gestión</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://etiltewnmupnifedhyld.supabase.co" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -3451,7 +3453,7 @@ function importExcel(e){
 let _sb=null;
 function loadSbCreds(){try{const c=JSON.parse(localStorage.getItem(SB_KEY))||{};if(!c.url&&SB_DEFAULT.url){return{...SB_DEFAULT,connected:true};}return c;}catch(e){return{...SB_DEFAULT,connected:true};}}
 function saveSbCreds(c){localStorage.setItem(SB_KEY,JSON.stringify(c));}
-(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))requestAnimationFrame(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();}catch(_){}});});})();
+(function initSb(){const c=loadSbCreds();document.getElementById('sbUrl').value=c.url||SB_DEFAULT.url;document.getElementById('sbKey').value=c.key||SB_DEFAULT.key;if((c.url||SB_DEFAULT.url))setTimeout(()=>{void connectSupabase(true).then(()=>{try{sbMsgEconomyInitCheckbox();}catch(_){}});},0);})();
 
 /* ════════════ AUTH ════════════ */
 let _currentUser=null;
@@ -3544,6 +3546,18 @@ async function bindSupabaseAuth(){
   const b0=document.getElementById('authBoot');
   if(b0)b0.textContent='Comprobando sesión…';
   let initialDone=false;
+  /* Hidratar antes del listener: INITIAL_SESSION a veces llega tarde y la pantalla boot se queda mucho tiempo. */
+  try{
+    const{data:preData,error:preErr}=await _sb.auth.getSession();
+    if(preErr)throw preErr;
+    const preSess=preData&&preData.session?preData.session:null;
+    if(preSess){
+      await adminHydrateFromSession(preSess);
+      initialDone=true;
+    }
+  }catch(e){
+    try{sbLog('getSession previo a auth listener: '+(e&&e.message?e.message:String(e)),false);}catch(_){}
+  }
   const{data:{subscription}}=_sb.auth.onAuthStateChange(async(event,sess)=>{
     try{
       if(event==='INITIAL_SESSION'){
@@ -3560,18 +3574,22 @@ async function bindSupabaseAuth(){
         try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
         return;
       }
-      if(event==='SIGNED_IN'&&sess)await applySession(sess);
+      if(event==='SIGNED_IN'&&sess){
+        const m=document.getElementById('authMsg');
+        if(m){m.style.color='#64748b';m.textContent='Cargando perfil…';}
+        await applySession(sess);
+      }
     }catch(err){try{sbLog('auth listener: '+(err&&err.message?err.message:String(err)),false);}catch(_){}}
   });
   _authSub=subscription;
-  /* Si INITIAL_SESSION no llega (extensiones, red lenta), recuperar sesión por getSession. */
+  /* Respaldo si getSession previo e INITIAL_SESSION nunca cierran el arranque (poco frecuente). */
   setTimeout(()=>{
     void (async()=>{
       if(initialDone)return;
       try{
         const gs=await Promise.race([
           _sb.auth.getSession(),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('getSession timeout')),9000))
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('getSession timeout')),8000))
         ]);
         if(initialDone)return;
         initialDone=true;
@@ -3589,7 +3607,7 @@ async function bindSupabaseAuth(){
         showAuthOverlay();
       }
     })();
-  },6000);
+  },2800);
 }
 /** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
 function dashRefreshKgSummary(opts){
