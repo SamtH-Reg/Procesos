@@ -9594,7 +9594,6 @@ initRuntime();
 /* RT compartido con admin.html u otra pestaña: mismo localStorage, sin Supabase */
 let _peerRtSyncTimer=null;
 let _peerRtPendingJson=null;
-let _lastPeerRtToastAt=0;
 function applyRtFromPeerJson(jsonStr){
   if(jsonStr==null)return;
   try{
@@ -9621,18 +9620,14 @@ function applyRtFromPeerJson(jsonStr){
       });
     }
     const serialized=JSON.stringify(RT);
-    /* Si ya coincide con lo que mandó la otra pestaña, no volver a escribir localStorage (evita eco storage → bucle de avisos). */
-    let wrote=false;
+    /* Si ya coincide con lo que mandó la otra pestaña, no volver a escribir localStorage (evita eco storage entre pestañas). */
     if(serialized!==jsonStr){
-      try{localStorage.setItem(RT_KEY,serialized);wrote=true;}catch(e){}
+      try{localStorage.setItem(RT_KEY,serialized);}catch(e){}
     }
     if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();
     initRuntime();
     updateBadges();
-    if(typeof showToast==='function'&&wrote){
-      const t=Date.now();
-      if(t-_lastPeerRtToastAt>12000){_lastPeerRtToastAt=t;showToast('Datos operativos actualizados (admin u otra pestaña)','info');}
-    }
+    /* Sin toast: el sync entre pestañas debe ser silencioso; avisos repetidos venían de eco Realtime/storage. */
   }catch(err){console.warn('[peer RT]',err);}
 }
 function schedulePeerRtApply(jsonStr){
@@ -9943,6 +9938,14 @@ function _tbMapRoleFromSb(row){
 function _tbEqRuntimeSig(){
   try{return JSON.stringify({es:RT.eqState&&typeof RT.eqState==='object'?RT.eqState:{},eh:RT.eqHist&&typeof RT.eqHist==='object'?RT.eqHist:{}});}catch(e){return'';}
 }
+/** Ignora `at` y otros metadatos del valor en `app_kv` para no reprocesar el mismo estado en bucle (Realtime + push con Date.now()). */
+function _tbStableEqKvFingerprint(val){
+  try{
+    if(!val||typeof val!=='object')return'';
+    return JSON.stringify({eqState:val.eqState&&typeof val.eqState==='object'?val.eqState:{},eqHist:val.eqHist&&typeof val.eqHist==='object'?val.eqHist:{},source:val.source||''});
+  }catch(e){return'';}
+}
+let _tbLastStableEqKvFp='';
 function _tbEnsureEqStateKeysFromEquipos(){
   if(typeof RT==='undefined'||!RT.eqState||typeof RT.eqState!=='object')return;
   if(typeof DB==='undefined'||!DB.data||!Array.isArray(DB.data.equipos))return;
@@ -9952,24 +9955,35 @@ function _tbEnsureEqStateKeysFromEquipos(){
     if(!RT.eqState[c])RT.eqState[c]={estado:'libre',items:[],congelando:false,horaInicio:null,horaFinEst:null,horasTotal:0};
   });
 }
-/** Aplica `app_kv` remoto (otra tablet o admin). No pisa UI si hay modal de equipo abierto. */
-function _tbApplyRemoteEqRuntime(value,_updatedAt){
+/** Aplica `app_kv` remoto (otra tablet o admin). No pisa UI si hay modal de equipo abierto.
+ *  @param {boolean} [fromPull] si true (pull HTTP), no se usa dedupe por huella — el servidor puede repetir el mismo blob que ya llegó por Realtime. */
+function _tbApplyRemoteEqRuntime(value,_updatedAt,fromPull){
   try{
     if(!value||typeof value!=='object')return;
     if(typeof _eqModalCode!=='undefined'&&_eqModalCode){
       console.info('[eq_runtime] sync remoto omitido: modal de equipo abierto');
       return;
     }
+    const fp=_tbStableEqKvFingerprint(value);
+    if(!fromPull){
+      if(fp&&fp===_tbLastStableEqKvFp)return;
+    }
     const es=value.eqState&&typeof value.eqState==='object'?value.eqState:null;
     const eh=value.eqHist&&typeof value.eqHist==='object'?value.eqHist:null;
     if(!es&&!eh)return;
     if(!RT.eqState||typeof RT.eqState!=='object')RT.eqState={};
+    const sigBefore=_tbEqRuntimeSig();
     if(es){
       RT.eqState=JSON.parse(JSON.stringify(es));
       _tbEnsureEqStateKeysFromEquipos();
     }
     if(eh)RT.eqHist=JSON.parse(JSON.stringify(eh));
     else if(!RT.eqHist||typeof RT.eqHist!=='object')RT.eqHist={};
+    if(_tbEqRuntimeSig()===sigBefore){
+      if(fp)_tbLastStableEqKvFp=fp;
+      return;
+    }
+    if(fp)_tbLastStableEqKvFp=fp;
     try{if(typeof _rtSaveOrig==='function')_rtSaveOrig();}catch(_){}
     try{if(typeof TBSync!=='undefined'&&TBSync._lastSig)TBSync._lastSig.eqKv=_tbEqRuntimeSig();}catch(_){}
     if(typeof renderEquipos==='function')renderEquipos();
@@ -9984,7 +9998,7 @@ async function _tbPullEqRuntimeFromCloud(opts){
   try{
     const{data,error}=await _tbSb.from('app_kv').select('value,updated_at').eq('key',TB_EQ_CLOUD_KEY).maybeSingle();
     if(error){if(!silent)console.warn('[tb pull eq_runtime]',error.message);return;}
-    if(data&&data.value)_tbApplyRemoteEqRuntime(data.value,data.updated_at);
+    if(data&&data.value)_tbApplyRemoteEqRuntime(data.value,data.updated_at,true);
   }catch(e){if(!silent)console.warn('[tb pull eq_runtime]',e);}
 }
 
