@@ -2763,8 +2763,13 @@ function renderPresets(){
     <td><button class="btn sm ghost" onclick="openPresetModal(${p.id})">✎</button> <button class="btn sm ghost" onclick="delPreset(${p.id})">✕</button></td>
   </tr>`).join('')||'<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets que coincidan con el filtro</td></tr>';
 }
+function _adminNextPresetId(){
+  let m=0;
+  for(const p of(DB.data.presets||[])){const id=+p.id;if(Number.isFinite(id)&&id>m)m=id;}
+  return m+1;
+}
 function openPresetModal(id){
-  const p=id?DB.data.presets.find(x=>x.id===id):{id:Date.now(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true};
+  const p=id?DB.data.presets.find(x=>x.id===id):{id:_adminNextPresetId(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true};
   const uso=inferUsoEquipo(p);
   openModal('Preset',`
     <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(p.nombre)}"></div>
@@ -3964,8 +3969,8 @@ async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}t
 const _today=()=>new Date().toISOString().slice(0,10);
 const SB_MAP={
   presets:{
-    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,temp_obj:r.tempObj??r.temp_obj??null,activo:r.activo!==false}),
-    in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo})
+    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:inferUsoEquipo(r),temp_obj:r.tempObj??r.temp_obj??null,activo:r.activo!==false}),
+    in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo,usoEquipo:r.uso_equipo})
   },
   trabajadores:{
     out:r=>({id:r.id,codigo:r.codigo||null,nombre:r.nombre,ficha:r.ficha||null,area:r.area||null,rol:r.rol||null,turno:r.turno||null,linea:r.linea||null,activo:r.activo!==false}),
@@ -4021,8 +4026,8 @@ async function adminSyncRoleRowToSupabase(rid){
 async function sbUpsertPresets(rows){
   if(!_sb)return{error:new Error('Sin Supabase')};
   const mapped=_sbRows('presets',rows);
-  const{data,error}=await _sb.from('presets').upsert(mapped,{onConflict:'id'}).select('id');
-  return{data,error};
+  const{error}=await _sb.from('presets').upsert(mapped,{onConflict:'id'});
+  return{data:null,error};
 }
 async function sbDeletePresetRemote(id){
   if(!_sb||id==null)return{error:null};
