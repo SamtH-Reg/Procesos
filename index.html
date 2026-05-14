@@ -9593,6 +9593,7 @@ initRuntime();
 
 /* RT compartido con admin.html u otra pestaña: mismo localStorage, sin Supabase */
 let _peerRtSyncTimer=null;
+let _peerRtPendingJson=null;
 let _lastPeerRtToastAt=0;
 function applyRtFromPeerJson(jsonStr){
   if(jsonStr==null)return;
@@ -9619,19 +9620,31 @@ function applyRtFromPeerJson(jsonStr){
         if(!RT.eqState[eq.codigo])RT.eqState[eq.codigo]={estado:'libre',items:[],congelando:false,horaInicio:null,horaFinEst:null,horasTotal:0};
       });
     }
-    try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}
+    const serialized=JSON.stringify(RT);
+    /* Si ya coincide con lo que mandó la otra pestaña, no volver a escribir localStorage (evita eco storage → bucle de avisos). */
+    let wrote=false;
+    if(serialized!==jsonStr){
+      try{localStorage.setItem(RT_KEY,serialized);wrote=true;}catch(e){}
+    }
     if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();
     initRuntime();
     updateBadges();
-    if(typeof showToast==='function'){
+    if(typeof showToast==='function'&&wrote){
       const t=Date.now();
-      if(t-_lastPeerRtToastAt>4500){_lastPeerRtToastAt=t;showToast('Datos operativos actualizados (admin u otra pestaña)','info');}
+      if(t-_lastPeerRtToastAt>12000){_lastPeerRtToastAt=t;showToast('Datos operativos actualizados (admin u otra pestaña)','info');}
     }
   }catch(err){console.warn('[peer RT]',err);}
 }
 function schedulePeerRtApply(jsonStr){
+  if(_peerRtPendingJson===jsonStr&&_peerRtSyncTimer)return;
+  _peerRtPendingJson=jsonStr;
   if(_peerRtSyncTimer)clearTimeout(_peerRtSyncTimer);
-  _peerRtSyncTimer=setTimeout(()=>{_peerRtSyncTimer=null;applyRtFromPeerJson(jsonStr);},120);
+  _peerRtSyncTimer=setTimeout(()=>{
+    _peerRtSyncTimer=null;
+    const pending=_peerRtPendingJson;
+    _peerRtPendingJson=null;
+    applyRtFromPeerJson(pending);
+  },120);
 }
 
 let _catalogStorageDebounce=null;
