@@ -3479,6 +3479,36 @@ function _normalizeSesionRol(r){
   return x||'operario';
 }
 function isSbAdmin(){return!!(_currentUser&&_normalizeSesionRol(_currentUser.rol)==='admin');}
+/** Último `user_profiles` leído OK (cualquier rol); sirve para no expulsar al admin si falla un SELECT puntual por red. */
+let _adminVerifiedProfileCache=null; // {id,rol,nombre,ts}
+function _adminIsTransientProfileFetchError(e){
+  if(!e)return false;
+  if(e.__profileTimeout)return true;
+  const low=String(e.message!=null?e.message:'').toLowerCase();
+  if(/failed to fetch|networkerror|network request failed|load failed|fetch/i.test(low))return true;
+  if(/timeout|timed out|etimedout|econnreset|abort/i.test(low))return true;
+  if(/502|503|504|524|bad gateway|gateway timeout|unavailable/i.test(low))return true;
+  return false;
+}
+function _adminIsNoProfileRowError(e){
+  if(!e)return false;
+  const c=String(e.code||'');
+  const low=String(e.message||'').toLowerCase();
+  return c==='PGRST116'||low.includes('0 rows')||(/multiple/i.test(low)&&/rows/i.test(low));
+}
+function _adminTryRecoverProfileFromCache(session,msgEl,reason){
+  const c=_adminVerifiedProfileCache;
+  if(!c||!session||c.id!==session.user.id)return false;
+  if(_normalizeSesionRol(c.rol)!=='admin')return false;
+  if(Date.now()-c.ts>25*60*1000)return false;
+  _currentUser={id:session.user.id,email:session.user.email,rol:'admin',nombre:c.nombre||String(session.user.email||'').split('@')[0]};
+  try{sbLog('Admin: perfil desde caché ('+reason+'). Revalidá conexión si persiste.');}catch(_){}
+  if(msgEl){
+    msgEl.style.color='#b45309';
+    msgEl.textContent='Sin respuesta al leer perfil en la nube; seguís con sesión admin. Si el problema continúa, recargá la página.';
+  }
+  return true;
+}
 /** Igual que `tbAuthOverlayMode` en index: `boot` = solo mensaje en gradiente; `login` = tarjeta; `hidden` = sin overlay. */
 function adminAuthOverlayMode(mode){
   const o=document.getElementById('authOverlay');
@@ -3526,6 +3556,7 @@ async function forceSupabaseAuthReset(){
   try{if(_authSub){_authSub.unsubscribe();}}catch(_){}
   _authSub=null;
   _currentUser=null;
+  try{_adminVerifiedProfileCache=null;}catch(_){}
   try{applyRolePermissions();}catch(_){}
   try{updateUserBadge();}catch(_){}
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
@@ -3543,6 +3574,7 @@ async function adminHydrateFromSession(sess){
     await applySession(sess);
   }else{
     _currentUser=null;
+    try{_adminVerifiedProfileCache=null;}catch(_){}
     try{applyRolePermissions();}catch(_){}
     try{updateUserBadge();}catch(_){}
     const m=document.getElementById('authMsg');
@@ -3583,6 +3615,7 @@ async function bindSupabaseAuth(){
       }
       if(event==='SIGNED_OUT'){
         _currentUser=null;
+        try{_adminVerifiedProfileCache=null;}catch(_){}
         try{applyRolePermissions();}catch(_){}
         try{updateUserBadge();}catch(_){}
         showAuthOverlay();
@@ -3615,6 +3648,7 @@ async function bindSupabaseAuth(){
         if(initialDone)return;
         initialDone=true;
         _currentUser=null;
+        try{_adminVerifiedProfileCache=null;}catch(_){}
         try{applyRolePermissions();}catch(_){}
         try{updateUserBadge();}catch(_){}
         const m=document.getElementById('authMsg');
@@ -3739,41 +3773,60 @@ async function sbPullRuntimeFromCloud(){
 async function applySession(session){
   if(!_sb||!session)return false;
   const msgEl=document.getElementById('authMsg');
+  let data=null;
   try{
     const res=await Promise.race([
       _sb.from('user_profiles').select('*').eq('id',session.user.id).single(),
-      new Promise(r=>setTimeout(()=>r({__profileTimeout:true}),10000))
+      new Promise(r=>setTimeout(()=>r({__profileTimeout:true}),12000))
     ]);
     if(res&&res.__profileTimeout){
+      if(!_adminTryRecoverProfileFromCache(session,msgEl,'timeout user_profiles')){
+        _currentUser=null;
+        showAuthOverlay();
+        if(msgEl){
+          msgEl.style.color='#dc2626';
+          msgEl.textContent='Tiempo de espera al leer user_profiles. Reintentá o recargá; la sesión en el navegador no se borró sola.';
+        }
+        try{applyRolePermissions();}catch(_){}
+        try{updateUserBadge();}catch(_){}
+        try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+        return false;
+      }
+    }else{
+      const{data:d,error}=res;
+      if(error)throw error;
+      data=d;
+    }
+  }catch(e){
+    if(!_adminTryRecoverProfileFromCache(session,msgEl,'error user_profiles')){
       _currentUser=null;
-      showAuthOverlay();
       if(msgEl){
         msgEl.style.color='#dc2626';
-        msgEl.textContent='Tiempo de espera al leer user_profiles. Revisá la red, el proyecto Supabase o las políticas RLS.';
+        msgEl.textContent='No se pudo leer user_profiles: '+(e&&e.message?e.message:'¿existe tu fila y políticas RLS?')+'.';
       }
       try{applyRolePermissions();}catch(_){}
       try{updateUserBadge();}catch(_){}
+      showAuthOverlay();
       try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+      if(_adminIsNoProfileRowError(e)){
+        try{await _sb.auth.signOut({scope:'global'});}catch(_){try{await _sb.auth.signOut();}catch(__){}}
+      }
       return false;
     }
-    const{data,error}=res;
-    if(error)throw error;
+  }
+  if(data){
     _currentUser={id:session.user.id,email:session.user.email,rol:_normalizeSesionRol(data.rol),nombre:data.nombre||session.user.email.split('@')[0]};
-  }catch(e){
-    _currentUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};
-    if(msgEl){
-      msgEl.style.color='#dc2626';
-      msgEl.textContent='No se pudo leer user_profiles: '+(e&&e.message?e.message:'¿existe tu fila y políticas RLS?')+'.';
-    }
+    try{_adminVerifiedProfileCache={id:_currentUser.id,rol:_currentUser.rol,nombre:_currentUser.nombre,ts:Date.now()};}catch(_){}
   }
   if(!isSbAdmin()){
     const rolBad=_currentUser?_normalizeSesionRol(_currentUser.rol):'';
     _currentUser=null;
+    try{_adminVerifiedProfileCache=null;}catch(_){}
     try{await _sb.auth.signOut({scope:'global'});}catch(_){try{await _sb.auth.signOut();}catch(__){}}
     showAuthOverlay();
     if(msgEl){
       msgEl.style.color='#dc2626';
-      const keep=String(msgEl.textContent||'').includes('user_profiles');
+      const keep=String(msgEl.textContent||'').includes('user_profiles')||String(msgEl.textContent||'').includes('nube');
       if(!keep){msgEl.textContent='Esta consola admin es solo para rol admin en Supabase. Rol detectado: «'+rolBad+'».';}
     }
     try{applyRolePermissions();}catch(_){}
@@ -3828,6 +3881,7 @@ async function doLogout(){
   if(typeof sbStopPoll==='function')sbStopPoll();
   try{await _sb.auth.signOut();}catch(_){}
   _currentUser=null;
+  try{_adminVerifiedProfileCache=null;}catch(_){}
   try{applyRolePermissions();}catch(_){}
   try{updateUserBadge();}catch(_){}
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
