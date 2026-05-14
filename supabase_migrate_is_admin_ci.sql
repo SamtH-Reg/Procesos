@@ -5,11 +5,14 @@
 -- Si is_admin() hace SELECT en user_profiles con row_security ON, Postgres puede
 -- re-evaluar la misma política de forma recursiva y el cliente ve timeouts.
 -- Solución: SECURITY DEFINER + SET LOCAL row_security = off solo dentro de estas funciones.
+--
+-- Debe ser VOLATILE: PostgreSQL no permite SET LOCAL dentro de funciones STABLE/IMMUTABLE
+-- (error: «SET is not allowed in a non-volatile function»).
 
 create or replace function public.is_admin()
 returns boolean
 language plpgsql
-stable
+volatile
 security definer
 set search_path to 'public'
 as $$
@@ -25,7 +28,7 @@ $$;
 create or replace function public.current_rol()
 returns text
 language plpgsql
-stable
+volatile
 security definer
 set search_path to 'public'
 as $$

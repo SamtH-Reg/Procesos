@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Control de Producción — Friosur SpA</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://etiltewnmupnifedhyld.supabase.co" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -186,12 +188,18 @@ input,select,textarea{font-family:inherit;}
 }
 /* Misma idea que admin: hasta que GoTrue confirma sesión, no mostrar la app detrás del overlay. */
 body.tb-auth-lock{overflow:hidden;}
-body.tb-auth-lock .app{
+/* No bloquear la topbar: el overlay cubre la vista pero el chip permite cerrar sesión */
+body.tb-auth-lock .app > .content,
+body.tb-auth-lock .app > .tabbar{
   visibility:hidden !important;
   pointer-events:none;
   user-select:none;
 }
 body.tb-auth-lock #tbAuthOverlay{pointer-events:auto;}
+body.tb-auth-lock .topbar{
+  position:relative;
+  z-index:100010;
+}
 
 /* ═══ TOPBAR ══════════════════════════════════════════════════ */
 .topbar{
@@ -1593,7 +1601,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 </head>
 <body class="tb-auth-lock">
 <!-- ═══ LOGIN MODAL TABLET ═══ -->
-<div id="tbAuthOverlay" style="display:flex;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:99999;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:column;gap:20px;padding:20px;box-sizing:border-box;">
+<div id="tbAuthOverlay" style="display:flex;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:99990;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:column;gap:20px;padding:20px;box-sizing:border-box;">
+  <button type="button" id="tbAuthExitBtn" onclick="void tbAuthEmergencyExit()" style="position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:2;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.35);background:rgba(15,23,42,.45);color:#e2e8f0;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Salir</button>
   <div id="tbAuthBoot" style="color:#e2e8f0;font-size:17px;font-weight:600;text-align:center;">Comprobando sesión…</div>
   <div id="tbAuthCard" style="display:none;background:#fff;border-radius:20px;padding:40px;width:min(440px,92vw);box-shadow:0 24px 80px rgba(0,0,0,.6);">
     <div style="text-align:center;margin-bottom:28px;">
@@ -10325,6 +10334,12 @@ const _rtSaveOrig=rtSave;
 rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();_tbMaybeStoreArmadoBackupOnRtSave();TBSync.schedulePush();};
 
 /* ── AUTH TABLET ── */
+async function tbAuthEmergencyExit(){
+  try{if(_tbSb)await _tbSb.auth.signOut();}catch(_){}
+  _tbUser=null;
+  try{if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();}catch(_){}
+  tbAuthOverlayMode('hidden');
+}
 function tbAuthOverlayMode(mode){
   const o=document.getElementById('tbAuthOverlay');
   const boot=document.getElementById('tbAuthBoot');
@@ -10358,6 +10373,17 @@ async function tbInitAuth(){
   _tbAuthSub=null;
   tbAuthOverlayMode('boot');
   let initialDone=false;
+  try{
+    const{data:preData,error:preErr}=await _tbSb.auth.getSession();
+    if(preErr)throw preErr;
+    const preSess=preData&&preData.session?preData.session:null;
+    if(preSess){
+      await tbApplySession(preSess);
+      try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull catálogo inicial',e);}
+      try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos iniciales',e2);}
+      initialDone=true;
+    }
+  }catch(e){console.warn('[tb] getSession previo a listener',e&&e.message?e.message:e);}
   const{data:{subscription}}=_tbSb.auth.onAuthStateChange(async(event,sess)=>{
     try{
       if(event==='INITIAL_SESSION'){
@@ -10383,6 +10409,8 @@ async function tbInitAuth(){
         return;
       }
       if(event==='SIGNED_IN'&&sess){
+        const m=document.getElementById('tbAuthMsg');
+        if(m){m.style.color='#64748b';m.textContent='Cargando perfil…';}
         await tbApplySession(sess);
         try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
         try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos tras login',e2);}
