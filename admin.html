@@ -3518,6 +3518,22 @@ async function forceSupabaseAuthReset(){
 }
 /** Suscripción Auth del cliente actual (tras cada connectSupabase). Evita quedar sin sesión con cliente nuevo. */
 let _authSub=null;
+/** Aplica sesión inicial o post-login; actualiza texto de boot mientras se lee el perfil. */
+async function adminHydrateFromSession(sess){
+  if(sess){
+    const b=document.getElementById('authBoot');
+    if(b)b.textContent='Cargando perfil…';
+    await applySession(sess);
+  }else{
+    _currentUser=null;
+    try{applyRolePermissions();}catch(_){}
+    try{updateUserBadge();}catch(_){}
+    const m=document.getElementById('authMsg');
+    if(m){m.style.color='#64748b';m.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
+    showAuthOverlay();
+    try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+  }
+}
 async function bindSupabaseAuth(){
   if(!_sb)return;
   if(_authSub){
@@ -3525,23 +3541,15 @@ async function bindSupabaseAuth(){
     _authSub=null;
   }
   adminAuthOverlayMode('boot');
+  const b0=document.getElementById('authBoot');
+  if(b0)b0.textContent='Comprobando sesión…';
   let initialDone=false;
   const{data:{subscription}}=_sb.auth.onAuthStateChange(async(event,sess)=>{
     try{
       if(event==='INITIAL_SESSION'){
         if(initialDone)return;
         initialDone=true;
-        if(sess){
-          await applySession(sess);
-        }else{
-          _currentUser=null;
-          try{applyRolePermissions();}catch(_){}
-          try{updateUserBadge();}catch(_){}
-          const m=document.getElementById('authMsg');
-          if(m){m.style.color='#64748b';m.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
-          showAuthOverlay();
-          try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
-        }
+        await adminHydrateFromSession(sess);
         return;
       }
       if(event==='SIGNED_OUT'){
@@ -3556,6 +3564,32 @@ async function bindSupabaseAuth(){
     }catch(err){try{sbLog('auth listener: '+(err&&err.message?err.message:String(err)),false);}catch(_){}}
   });
   _authSub=subscription;
+  /* Si INITIAL_SESSION no llega (extensiones, red lenta), recuperar sesión por getSession. */
+  setTimeout(()=>{
+    void (async()=>{
+      if(initialDone)return;
+      try{
+        const gs=await Promise.race([
+          _sb.auth.getSession(),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('getSession timeout')),9000))
+        ]);
+        if(initialDone)return;
+        initialDone=true;
+        if(gs.error)throw gs.error;
+        const s=(gs.data&&gs.data.session)||null;
+        await adminHydrateFromSession(s);
+      }catch(e){
+        if(initialDone)return;
+        initialDone=true;
+        _currentUser=null;
+        try{applyRolePermissions();}catch(_){}
+        try{updateUserBadge();}catch(_){}
+        const m=document.getElementById('authMsg');
+        if(m){m.style.color='#dc2626';m.textContent='No se pudo comprobar la sesión: '+(e&&e.message?e.message:String(e))+'. Recargá o revisá la red.';}
+        showAuthOverlay();
+      }
+    })();
+  },6000);
 }
 /** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
 function dashRefreshKgSummary(opts){
@@ -3673,7 +3707,23 @@ async function applySession(session){
   if(!_sb||!session)return false;
   const msgEl=document.getElementById('authMsg');
   try{
-    const{data,error}=await _sb.from('user_profiles').select('*').eq('id',session.user.id).single();
+    const res=await Promise.race([
+      _sb.from('user_profiles').select('*').eq('id',session.user.id).single(),
+      new Promise(r=>setTimeout(()=>r({__profileTimeout:true}),18000))
+    ]);
+    if(res&&res.__profileTimeout){
+      _currentUser=null;
+      showAuthOverlay();
+      if(msgEl){
+        msgEl.style.color='#dc2626';
+        msgEl.textContent='Tiempo de espera al leer user_profiles. Revisá la red, el proyecto Supabase o las políticas RLS.';
+      }
+      try{applyRolePermissions();}catch(_){}
+      try{updateUserBadge();}catch(_){}
+      try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+      return false;
+    }
+    const{data,error}=res;
     if(error)throw error;
     _currentUser={id:session.user.id,email:session.user.email,rol:_normalizeSesionRol(data.rol),nombre:data.nombre||session.user.email.split('@')[0]};
   }catch(e){
