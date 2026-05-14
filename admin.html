@@ -4057,13 +4057,7 @@ async function adminSyncRoleRowToSupabase(rid){
 
 async function sbUpsertPresets(rows){
   if(!_sb)return{error:new Error('Sin Supabase')};
-  try{
-    const{data:{session},error:sErr}=await _sb.auth.getSession();
-    if(sErr)return{error:sErr};
-    if(!session||!session.user)return{error:new Error('Sesión no válida o caducada: vuelve a entrar en Cuenta y reintenta.')};
-  }catch(e){
-    return{error:e};
-  }
+  // No usar await getSession() aquí: en algunos navegadores puede bloquearse y dejar el modal en «Guardando…» sin resolver.
   const mapped=(_sbRows('presets',rows||[])).map(r=>{
     const o=_sbSanitizeRow(r);
     if(Object.prototype.hasOwnProperty.call(o,'id')&&o.id!=null)o.id=_presetNumericId(o.id);
@@ -4139,6 +4133,15 @@ function setTheme(t){document.body.setAttribute('data-theme',t);localStorage.set
 })();
 
 /* ════════════ MODAL helper ════════════ */
+/** Evita UI colgada si una promesa (p. ej. red/Supabase) no termina nunca. */
+function _modalAsyncWithTimeout(p,ms){
+  const m=ms||35000;
+  let tid;
+  const timeout=new Promise((_,rej)=>{
+    tid=setTimeout(()=>rej(new Error('Tiempo de espera ('+Math.round(m/1000)+' s). Revisa conexión o vuelve a entrar en Cuenta.')),m);
+  });
+  return Promise.race([p,timeout]).finally(()=>{try{clearTimeout(tid);}catch(_){}});
+}
 let _modalCallback=null;
 function openModal(title,body,cb){
   _modalCallback=cb;
@@ -4155,7 +4158,7 @@ function confirmModal(){
   const ret=_modalCallback();
   if(ret&&typeof ret.then==='function'){
     if(btn){btn.disabled=true;btn.textContent='Guardando…';}
-    ret.then(ok=>{
+    _modalAsyncWithTimeout(ret,35000).then(ok=>{
       if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
       if(ok!==false)closeModal();
     }).catch(e=>{
