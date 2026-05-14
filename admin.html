@@ -3709,7 +3709,7 @@ async function applySession(session){
   try{
     const res=await Promise.race([
       _sb.from('user_profiles').select('*').eq('id',session.user.id).single(),
-      new Promise(r=>setTimeout(()=>r({__profileTimeout:true}),18000))
+      new Promise(r=>setTimeout(()=>r({__profileTimeout:true}),10000))
     ]);
     if(res&&res.__profileTimeout){
       _currentUser=null;
