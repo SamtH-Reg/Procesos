@@ -873,6 +873,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div style="font-size:13px;color:#64748b;margin-top:4px;">Control de Producción · Admin</div>
       <div style="font-size:12px;color:#b45309;margin-top:10px;font-weight:600;">Solo cuentas con rol <strong>admin</strong> en Supabase (<code>user_profiles</code>).</div>
     </div>
+    <div id="authFormFields" style="display:none;">
     <div style="margin-bottom:12px;">
       <label style="font-size:12px;font-weight:600;color:#334155;display:block;margin-bottom:4px;">Email</label>
       <input id="authEmail" type="email" placeholder="admin@friosur.cl" autocomplete="username" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">
@@ -882,6 +883,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <input id="authPass" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button type="button" onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
+    </div>
     <div id="authMsg" style="margin-top:12px;font-size:12px;color:#64748b;text-align:center;min-height:16px;">Comprobando sesión…</div>
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
       <button type="button" class="btn ghost sm" style="width:100%;color:var(--err);" onclick="void forceSupabaseAuthReset()">Borrar sesión guardada en este navegador</button>
@@ -3461,16 +3463,23 @@ function _normalizeSesionRol(r){
   return x||'operario';
 }
 function isSbAdmin(){return!!(_currentUser&&_normalizeSesionRol(_currentUser.rol)==='admin');}
+function _adminAuthFormFieldsSet(visible){
+  const el=document.getElementById('authFormFields');
+  if(!el)return;
+  el.style.display=visible?'block':'none';
+}
 function showAuthOverlay(){
   const o=document.getElementById('authOverlay');if(!o)return;
   o.style.display='flex';
   o.style.alignItems='center';
   o.style.justifyContent='center';
+  _adminAuthFormFieldsSet(true);
   try{document.body.classList.add('admin-auth-lock');}catch(e){}
   requestAnimationFrame(()=>{try{document.getElementById('authEmail')?.focus();}catch(e){}});
 }
 function hideAuthOverlay(){
   const o=document.getElementById('authOverlay');if(o)o.style.display='none';
+  _adminAuthFormFieldsSet(false);
   try{document.body.classList.remove('admin-auth-lock');}catch(e){}
 }
 function openAuthLoginPanel(){showAuthOverlay();}
@@ -3502,25 +3511,18 @@ async function bindSupabaseAuth(){
     try{_authSub.unsubscribe();}catch(e){}
     _authSub=null;
   }
-  let sessionApplied=false;
-  const{data:{session:initialSess}}=await _sb.auth.getSession();
-  if(initialSess){
-    await applySession(initialSess);
-    sessionApplied=true;
-  }else{
-    _currentUser=null;
-    try{applyRolePermissions();}catch(_){}
-    try{updateUserBadge();}catch(_){}
-    const msg=document.getElementById('authMsg');
-    if(msg){msg.style.color='#64748b';msg.textContent='Ingresá con un usuario que tenga rol admin en la nube.';}
-    showAuthOverlay();
-    try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
-  }
+  _adminAuthFormFieldsSet(false);
+  const msg0=document.getElementById('authMsg');
+  if(msg0){msg0.style.color='#64748b';msg0.textContent='Comprobando sesión…';}
+  let initialDone=false;
   const{data:{subscription}}=_sb.auth.onAuthStateChange(async(event,sess)=>{
     try{
       if(event==='INITIAL_SESSION'){
-        if(sess&&!sessionApplied){await applySession(sess);sessionApplied=true;}
-        else if(!sess&&!sessionApplied){
+        if(initialDone)return;
+        initialDone=true;
+        if(sess){
+          await applySession(sess);
+        }else{
           _currentUser=null;
           try{applyRolePermissions();}catch(_){}
           try{updateUserBadge();}catch(_){}
@@ -3701,12 +3703,12 @@ async function applySession(session){
   },400);
   return true;
 }
-/** Mismas opciones Auth que `index.html` (`_tbSbAuthOptions`): persistencia, URL, lock en no-op. */
+/** Mismas opciones Auth que `index.html` (`_tbSbAuthOptions`): persistencia, URL, lock; `storageKey` distinto para no reutilizar el JWT de la tablet en esta página. */
 function _sbAdminAuthOptions(){
   try{
-    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined,lock:async(_n,_t,fn)=>await fn()}};
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:typeof localStorage!=='undefined'?localStorage:undefined,storageKey:'friosur-sb-auth-admin-v1',lock:async(_n,_t,fn)=>await fn()}};
   }catch(e){
-    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,lock:async(_n,_t,fn)=>await fn()}};
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'friosur-sb-auth-admin-v1',lock:async(_n,_t,fn)=>await fn()}};
   }
 }
 /** Igual que `tbDoLogin` en index: solo `signInWithPassword`; la sesión la aplica `onAuthStateChange` (SIGNED_IN / INITIAL_SESSION). */

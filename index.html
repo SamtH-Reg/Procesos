@@ -184,6 +184,14 @@ input,select,textarea{font-family:inherit;}
   padding-left:env(safe-area-inset-left,0px);
   padding-right:env(safe-area-inset-right,0px);
 }
+/* Misma idea que admin: hasta que GoTrue confirma sesión, no mostrar la app detrás del overlay. */
+body.tb-auth-lock{overflow:hidden;}
+body.tb-auth-lock .app{
+  visibility:hidden !important;
+  pointer-events:none;
+  user-select:none;
+}
+body.tb-auth-lock #tbAuthOverlay{pointer-events:auto;}
 
 /* ═══ TOPBAR ══════════════════════════════════════════════════ */
 .topbar{
@@ -1583,10 +1591,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.4/dist/umd/supabase.min.js"></script>
 </head>
-<body>
+<body class="tb-auth-lock">
 <!-- ═══ LOGIN MODAL TABLET ═══ -->
-<div id="tbAuthOverlay" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:99999;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;">
-  <div style="background:#fff;border-radius:20px;padding:40px;width:min(440px,92vw);box-shadow:0 24px 80px rgba(0,0,0,.6);">
+<div id="tbAuthOverlay" style="display:flex;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:99999;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:column;gap:20px;padding:20px;box-sizing:border-box;">
+  <div id="tbAuthBoot" style="color:#e2e8f0;font-size:17px;font-weight:600;text-align:center;">Comprobando sesión…</div>
+  <div id="tbAuthCard" style="display:none;background:#fff;border-radius:20px;padding:40px;width:min(440px,92vw);box-shadow:0 24px 80px rgba(0,0,0,.6);">
     <div style="text-align:center;margin-bottom:28px;">
       <div style="font-size:36px;font-weight:800;color:#1e3a66;">🐟 FRIOSUR</div>
       <div style="font-size:15px;color:#64748b;margin-top:6px;">Control de Producción · Tablet</div>
@@ -9655,7 +9664,7 @@ setInterval(()=>{
    - Push a Supabase: upsert incremental (solo filas nuevas/cambiadas + DELETE de borrados) para moldes/pesajes/generales y armado_lineas (clave compuesta) — evita tormentas Realtime al re-subir todo en cada rtSave
    - Tras «Traer» o aplicar armado remoto se alinean firmas locales (refresh / refreshArmadoSigFromLocal) para no re-tocar la nube al siguiente guardado
    - Realtime: catálogos + moldes/pesajes (un canal) + armado_lineas + app_kv (`friosur_eq_runtime`); generales solo REST si no están en publication
-   - Misma clave localStorage que admin (`friosur_sb`): URL/key por defecto embebidos; si el admin guardó otro proyecto, la tablet usa ese (mismo patrón que UCO admin_cfg + defaults).
+   - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
@@ -9671,12 +9680,12 @@ function _tbResolveSupabaseCreds(){
   }
 }
 let _tbSb=null;
-/** Opciones Auth: persistencia en localStorage (evita pedir login en cada recarga; compatible con INITIAL_SESSION en GoTrue). */
+/** Opciones Auth: persistencia en localStorage; `storageKey` distinto al de admin para no compartir JWT entre páginas (evita signOut cruzado y parpadeo). */
 function _tbSbAuthOptions(){
   try{
-    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage,lock:async(_n,_t,fn)=>await fn()}};
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage,storageKey:'friosur-sb-auth-tablet-v1',lock:async(_n,_t,fn)=>await fn()}};
   }catch(e){
-    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,lock:async(_n,_t,fn)=>await fn()}};
+    return{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'friosur-sb-auth-tablet-v1',lock:async(_n,_t,fn)=>await fn()}};
   }
 }
 try{
@@ -10316,33 +10325,75 @@ const _rtSaveOrig=rtSave;
 rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();_tbMaybeStoreArmadoBackupOnRtSave();TBSync.schedulePush();};
 
 /* ── AUTH TABLET ── */
-function tbShowAuth(){document.getElementById('tbAuthOverlay').style.display='flex';}
-function tbHideAuth(){document.getElementById('tbAuthOverlay').style.display='none';}
-async function tbInitAuth(){
-  if(!_tbSb)return;
-  let sessionApplied=false;
-  const{data:{session:initialSess}}=await _tbSb.auth.getSession();
-  if(initialSess){await tbApplySession(initialSess);sessionApplied=true;}else{tbShowAuth();}
-  try{
-    await TBSync.pullCatalogs();
-    TBSync.subscribe();
-    if(initialSess&&typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});
-  }catch(e){console.warn('[tb] pull catálogo inicial',e);}
-  _tbSb.auth.onAuthStateChange(async(event,sess)=>{
-    if(event==='INITIAL_SESSION'){
-      if(sess&&!sessionApplied){await tbApplySession(sess);sessionApplied=true;}
-      else if(!sess&&!sessionApplied){tbShowAuth();}
-      return;
-    }
-    if(event==='SIGNED_OUT'){_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();tbShowAuth();return;}
-    if(event==='SIGNED_IN'&&sess){
-      await tbApplySession(sess);
-      try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
-      try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos tras login',e2);}
-    }
-  });
-  if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+function tbAuthOverlayMode(mode){
+  const o=document.getElementById('tbAuthOverlay');
+  const boot=document.getElementById('tbAuthBoot');
+  const card=document.getElementById('tbAuthCard');
+  if(!o)return;
+  if(mode==='hidden'){
+    o.style.display='none';
+    if(boot)boot.style.display='none';
+    if(card)card.style.display='none';
+    try{document.body.classList.remove('tb-auth-lock');}catch(_){}
+    return;
+  }
+  try{document.body.classList.add('tb-auth-lock');}catch(_){}
+  o.style.display='flex';
+  if(mode==='boot'){
+    if(boot)boot.style.display='block';
+    if(card)card.style.display='none';
+  }else if(mode==='login'){
+    if(boot)boot.style.display='none';
+    if(card)card.style.display='block';
+  }
 }
+function tbShowAuth(){tbAuthOverlayMode('login');}
+function tbHideAuth(){tbAuthOverlayMode('hidden');}
+async function tbInitAuth(){
+  if(!_tbSb){
+    tbAuthOverlayMode('hidden');
+    return;
+  }
+  if(_tbAuthSub){try{_tbAuthSub.unsubscribe();}catch(_){}}
+  _tbAuthSub=null;
+  tbAuthOverlayMode('boot');
+  let initialDone=false;
+  const{data:{subscription}}=_tbSb.auth.onAuthStateChange(async(event,sess)=>{
+    try{
+      if(event==='INITIAL_SESSION'){
+        if(initialDone)return;
+        initialDone=true;
+        if(sess){
+          await tbApplySession(sess);
+          try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull catálogo inicial',e);}
+          try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos iniciales',e2);}
+        }else{
+          _tbUser=null;
+          if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();
+          tbShowAuth();
+        }
+        if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+        return;
+      }
+      if(event==='SIGNED_OUT'){
+        _tbUser=null;
+        if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();
+        tbShowAuth();
+        if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+        return;
+      }
+      if(event==='SIGNED_IN'&&sess){
+        await tbApplySession(sess);
+        try{await TBSync.pullCatalogs();}catch(e){console.warn('[tb] pull tras login',e);}
+        try{if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent:true});}catch(e2){console.warn('[tb] pull operativos tras login',e2);}
+        if(typeof _idxRefreshAdminTabNav==='function')_idxRefreshAdminTabNav();
+      }
+    }catch(err){console.warn('[tb] auth listener',err&&err.message?err.message:err);}
+  });
+  _tbAuthSub=subscription;
+  try{TBSync.subscribe();}catch(e){console.warn('[tb] TBSync.subscribe',e);}
+}
+let _tbAuthSub=null;
 async function tbApplySession(session){
   tbHideAuth();
   try{
@@ -10381,8 +10432,8 @@ function tbUpdateUserBadge(){
   if(typeof _idxApplyModuleRestrictions==='function')_idxApplyModuleRestrictions();
 }
 
-// Arranca auth (reemplaza sync directo)
-setTimeout(()=>{tbInitAuth();},800);
+// Auth en cuanto existe el cliente (sin delay: evita flash de UI y doble lectura con INITIAL_SESSION)
+requestAnimationFrame(()=>{try{tbInitAuth();}catch(e){console.warn('[tb] tbInitAuth',e);}});
 window.addEventListener('online',()=>{TBSync.setStatus('☁ Sync','#16a34a');if(_tbUser)TBSync.pushAll();});
 window.addEventListener('offline',()=>TBSync.setStatus('⚠ Offline','#dc2626'));
 </script>
