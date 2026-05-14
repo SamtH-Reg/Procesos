@@ -2820,7 +2820,7 @@ async function delPreset(id){
     const{error}=await sbDeletePresetRemote(id);
     if(error){toast('Supabase no permitió borrar: '+error.message+' (preset no eliminado)','err');return;}
   }else if(!confirm('Sin Supabase conectado: el borrado será solo local. ¿Continuar?'))return;
-  DB.data.presets=DB.data.presets.filter(p=>p.id!==id);
+  DB.data.presets=DB.data.presets.filter(p=>String(p.id)!==String(id));
   DB.save();renderPresets();
   toast(_sb?'Preset eliminado (Supabase y local)':'Preset eliminado (solo local)','success');
 }
@@ -4029,6 +4029,20 @@ function _mergeSbDefined(base,patch){
   return b;
 }
 
+/** Payload REST sin claves `undefined` (PostgREST puede rechazar o comportarse distinto). */
+function _sbSanitizeRow(row){
+  if(!row||typeof row!=='object')return row;
+  const o={};
+  for(const k of Object.keys(row)){
+    if(row[k]!==undefined)o[k]=row[k];
+  }
+  return o;
+}
+function _presetNumericId(id){
+  const n=typeof id==='bigint'?Number(id):+id;
+  return Number.isFinite(n)&&Number.isInteger(n)?n:id;
+}
+
 /** Tras cambiar permisos en Admin: sube la fila a Supabase para que index (pull/Realtime) reciba la misma matriz. */
 async function adminSyncRoleRowToSupabase(rid){
   try{
@@ -4043,7 +4057,18 @@ async function adminSyncRoleRowToSupabase(rid){
 
 async function sbUpsertPresets(rows){
   if(!_sb)return{error:new Error('Sin Supabase')};
-  const mapped=_sbRows('presets',rows);
+  try{
+    const{data:{session},error:sErr}=await _sb.auth.getSession();
+    if(sErr)return{error:sErr};
+    if(!session||!session.user)return{error:new Error('Sesión no válida o caducada: vuelve a entrar en Cuenta y reintenta.')};
+  }catch(e){
+    return{error:e};
+  }
+  const mapped=(_sbRows('presets',rows||[])).map(r=>{
+    const o=_sbSanitizeRow(r);
+    if(Object.prototype.hasOwnProperty.call(o,'id')&&o.id!=null)o.id=_presetNumericId(o.id);
+    return _sbSanitizeRow(o);
+  });
   const{error}=await _sb.from('presets').upsert(mapped,{onConflict:'id'});
   return{data:null,error};
 }
