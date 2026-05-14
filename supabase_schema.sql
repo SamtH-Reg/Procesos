@@ -227,6 +227,7 @@ end $$;
 
 -- ═══════════════ CONFIG COMPARTIDA (dashboard admin, etc.) ═══════
 
+-- Claves usadas por la app: `friosur_dashboard` (widgets admin), `friosur_eq_runtime` (eqState+eqHist túneles/placas, tablet+admin).
 create table if not exists app_kv(
   key        text primary key,
   value      jsonb not null default '{}'::jsonb,

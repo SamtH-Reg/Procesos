@@ -1,4 +1,4 @@
--- Clave/valor para estado compartido (ej. layout del dashboard admin).
+-- Clave/valor compartido: `friosur_dashboard` (layout admin), `friosur_eq_runtime` (túneles/placas: eqState+eqHist).
 -- Ejecutar en SQL Editor de Supabase (una vez, o reaplicar si cambias RLS).
 
 create table if not exists app_kv(
@@ -14,7 +14,7 @@ create trigger trg_app_kv_updated
   before update on app_kv
   for each row execute function set_updated_at();
 
-comment on table app_kv is 'Config compartida: key=friosur_dashboard → value.widgets, value.layouts';
+comment on table app_kv is 'KV compartido: friosur_dashboard (widgets admin), friosur_eq_runtime (estado+histórico túneles/placas, JSON eqState/eqHist)';
 
 -- ═══════════════════════════════════════════════════════════════════
 -- RLS: sin políticas, un upsert desde el cliente autenticado puede dar 403.

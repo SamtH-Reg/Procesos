@@ -526,6 +526,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div><h1 class="page-title">Túneles y Placas</h1><div class="page-sub">Cargas con hora de inicio/término, por turno · pendientes por cargar</div></div>
     <div style="display:flex;gap:6px;">
       <button class="btn ghost sm" onclick="renderTunReport()">↻ Actualizar</button>
+      <button class="btn ghost sm" onclick="adminPushEqRuntimeToCloud({silent:false})" title="Sube estado + histórico a Supabase (clave app_kv friosur_eq_runtime)">☁ Subir a Supabase</button>
       <button class="btn ghost sm" onclick="exportTunReport()">📤 Exportar Excel</button>
     </div>
   </div>
@@ -3597,6 +3598,33 @@ async function _adminPullEqRuntimeFromCloud(){
     return true;
   }catch(e){return false;}
 }
+/** Sube `eqState` + `eqHist` a `app_kv` (misma clave que la tablet) para que otros dispositivos vean el histórico. */
+async function adminPushEqRuntimeToCloud(opts){
+  const silent=opts&&opts.silent;
+  try{
+    if(!_sb||!_currentUser||!isSbAdmin()){
+      if(!silent)toast('Conecta Supabase y entra como admin para subir túneles/placas.','warn');
+      return false;
+    }
+    if(!RT.data)RT.data={};
+    const payload={
+      eqState:RT.data.eqState&&typeof RT.data.eqState==='object'?JSON.parse(JSON.stringify(RT.data.eqState)):{},
+      eqHist:RT.data.eqHist&&typeof RT.data.eqHist==='object'?JSON.parse(JSON.stringify(RT.data.eqHist)):{},
+      source:'admin',
+      at:Date.now(),
+    };
+    const{error}=await _sb.from('app_kv').upsert({key:EQ_RUNTIME_CLOUD_KEY,value:payload},{onConflict:'key'});
+    if(error)throw error;
+    if(!silent)toast('Histórico y estado túneles/placas guardados en Supabase (app_kv).','success');
+    sbLog('↑ app_kv '+EQ_RUNTIME_CLOUD_KEY+' OK',true);
+    return true;
+  }catch(e){
+    const m=e&&e.message?String(e.message):String(e);
+    if(!silent)toast('No se pudo subir eq_runtime: '+m,'err');
+    sbLog('push eq_runtime: '+m,false);
+    return false;
+  }
+}
 /** Moldes/pesajes desde la nube (tablets / otros admins). Necesario para tiempo real entre dispositivos — localStorage no cruza equipos. */
 async function sbPullRuntimeFromCloud(){
   if(!_sb)return;
@@ -4093,6 +4121,10 @@ async function pushAll(){
     }catch(e){sbLog(t+' error: '+e.message,false);err++;}
   }
   try{await sbPushDashboardCloud();sbLog('Dashboard incluido en push',true);}catch(e2){sbLog('push dashboard: '+e2.message,false);}
+  try{
+    const okEq=await adminPushEqRuntimeToCloud({silent:true});
+    if(okEq)sbLog('eq_runtime (túneles/placas) incluido en push ↑ app_kv',true);
+  }catch(e3){sbLog('push eq_runtime: '+(e3&&e3.message?e3.message:String(e3)),false);}
   document.getElementById('sbDot').className='status-dot online';
   toast('Push: '+ok+' OK, '+err+' err',err?'warn':'success');
 }
@@ -4115,6 +4147,7 @@ async function pullAll(){
       sbLog(t+': '+RT.data[t].length+' filas ↓ (nube '+remote.length+')');
     }
     if(await _adminPullArmadoLineasFromCloud())sbLog('armado_lineas ↓',true);
+    try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) desde app_kv ↓',true);}catch(_e){}
     RT._ensureShape();
     DB.save();if(RT.save)RT.save();
     await sbPullDashboardCloud({silent:true});
@@ -4832,7 +4865,12 @@ function importTunelesWorkbook(wb){
   }
   RT._ensureShape();
   RT.save();
-  toast(arr.length+' filas procesadas (túneles/placas)','success');
+  const nImp=arr.length;
+  void (async()=>{
+    const up=await adminPushEqRuntimeToCloud({silent:true});
+    if(up)toast(nImp+' filas importadas y sincronizadas en Supabase (túneles/placas).','success');
+    else toast(nImp+' filas importadas (local). No se pudo subir a Supabase — revisa conexión o pestaña Supabase.','warn');
+  })();
 }
 function previewFiltered(){
   const mod=document.getElementById('ieModulo').value;
