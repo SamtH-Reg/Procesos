@@ -2769,7 +2769,10 @@ function _adminNextPresetId(){
   return m+1;
 }
 function openPresetModal(id){
-  const p=id?DB.data.presets.find(x=>x.id===id):{id:_adminNextPresetId(),nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true};
+  const editing=id!=null&&id!=='';
+  const src=editing?DB.data.presets.find(x=>String(x.id)===String(id)):null;
+  if(editing&&!src){toast('Preset no encontrado','err');return;}
+  const p=src?{...src}:{id:null,nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true};
   const uso=inferUsoEquipo(p);
   openModal('Preset',`
     <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(p.nombre)}"></div>
@@ -2786,7 +2789,8 @@ function openPresetModal(id){
       <div class="form-field"><label class="form-label">Tº objetivo</label><input class="input" id="f_tempObj" type="number" value="${p.tempObj||0}"></div>
       <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${p.activo?'selected':''}>Activo</option><option value="0" ${!p.activo?'selected':''}>Inactivo</option></select></div>
     </div>`,async ()=>{
-    const n={id:p.id,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
+    const newId=!editing?_adminNextPresetId():p.id;
+    const n={id:newId,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
     if(!_sb){
       toast('Sin Supabase: guardando solo en este equipo.','warn');
@@ -2803,7 +2807,7 @@ function openPresetModal(id){
       }
       sbLog('← Preset id='+n.id+' guardado en Supabase OK');
     }
-    const i=DB.data.presets.findIndex(x=>x.id===n.id);
+    const i=DB.data.presets.findIndex(x=>String(x.id)===String(n.id));
     if(i>=0)DB.data.presets[i]=n;else DB.data.presets.push(n);
     DB.save();renderPresets();
     if(_sb)toast('Preset guardado en Supabase (la tablet lo verá al sincronizar)','success');
@@ -3795,7 +3799,9 @@ function sbSubscribeRealtime(){
     const ch=_sb.channel('rt-'+s.tbl).on('postgres_changes',{event:'*',schema:'public',table:s.tbl},(p)=>{
       const tgt=s.target==='RT'?RT:DB;
       if(!tgt.data)tgt.data={};
-      const arr=tgt.data[s.key]||[];
+      // Nunca usar `||[]` huérfano: si el array no existía, se reemplazaba todo el catálogo por una sola fila del evento.
+      if(!Array.isArray(tgt.data[s.key]))tgt.data[s.key]=[];
+      const arr=tgt.data[s.key];
       const mapper=SB_MAP[s.tbl]?SB_MAP[s.tbl].in:(x=>x);
       const pkCol=(s.tbl==='turnos'||s.tbl==='equipos')?'codigo':'id';
       // Trabajadores vienen de Asistencia (sync externo) — ignorar eventos RT de Procesos
@@ -3803,10 +3809,13 @@ function sbSubscribeRealtime(){
       if(s.tbl==='trabajadores'){sbLog('↻ trabajadores RT ignorado (datos de Asistencia)');sbRerenderCurrent(s.tbl);return;}
       if(p.eventType==='INSERT'||p.eventType==='UPDATE'){
         const rec=mapper(p.new);
-        const i=arr.findIndex(r=>String(r[pkCol])===String(p.new[pkCol]));
-        if(i>=0)arr[i]=rec; else arr.push(rec);
+        const pkVal=(p.new||{})[pkCol];
+        const i=arr.findIndex(r=>String(r[pkCol])===String(pkVal));
+        if(i>=0)arr[i]=_mergeSbDefined(arr[i],rec);
+        else arr.push(rec);
       }else if(p.eventType==='DELETE'){
-        const i=arr.findIndex(r=>String(r[pkCol])===String(p.old[pkCol]));
+        const pkVal=(p.old||{})[pkCol];
+        const i=arr.findIndex(r=>String(r[pkCol])===String(pkVal));
         if(i>=0)arr.splice(i,1);
       }
       tgt.data[s.key]=arr;
@@ -4010,6 +4019,15 @@ const SB_MAP={
 };
 function _sbRows(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.out);}
 function _sbParse(t,arr){const m=SB_MAP[t];return(arr||[]).map(m.in);}
+/** Realtime a veces manda filas parciales; no pisar campos existentes con `undefined`. */
+function _mergeSbDefined(base,patch){
+  const b=(base&&typeof base==='object')?{...base}:{};
+  if(!patch||typeof patch!=='object')return b;
+  for(const k of Object.keys(patch)){
+    if(patch[k]!==undefined)b[k]=patch[k];
+  }
+  return b;
+}
 
 /** Tras cambiar permisos en Admin: sube la fila a Supabase para que index (pull/Realtime) reciba la misma matriz. */
 async function adminSyncRoleRowToSupabase(rid){
