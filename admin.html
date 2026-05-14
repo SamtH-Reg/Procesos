@@ -865,15 +865,15 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 
 <div class="toast-container" id="toasts"></div>
 
-<!-- ═══ LOGIN MODAL ═══ -->
-<div id="authOverlay" style="display:flex;position:fixed;inset:0;background:#0a1628;z-index:2147483000;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:row;padding:16px;box-sizing:border-box;">
-  <div style="background:#fff;border-radius:16px;padding:28px;width:min(400px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:calc(100vh - 32px);overflow:auto;">
+<!-- ═══ LOGIN MODAL (misma idea que index: boot en gradiente, tarjeta solo al pedir login) ═══ -->
+<div id="authOverlay" style="display:flex;position:fixed;inset:0;background:linear-gradient(135deg,#0a1628,#1e3a66);z-index:2147483000;align-items:center;justify-content:center;font-family:'Inter Tight',sans-serif;flex-direction:column;gap:20px;padding:16px;box-sizing:border-box;">
+  <div id="authBoot" style="color:#e2e8f0;font-size:17px;font-weight:600;text-align:center;">Comprobando sesión…</div>
+  <div id="authCard" style="display:none;background:#fff;border-radius:16px;padding:28px;width:min(400px,96vw);box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:calc(100vh - 32px);overflow:auto;">
     <div style="text-align:center;margin-bottom:20px;">
       <div style="font-size:28px;font-weight:800;color:#1e3a66;">🐟 FRIOSUR SpA</div>
       <div style="font-size:13px;color:#64748b;margin-top:4px;">Control de Producción · Admin</div>
       <div style="font-size:12px;color:#b45309;margin-top:10px;font-weight:600;">Solo cuentas con rol <strong>admin</strong> en Supabase (<code>user_profiles</code>).</div>
     </div>
-    <div id="authFormFields" style="display:none;">
     <div style="margin-bottom:12px;">
       <label style="font-size:12px;font-weight:600;color:#334155;display:block;margin-bottom:4px;">Email</label>
       <input id="authEmail" type="email" placeholder="admin@friosur.cl" autocomplete="username" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;">
@@ -883,8 +883,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <input id="authPass" type="password" autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <button type="button" onclick="doLogin()" style="width:100%;padding:12px;background:#1e3a66;color:#fff;border:0;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Ingresar</button>
-    </div>
-    <div id="authMsg" style="margin-top:12px;font-size:12px;color:#64748b;text-align:center;min-height:16px;">Comprobando sesión…</div>
+    <div id="authMsg" style="margin-top:12px;font-size:12px;color:#64748b;text-align:center;min-height:16px;"></div>
     <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
       <button type="button" class="btn ghost sm" style="width:100%;color:var(--err);" onclick="void forceSupabaseAuthReset()">Borrar sesión guardada en este navegador</button>
     </div>
@@ -3463,24 +3462,38 @@ function _normalizeSesionRol(r){
   return x||'operario';
 }
 function isSbAdmin(){return!!(_currentUser&&_normalizeSesionRol(_currentUser.rol)==='admin');}
-function _adminAuthFormFieldsSet(visible){
-  const el=document.getElementById('authFormFields');
-  if(!el)return;
-  el.style.display=visible?'block':'none';
-}
-function showAuthOverlay(){
-  const o=document.getElementById('authOverlay');if(!o)return;
+/** Igual que `tbAuthOverlayMode` en index: `boot` = solo mensaje en gradiente; `login` = tarjeta; `hidden` = sin overlay. */
+function adminAuthOverlayMode(mode){
+  const o=document.getElementById('authOverlay');
+  const boot=document.getElementById('authBoot');
+  const card=document.getElementById('authCard');
+  if(!o)return;
+  if(mode==='hidden'){
+    o.style.display='none';
+    if(boot)boot.style.display='none';
+    if(card)card.style.display='none';
+    try{document.body.classList.remove('admin-auth-lock');}catch(_){}
+    return;
+  }
+  try{document.body.classList.add('admin-auth-lock');}catch(_){}
   o.style.display='flex';
+  o.style.flexDirection='column';
   o.style.alignItems='center';
   o.style.justifyContent='center';
-  _adminAuthFormFieldsSet(true);
-  try{document.body.classList.add('admin-auth-lock');}catch(e){}
+  if(mode==='boot'){
+    if(boot)boot.style.display='block';
+    if(card)card.style.display='none';
+  }else if(mode==='login'){
+    if(boot)boot.style.display='none';
+    if(card)card.style.display='block';
+  }
+}
+function showAuthOverlay(){
+  adminAuthOverlayMode('login');
   requestAnimationFrame(()=>{try{document.getElementById('authEmail')?.focus();}catch(e){}});
 }
 function hideAuthOverlay(){
-  const o=document.getElementById('authOverlay');if(o)o.style.display='none';
-  _adminAuthFormFieldsSet(false);
-  try{document.body.classList.remove('admin-auth-lock');}catch(e){}
+  adminAuthOverlayMode('hidden');
 }
 function openAuthLoginPanel(){showAuthOverlay();}
 function onTopbarAuthClick(){
@@ -3511,9 +3524,7 @@ async function bindSupabaseAuth(){
     try{_authSub.unsubscribe();}catch(e){}
     _authSub=null;
   }
-  _adminAuthFormFieldsSet(false);
-  const msg0=document.getElementById('authMsg');
-  if(msg0){msg0.style.color='#64748b';msg0.textContent='Comprobando sesión…';}
+  adminAuthOverlayMode('boot');
   let initialDone=false;
   const{data:{subscription}}=_sb.auth.onAuthStateChange(async(event,sess)=>{
     try{
@@ -3801,7 +3812,13 @@ function applyRolePermissions(){
 function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
 async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
-  if(!url||!key){toast('Ingresa URL y key','err');const m=document.getElementById('authMsg');if(m){m.style.color='#dc2626';m.textContent='Completá URL y clave anon en Supabase para poder ingresar.';}return;}
+  if(!url||!key){
+    toast('Ingresa URL y key','err');
+    adminAuthOverlayMode('login');
+    const m=document.getElementById('authMsg');
+    if(m){m.style.color='#dc2626';m.textContent='Completá URL y clave anon en Supabase para poder ingresar.';}
+    return;
+  }
   try{
     _sb=window.supabase.createClient(url,key,_sbAdminAuthOptions());
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
@@ -3809,6 +3826,7 @@ async function connectSupabase(silent){
   }
   catch(e){
     toast('Error al conectar','err');sbLog('Error: '+e.message,false);
+    adminAuthOverlayMode('login');
     const m=document.getElementById('authMsg');
     if(m){m.style.color='#dc2626';m.textContent='No se pudo crear el cliente Supabase: '+(e&&e.message?e.message:String(e));}
   }
