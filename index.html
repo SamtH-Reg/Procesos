@@ -9577,13 +9577,6 @@ function syncCatalogFromStorage(opts){
   }catch(e){console.warn('[syncCatalog]',e);return false;}
   _bumpCatalogSnap();
   refreshOperateUiAfterCatalogChange();
-  if(opts.source==='storage'&&typeof showToast==='function'){
-    const now=Date.now();
-    if(!window._idxCatalogToastAt||now-window._idxCatalogToastAt>8000){
-      window._idxCatalogToastAt=now;
-      showToast('Catálogo actualizado (admin u otra pestaña)','info');
-    }
-  }
   return true;
 }
 window.refreshOperateUiAfterCatalogChange=refreshOperateUiAfterCatalogChange;
