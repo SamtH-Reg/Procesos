@@ -1925,7 +1925,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
     <!-- MOLDES — CONSOLIDADO (kg acumulados por persona) -->
     <div id="mConsol" class="mold-tab hidden">
       <div class="card">
-        <div class="card-hdr"><div class="card-title">Consolidado — Kg por persona</div><div class="card-sub" id="mConsolSub">—</div></div>
+        <div class="card-hdr"><div class="card-title">Consolidado — Kg por operario, especie y producto</div><div class="card-sub" id="mConsolSub">—</div></div>
         <div class="tbl-wrap" id="mConsolWrap"></div>
       </div>
     </div>
@@ -7266,31 +7266,43 @@ function renderMConsol(){
   if(!mol.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes en ese rango de ciclos.</div>';if(sub)sub.textContent='0 moldes · rango vacío';return;}
   const map={};
   mol.forEach(r=>{
-    const key=String(r.trabId!=null?r.trabId:(r.nombre||'—'));
-    if(!map[key])map[key]={nombre:r.nombre||'—',totKg:0,totCant:0};
+    const esp=_especieDe(r);
+    const prod=String(r.producto||r.preset||'—').trim()||'—';
+    const tid=String(r.trabId!=null?r.trabId:(r.nombre||'—'));
+    const key=tid+'\u0001'+esp+'\u0001'+prod;
+    if(!map[key])map[key]={nombre:r.nombre||'—',especie:esp,producto:prod,totKg:0,totCant:0};
     map[key].totKg+=(+r.kg||0);
     map[key].totCant+=(+r.cant||0);
   });
-  const rows=Object.values(map).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const rows=Object.values(map).sort((a,b)=>{
+    const c=a.nombre.localeCompare(b.nombre);
+    if(c)return c;
+    const c2=String(a.especie||'').localeCompare(String(b.especie||''));
+    if(c2)return c2;
+    return String(a.producto||'').localeCompare(String(b.producto||''));
+  });
   const fmt=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
   const fmtN=v=>v?v.toLocaleString('es-CL'):'';
   let totGrand=0,totCant=0;
   rows.forEach(r=>{totGrand+=r.totKg;totCant+=r.totCant;});
-  const hdr='<thead><tr><th style="min-width:220px;">NOMBRE</th><th class="num" style="min-width:100px;">MOLDES</th><th class="num" style="min-width:120px;">TOTAL KG</th></tr></thead>';
+  const nombresUnicos=new Set(rows.map(x=>x.nombre));
+  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:120px;">ESPECIE</th><th style="min-width:160px;">PRODUCTO</th><th class="num" style="min-width:100px;">MOLDES</th><th class="num" style="min-width:120px;">TOTAL KG</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
+    <td style="color:var(--text-2);font-size:12px;">${esc(r.especie)}</td>
+    <td style="color:var(--text-2);">${esc(r.producto)}</td>
     <td class="num" style="font-weight:600;">${fmtN(r.totCant)}</td>
     <td class="num" style="font-weight:700;">${fmt(r.totKg)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
     <tr>
-      <td>Total</td>
+      <td colspan="3">Total</td>
       <td class="num" style="font-weight:700;">${fmtN(totCant)}</td>
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
   </tfoot>`;
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
-  if(sub)sub.textContent=rows.length+' personas · '+mol.length+' registros · '+fmt(totGrand)+' kg · '+_cycleDateLabel(r.fromDate)+' '+(r.fromTurno==='noche'?'Noche':'Día')+' → '+_cycleDateLabel(r.toDate)+' '+(r.toTurno==='noche'?'Noche':'Día');
+  if(sub)sub.textContent=nombresUnicos.size+' operarios · '+rows.length+' líneas (esp.+prod.) · '+mol.length+' registros · '+fmt(totGrand)+' kg · '+_cycleDateLabel(r.fromDate)+' '+(r.fromTurno==='noche'?'Noche':'Día')+' → '+_cycleDateLabel(r.toDate)+' '+(r.toTurno==='noche'?'Noche':'Día');
 }
 
 /* ═══ MOLDES — Por Especie (operario × especie) ════════════════════ */
