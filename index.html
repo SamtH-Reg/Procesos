@@ -4852,6 +4852,37 @@ function _tbMaybeStoreArmadoBackupOnRtSave(){
 }
 
 /**
+ * Corrige filas legacy (linea/fecha intercambiadas o fecha vacía con `updated_at`).
+ * Paridad: misma lógica en admin `_adminNormalizeArmadoLineaSupabaseRow`.
+ */
+function _tbNormalizeArmadoLineaSupabaseRow(row){
+  if(!row||typeof row!=='object')return row;
+  const o={...row};
+  let la=String(o.linea==null?'':o.linea).trim();
+  let fe=String(o.fecha==null?'':o.fecha).trim();
+  const laY=la.match(/^(\d{4}-\d{2}-\d{2})/);
+  const feLn=fe.match(/^(L\d{1,3})$/i);
+  if(laY&&feLn){
+    o.linea=feLn[1].toUpperCase();
+    o.fecha=laY[1];
+    la=String(o.linea);fe=String(o.fecha);
+  }
+  const lineaUp=la.toUpperCase();
+  if(typeof _armValidLineaCodigo==='function'&&_armValidLineaCodigo(lineaUp)){
+    const fm=fe.match(/^(\d{4}-\d{2}-\d{2})/);
+    const ok=fm&&/^\d{4}-\d{2}-\d{2}$/.test(fm[1]);
+    if(!ok){
+      const u=o.updated_at||o.updatedAt;
+      if(u){
+        const n=_tbNormYmd(u);
+        if(n)o.fecha=n;
+      }
+    }
+  }
+  return o;
+}
+
+/**
  * Aplica filas de Supabase `armado_lineas` sobre RT.armadoMolde / RT.armadoPesaje.
  * Fusiona con lo local: el remoto gana en claves que trae; no se borran claves locales
  * que el servidor no devolvió (evita pérdida por pull incompleto, RLS o retraso de push).
@@ -4864,13 +4895,16 @@ function _applyRemoteArmadoLineasRows(armData){
   const prevKeyCount=Object.keys(prevMolde).length+Object.keys(prevPesaje).length;
   if(rows.length===0&&prevKeyCount>0){
     console.warn('[armado_lineas] pull devolvió 0 filas; se conserva armado local para evitar pérdida de datos.');
-    if(typeof showToast==='function')showToast('Sync: la nube no devolvió armado de línea; se mantiene lo local. Revisa conexión o RLS. Si perdiste líneas antes, prueba en consola: restoreArmadoEmergencyBackup()','warn');
+    if(_tbUser&&typeof showToast==='function'){
+      showToast('Sync: la nube no devolvió armado de línea; se mantiene lo local. Revisá sesión Supabase o RLS. Si perdiste líneas antes, en consola: restoreArmadoEmergencyBackup()','warn');
+    }
     return 0;
   }
   _tbTryStoreArmadoEmergencyBackup();
   const newMolde={};
   const newPesaje={};
-  rows.forEach(row=>{
+  rows.forEach(raw=>{
+    const row=_tbNormalizeArmadoLineaSupabaseRow(raw);
     const lineaRaw=String(row.linea==null?'':row.linea).trim().toUpperCase();
     if(!_armValidLineaCodigo(lineaRaw)){
       console.warn('[armado_lineas] fila omitida: linea inválida',row.linea,row.turno,row.fecha,row.area);
@@ -10790,7 +10824,8 @@ const TBSync={
     }
     // ── Realtime armado de línea ──────────────────────────────
     _tbSb.channel('tb-armado-lineas').on('postgres_changes',{event:'*',schema:'public',table:'armado_lineas'},(p)=>{
-      const rec=p.new||p.old;if(!rec)return;
+      const raw=p.new||p.old;if(!raw)return;
+      const rec=_tbNormalizeArmadoLineaSupabaseRow(raw);
       if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
       if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
       const area=String(rec.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';

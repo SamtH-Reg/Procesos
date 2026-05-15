@@ -1589,6 +1589,31 @@ function restoreAdminArmadoEmergencyBackup(){
 }
 window.restoreAdminArmadoEmergencyBackup=restoreAdminArmadoEmergencyBackup;
 
+/** Paridad con index `_tbNormalizeArmadoLineaSupabaseRow`. */
+function _adminNormalizeArmadoLineaSupabaseRow(row){
+  if(!row||typeof row!=='object')return row;
+  const o={...row};
+  let la=String(o.linea==null?'':o.linea).trim();
+  let fe=String(o.fecha==null?'':o.fecha).trim();
+  const laY=la.match(/^(\d{4}-\d{2}-\d{2})/);
+  const feLn=fe.match(/^(L\d{1,3})$/i);
+  if(laY&&feLn){
+    o.linea=feLn[1].toUpperCase();
+    o.fecha=laY[1];
+    la=String(o.linea);fe=String(o.fecha);
+  }
+  const lineaUp=la.toUpperCase();
+  if(/^L\d{1,3}$/i.test(lineaUp)&&(!fe||!/^\d{4}-\d{2}-\d{2}/.test(fe))){
+    const u=o.updated_at||o.updatedAt;
+    if(u){
+      try{
+        const d=new Date(u);
+        if(!isNaN(d.getTime()))o.fecha=d.toISOString().slice(0,10);
+      }catch(_){}
+    }
+  }
+  return o;
+}
 async function _adminPullArmadoLineasFromCloud(){
   if(!_sb)return false;
   try{
@@ -1606,7 +1631,8 @@ async function _adminPullArmadoLineasFromCloud(){
     _adminTryStoreArmadoEmergencyBackup();
     const newMolde={};
     const newPesaje={};
-    rows.forEach(row=>{
+    rows.forEach(raw=>{
+      const row=_adminNormalizeArmadoLineaSupabaseRow(raw);
       const lineaRaw=String(row.linea==null?'':row.linea).trim().toUpperCase();
       if(!/^L\d{1,3}$/i.test(lineaRaw))return;
       let fechaRow=String(row.fecha||'').trim();
@@ -4236,7 +4262,8 @@ function sbSubscribeRealtime(){
   });
   try{
     const chArm=_sb.channel('rt-admin-armado-lineas').on('postgres_changes',{event:'*',schema:'public',table:'armado_lineas'},(p)=>{
-      const rec=p.new||p.old;if(!rec)return;
+      const raw=p.new||p.old;if(!raw)return;
+      const rec=_adminNormalizeArmadoLineaSupabaseRow(raw);
       if(!RT.data)RT.data={};
       if(p.eventType==='DELETE')_adminArmDeleteCloudRow(rec);
       else _adminArmApplyCloudRow(rec);
