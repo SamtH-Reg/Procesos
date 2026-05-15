@@ -14,7 +14,7 @@ create trigger trg_app_kv_updated
   before update on app_kv
   for each row execute function set_updated_at();
 
-comment on table app_kv is 'KV compartido: friosur_dashboard (widgets admin), friosur_eq_runtime (estado+histórico túneles/placas, JSON eqState/eqHist)';
+comment on table app_kv is 'KV compartido: friosur_dashboard (widgets admin), friosur_eq_runtime (estado+histórico túneles/placas), friosur_planilleros_catalog (JSON {planilleros:[{id,nombre}]})';
 
 -- ═══════════════════════════════════════════════════════════════════
 -- RLS: sin políticas, un upsert desde el cliente autenticado puede dar 403.

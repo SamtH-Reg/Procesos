@@ -1241,6 +1241,9 @@ const LAYOUTS_KEY='friosur_dash_layouts';
 const DASH_CLOUD_KEY='friosur_dashboard';
 /** Paridad con tablet `TB_EQ_CLOUD_KEY`: estado túneles/placas en `app_kv`. */
 const EQ_RUNTIME_CLOUD_KEY='friosur_eq_runtime';
+/** Paridad con tablet `TB_PLANILLEROS_CLOUD_KEY`: catálogo planilleros en `app_kv`. */
+const PLANILLEROS_CLOUD_KEY='friosur_planilleros_catalog';
+let _plKvPushTimer=null;
 let dashLayouts={};
 let _dashApplyingFromCloud=false;
 let _dashCloudPushTimer=null;
@@ -1628,7 +1631,47 @@ async function _adminPullArmadoLineasFromCloud(){
   }catch(e){sbLog('pull armado_lineas: '+(e&&e.message?e.message:String(e)),false);return false;}
 }
 
-/** Catálogo simple planilleros (nombre) — compartido con tablet vía DB local. */
+function _adminApplyPlanillerosFromKvValue(val){
+  if(!val||typeof val!=='object'||!Array.isArray(val.planilleros))return false;
+  try{
+    const list=(val.planilleros||[]).filter(x=>x&&typeof x==='object').map(x=>({id:x.id,nombre:String(x.nombre||'').trim()})).filter(x=>x.nombre);
+    DB.data.planilleros=list;
+    if(typeof DB._heal==='function')DB._heal();
+    DB.save();
+    if(typeof renderPlanillerosLista==='function')renderPlanillerosLista();
+    return true;
+  }catch(_e){return false;}
+}
+async function adminPullPlanillerosFromCloud(){
+  if(!_sb||!_currentUser||!isSbAdmin())return false;
+  try{
+    const{data,error}=await _sb.from('app_kv').select('value').eq('key',PLANILLEROS_CLOUD_KEY).maybeSingle();
+    if(error||!data||data.value==null)return false;
+    return _adminApplyPlanillerosFromKvValue(data.value);
+  }catch(_e){return false;}
+}
+async function adminPushPlanillerosToCloud(opts){
+  const silent=opts&&opts.silent;
+  if(!_sb||!_currentUser||!isSbAdmin())return false;
+  try{
+    if(typeof DB._heal==='function')DB._heal();
+    const list=(DB.data.planilleros||[]).map(x=>({id:x.id,nombre:String(x.nombre||'').trim().toUpperCase()})).filter(x=>x.nombre);
+    const{error}=await _sb.from('app_kv').upsert({key:PLANILLEROS_CLOUD_KEY,value:{planilleros:list,source:'admin',at:Date.now()}},{onConflict:'key'});
+    if(error)throw error;
+    if(!silent)toast('Planilleros guardados en la nube (app_kv).','success');
+    return true;
+  }catch(e){
+    if(!silent)toast('Planilleros: no se pudo subir a la nube. '+(e.message||String(e)),'warn');
+    sbLog('push planilleros app_kv: '+(e&&e.message?e.message:String(e)),false);
+    return false;
+  }
+}
+function schedulePlanillerosCloudPush(){
+  if(!_sb||!_currentUser||!isSbAdmin())return;
+  if(_plKvPushTimer)clearTimeout(_plKvPushTimer);
+  _plKvPushTimer=setTimeout(()=>{_plKvPushTimer=null;void adminPushPlanillerosToCloud({silent:true});},1200);
+}
+/** Catálogo simple planilleros (nombre) — compartido con tablet vía DB local + app_kv. */
 function _adminNextPlanilleroId(){
   const arr=DB.data.planilleros||[];
   return arr.reduce((m,x)=>Math.max(m,+x.id||0),0)+1;
@@ -1671,13 +1714,13 @@ function openPlanilleroModal(id){
       const i=DB.data.planilleros.findIndex(x=>String(x.id)===String(p.id));
       if(i>=0)DB.data.planilleros[i]={...DB.data.planilleros[i],nombre};
     }
-    DB.save();renderPlanillerosLista();toast('Guardado','success');return true;
+    DB.save();renderPlanillerosLista();schedulePlanillerosCloudPush();toast('Guardado','success');return true;
   });
 }
 function delPlanillero(id){
   if(!confirm('¿Eliminar este planillero del catálogo?'))return;
   DB.data.planilleros=(DB.data.planilleros||[]).filter(x=>String(x.id)!==String(id));
-  DB.save();renderPlanillerosLista();toast('Eliminado','success');
+  DB.save();renderPlanillerosLista();schedulePlanillerosCloudPush();toast('Eliminado','success');
 }
 window.renderPlanillerosLista=renderPlanillerosLista;
 window.openPlanilleroModal=openPlanilleroModal;
@@ -4134,6 +4177,13 @@ function sbSubscribeRealtime(){
       if(row.key===EQ_RUNTIME_CLOUD_KEY&&row.value){
         _adminApplyEqRuntimeFromCloud(row.value);
       }
+    }).on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+PLANILLEROS_CLOUD_KEY},(p)=>{
+      const row=p.new||p.old;
+      if(!row||p.eventType==='DELETE'||row.key!==PLANILLEROS_CLOUD_KEY)return;
+      if(row.value&&_adminApplyPlanillerosFromKvValue(row.value)){
+        rtPulse('planilleros');
+        sbLog('↻ planilleros app_kv',true);
+      }
     }).subscribe((status)=>{sbLog('canal app_kv: '+status);});
     _sbChannels.push(chKv);
   }catch(e){sbLog('Realtime app_kv: '+(e&&e.message?e.message:String(e)),false);}
@@ -4386,6 +4436,9 @@ async function pushAll(){
     const okEq=await adminPushEqRuntimeToCloud({silent:true});
     if(okEq)sbLog('eq_runtime (túneles/placas) incluido en push ↑ app_kv',true);
   }catch(e3){sbLog('push eq_runtime: '+(e3&&e3.message?e3.message:String(e3)),false);}
+  try{
+    if(await adminPushPlanillerosToCloud({silent:true}))sbLog('planilleros catálogo ↑ app_kv',true);
+  }catch(e4){sbLog('push planilleros: '+(e4&&e4.message?e4.message:String(e4)),false);}
   document.getElementById('sbDot').className='status-dot online';
   toast('Push: '+ok+' OK, '+err+' err',err?'warn':'success');
 }
@@ -4399,7 +4452,9 @@ async function sbPullDbCatalogOnly(){
       DB.data[t]=_sbParse(t,data||[]);
     }
     DB.save();
+    try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros ↓ app_kv',true);}catch(_e){}
     renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
+    renderPlanillerosLista&&renderPlanillerosLista();
   }catch(e){sbLog('pull catálogo silencioso: '+(e&&e.message?e.message:String(e)),false);}
 }
 async function pullAll(){
@@ -4422,10 +4477,12 @@ async function pullAll(){
     }
     if(await _adminPullArmadoLineasFromCloud())sbLog('armado_lineas ↓',true);
     try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) desde app_kv ↓',true);}catch(_e){}
+    try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros catálogo ↓ app_kv',true);}catch(_e){}
     RT._ensureShape();
     DB.save();if(RT.save)RT.save();
     await sbPullDashboardCloud({silent:true});
     renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
+    renderPlanillerosLista&&renderPlanillerosLista();
     toast('Datos traídos desde Supabase','success');
   }catch(e){toast('Error al traer datos: '+e.message,'err');sbLog('Pull error: '+e.message,false);}
   document.getElementById('sbDot').className='status-dot online';

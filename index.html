@@ -4104,6 +4104,21 @@ updateBadges();
 const RT_KEY='friosur_rt_v1';
 /** `app_kv.key`: estado compartido túneles/placas (`eqState` + `eqHist`) entre tablets y admin. */
 const TB_EQ_CLOUD_KEY='friosur_eq_runtime';
+/** `app_kv.key`: catálogo `{ planilleros: [{id,nombre}] }` editado en admin; la tablet lo aplica en pull/realtime. */
+const TB_PLANILLEROS_CLOUD_KEY='friosur_planilleros_catalog';
+/** Aplica valor remoto de `app_kv` planilleros (misma forma que sube admin). */
+function _tbApplyPlanillerosFromCloudValue(val){
+  if(!val||typeof val!=='object'||!Array.isArray(val.planilleros))return false;
+  try{
+    if(!DB||!DB.data)return false;
+    const list=(val.planilleros||[]).filter(x=>x&&typeof x==='object').map(x=>({id:x.id,nombre:String(x.nombre||'').trim()})).filter(x=>x.nombre);
+    DB.data.planilleros=list;
+    if(typeof DB._heal==='function')DB._heal();
+    DB.save();
+    if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
+    return true;
+  }catch(e){console.warn('[tb planilleros app_kv]',e);return false;}
+}
 /** Firmas de último push (moldes/pesajes/generales/armado) por usuario — sobreviven al F5 para detectar borrados en Supabase. */
 const TB_PUSH_SIG_PREFIX='friosur_tb_push_sig_v1';
 function _tbPushSigStorageKeyForUser(){
@@ -10146,7 +10161,7 @@ setInterval(()=>{
    - Pull de catálogos (presets, trabajadores, turnos, equipos) 1 vez
    - Push a Supabase: upsert incremental (solo filas nuevas/cambiadas + DELETE de borrados) para moldes/pesajes/generales y armado_lineas (clave compuesta) — evita tormentas Realtime al re-subir todo en cada rtSave
    - Tras «Traer» o aplicar armado remoto se alinean firmas locales (refresh / refreshArmadoSigFromLocal) para no re-tocar la nube al siguiente guardado
-   - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por clave `friosur_eq_runtime`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
+   - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
@@ -10525,6 +10540,10 @@ const TBSync={
           _applyRemoteArmadoLineasRows(Array.isArray(armData)?armData:[]);
         }
       }catch(ae){console.warn('[sb pull armado_lineas]',ae);}
+      try{
+        const{data:plKv,error:plKvErr}=await _tbSb.from('app_kv').select('value,updated_at').eq('key',TB_PLANILLEROS_CLOUD_KEY).maybeSingle();
+        if(!plKvErr&&plKv&&plKv.value)_tbApplyPlanillerosFromCloudValue(plKv.value);
+      }catch(pe){console.warn('[sb pull planilleros app_kv]',pe);}
       try{if(_tbUser&&typeof _tbPullEqRuntimeFromCloud==='function')await _tbPullEqRuntimeFromCloud({silent:true});}catch(qe){console.warn('[sb pull eq_runtime]',qe);}
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
@@ -10832,6 +10851,12 @@ const TBSync={
         if(String(row.key||'')!==TB_EQ_CLOUD_KEY)return;
         if(p.eventType==='DELETE')return;
         if(typeof _tbApplyRemoteEqRuntime==='function')_tbApplyRemoteEqRuntime(row.value,row.updated_at);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+TB_PLANILLEROS_CLOUD_KEY},(p)=>{
+        const row=p.new||p.old;if(!row)return;
+        if(String(row.key||'')!==TB_PLANILLEROS_CLOUD_KEY)return;
+        if(p.eventType==='DELETE')return;
+        _tbApplyPlanillerosFromCloudValue(row.value);
       }).subscribe();
   }
 };
