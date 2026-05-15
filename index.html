@@ -837,6 +837,59 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
 .eq-tile.cargando{--accent:var(--safety-amber);}
 .eq-tile.congelando{--accent:var(--safety-blue);}
 .eq-tile.listo{--accent:var(--brand);}
+.eq-tile.deshielando{--accent:#0ea5e9;}
+
+@keyframes eq-tile-frio-pulse{
+  0%,100%{box-shadow:0 2px 10px rgba(3,105,161,.08),inset 0 0 0 1px rgba(3,105,161,.06);}
+  50%{box-shadow:0 4px 20px rgba(14,165,233,.22),inset 0 0 0 1px rgba(14,165,233,.18);}
+}
+@keyframes eq-tile-desh-pulse{
+  0%,100%{box-shadow:0 2px 10px rgba(14,165,233,.1),inset 0 0 0 1px rgba(125,211,252,.2);}
+  50%{box-shadow:0 4px 18px rgba(56,189,248,.28),inset 0 0 0 2px rgba(125,211,252,.35);}
+}
+@keyframes eq-tile-top-glow{
+  0%,100%{opacity:1;filter:brightness(1);}
+  50%{opacity:.88;filter:brightness(1.15);}
+}
+@keyframes eq-tile-bar-pulse{
+  0%,100%{filter:brightness(1) saturate(1);}
+  50%{filter:brightness(1.14) saturate(1.08);}
+}
+.eq-tile.congelando{
+  animation:eq-tile-frio-pulse 2.4s ease-in-out infinite;
+}
+.eq-tile.congelando::before{
+  animation:eq-tile-top-glow 1.8s ease-in-out infinite;
+}
+.eq-tile.congelando .eq-progress-bar{
+  animation:eq-tile-bar-pulse 2s ease-in-out infinite;
+}
+.eq-tile.congelando .badge.blue .badge-dot{
+  animation:eq-freeze-dot 1.35s ease-in-out infinite;
+}
+.eq-tile.deshielando{
+  animation:eq-tile-desh-pulse 2.2s ease-in-out infinite;
+}
+.eq-tile.deshielando::before{
+  background:linear-gradient(90deg,#0ea5e9,#7dd3fc,#38bdf8,#bae6fd,#38bdf8,#7dd3fc,#0ea5e9);
+  background-size:240% 100%;
+  animation:eq-freeze-shimmer 5s linear infinite;
+}
+.eq-tile.deshielando .eq-progress-bar{
+  animation:eq-tile-bar-pulse 2.1s ease-in-out infinite;
+}
+.eq-tile.deshielando .badge.ice .badge-dot{
+  animation:eq-freeze-dot 1.25s ease-in-out infinite;
+}
+@media (prefers-reduced-motion:reduce){
+  .eq-tile.congelando,.eq-tile.deshielando,
+  .eq-tile.congelando::before,.eq-tile.deshielando::before,
+  .eq-tile.congelando .eq-progress-bar,.eq-tile.deshielando .eq-progress-bar,
+  .eq-tile.congelando .badge.blue .badge-dot,.eq-tile.deshielando .badge.ice .badge-dot{
+    animation:none!important;
+  }
+  .eq-tile.deshielando::before{background:var(--accent);background-size:100% 100%;}
+}
 
 .eq-hdr{display:flex;align-items:center;justify-content:space-between;}
 .eq-id{
