@@ -4060,6 +4060,46 @@ function _tbMergeRtById(localArr,remoteRows,mapFn){
   const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id)));
   return remote.concat(extra);
 }
+/** Ids que en el último push exitoso se reflejaron en la nube (firma TBSync._lastSig.*). */
+function _tbLastPushedIdsFromSig(sigJson){
+  const s=new Set();
+  if(sigJson==null)return s;
+  const raw=String(sigJson).trim();
+  if(!raw)return s;
+  try{
+    const list=JSON.parse(raw);
+    if(!Array.isArray(list))return s;
+    for(const r of list){if(r&&r.id!=null)s.add(String(r.id));}
+  }catch(e){}
+  return s;
+}
+/**
+ * Pull operativo: si el snapshot de Supabase es completo (total filas ≤ límite y trajo todas),
+ * las filas que ya subimos y ya no vienen del servidor se interpretan como borradas en la nube
+ * y se quitan del RT (evita que vuelvan a aparecer en Supabase tras un reload).
+ * Si el snapshot es parcial (>4000 filas en BD) o falla el conteo, se mantiene el merge conservador
+ * (remote + extras locales no listados en esta página).
+ */
+function _tbMergeRtByIdForPull(localArr,remoteRows,mapFn,opts){
+  opts=opts||{};
+  const pullLimit=opts.pullLimit||4000;
+  const totalInDb=opts.totalInDb;
+  const lastPushedSig=opts.lastPushedSig;
+  const remote=(remoteRows||[]).map(mapFn).filter(Boolean);
+  const local=Array.isArray(localArr)?localArr:[];
+  const remoteIds=new Set(remote.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
+  const snapshotComplete=totalInDb!=null&&totalInDb>=0&&totalInDb<=pullLimit&&remote.length===totalInDb;
+  if(!snapshotComplete)return _tbMergeRtById(localArr,remoteRows,mapFn);
+  const pushedIds=_tbLastPushedIdsFromSig(lastPushedSig);
+  const extras=[];
+  for(const x of local){
+    if(!x||x.id==null)continue;
+    const id=String(x.id);
+    if(remoteIds.has(id))continue;
+    if(!pushedIds.has(id))extras.push(x);
+  }
+  return remote.concat(extras);
+}
 /** Union por `id` al recibir RT desde otra pestaña (admin/index): evita que un snapshot parcial borre filas y luego el push marque esos ids como DELETE en Supabase. */
 function _tbMergeRtRowsPeer(beforeArr, incomingArr){
   const byId=new Map();
@@ -4107,9 +4147,15 @@ async function tbManualPullMoldesPesajes(opts){
     const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
     for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
+      let totalInDb=null;
+      try{
+        const cr=await _tbSb.from(t).select('*',{count:'exact',head:true});
+        if(!cr.error&&cr.count!=null)totalInDb=+cr.count;
+      }catch(e){/* conteo opcional */}
       const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).limit(4000);
       if(error){console.warn('[tb pull]',t,error);if(!silent&&typeof showToast==='function')showToast(t+': '+error.message,'error');continue;}
-      RT[t]=_tbMergeRtById(localBefore,data||[],mapFor(t));
+      const lastSig=(typeof TBSync!=='undefined'&&TBSync._lastSig)?TBSync._lastSig[t]:'';
+      RT[t]=_tbMergeRtByIdForPull(localBefore,data||[],mapFor(t),{pullLimit:4000,totalInDb,lastPushedSig:lastSig});
     }
     rtSave();
     if(typeof initRuntime==='function')initRuntime();
