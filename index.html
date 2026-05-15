@@ -247,6 +247,50 @@ body.tb-auth-lock .topbar{
   70%{box-shadow:0 0 0 10px rgba(22,163,74,0);}
   100%{box-shadow:0 0 0 0 rgba(22,163,74,0);}
 }
+/* Modal equipo — producto bajo congelación (borde / brillo animado) */
+@keyframes eq-freeze-glow{
+  0%,100%{box-shadow:0 0 0 1px rgba(14,165,233,.4),0 0 14px rgba(56,189,248,.22);}
+  50%{box-shadow:0 0 0 3px rgba(14,165,233,.55),0 0 26px rgba(56,189,248,.45);}
+}
+@keyframes eq-freeze-shimmer{
+  0%{background-position:0% 40%;}
+  100%{background-position:200% 40%;}
+}
+@keyframes eq-freeze-dot{
+  0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(2,132,199,.55);}
+  50%{transform:scale(1.15);opacity:.9;box-shadow:0 0 0 10px rgba(2,132,199,0);}
+}
+.eq-item-congelando{
+  position:relative;
+  overflow:hidden;
+  border:2px solid #38bdf8 !important;
+  background:linear-gradient(110deg,#e0f2fe 0%,#f8fafc 22%,#bae6fd 45%,#f0f9ff 70%,#e0f2fe 100%) !important;
+  background-size:220% 100% !important;
+  animation:eq-freeze-glow 2.2s ease-in-out infinite,eq-freeze-shimmer 5s linear infinite;
+}
+body[data-theme="dark"] .eq-item-congelando{
+  background:linear-gradient(110deg,rgba(12,74,110,.55) 0%,rgba(15,23,42,.92) 30%,rgba(8,145,178,.35) 50%,rgba(15,23,42,.92) 70%,rgba(12,74,110,.55) 100%) !important;
+  border-color:#38bdf8 !important;
+}
+.eq-item-congelando__badge{
+  display:inline-flex;align-items:center;gap:7px;flex-shrink:0;
+  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  color:#0c4a6e;background:linear-gradient(180deg,#bae6fd,#7dd3fc);padding:5px 10px;border-radius:999px;
+  border:1px solid rgba(3,105,161,.35);
+  white-space:nowrap;
+}
+body[data-theme="dark"] .eq-item-congelando__badge{
+  color:#e0f2fe;background:linear-gradient(180deg,rgba(3,105,161,.85),rgba(8,145,178,.55));
+  border-color:rgba(125,211,252,.35);
+}
+.eq-item-congelando__badge .eq-freeze-dot{
+  width:8px;height:8px;border-radius:50%;background:#0369a1;
+  animation:eq-freeze-dot 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion:reduce){
+  .eq-item-congelando,.eq-item-congelando__badge .eq-freeze-dot{animation:none!important;}
+  .eq-item-congelando{background-size:100% 100%!important;}
+}
 
 .topbar-right{display:flex;align-items:center;gap:10px;margin-left:auto;}
 .top-btn{
@@ -5874,11 +5918,20 @@ function openEqModal(codigo){
   const capRestPlaca=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):null;
   const placaFull=capRestPlaca!=null&&capRestPlaca<=0;
   const canLoadUi=(rt.estado==='libre'||rt.estado==='cargando')||(rt.estado==='congelando'&&eq.tipo==='placa');
-  const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);">
+  const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>{
+    const enFrio=rt.estado==='congelando';
+    const rowCls=enFrio?'eq-item-congelando':'';
+    const rowPad=enFrio?'12px 14px':'10px 12px';
+    const rowBase=enFrio
+      ?`display:flex;align-items:center;gap:10px;padding:${rowPad};border-radius:var(--radius-sm);`
+      :`display:flex;align-items:center;gap:10px;padding:${rowPad};background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);`;
+    const badge=enFrio?'<span class="eq-item-congelando__badge" title="Congelación en curso"><span class="eq-freeze-dot" aria-hidden="true"></span>En frío</span>':'';
+    return`<div class="${rowCls}" style="${rowBase}">
+      ${badge}
       <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.producto)}</div><div style="font-size:11px;color:var(--text-3);">Cant: <strong>${it.cant}</strong> · Guía ${esc(it.guia)} · ${it.horasTotal}h</div></div>
       ${rt.estado==='libre'||rt.estado==='cargando'?`<button class="btn btn-danger-outline" type="button" onclick="removeEqItem(${i})">Quitar</button>`:''}
-    </div>`).join('')+'</div>'):'<div style="padding:18px;text-align:center;color:var(--text-3);font-size:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">Sin productos cargados</div>';
+    </div>`;
+  }).join('')+'</div>'):'<div style="padding:18px;text-align:center;color:var(--text-3);font-size:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">Sin productos cargados</div>';
 
   const actions=[];
   // Por cargar desde conteo (pending moldes filtered by tipo)
