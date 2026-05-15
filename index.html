@@ -4189,7 +4189,9 @@ function idxRefreshMoldesKpis(){
   set('idxKpiKgVal',Math.round(kgTot).toLocaleString('es-CL')+' kg');
   set('idxKpiKgSub','Mol '+Math.round(kgM).toLocaleString('es-CL')+' + Pes '+Math.round(kgP).toLocaleString('es-CL'));
   set('idxKpiPesVal',String(pesN));
-  set('idxKpiPesSub',avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.');
+  const tiposPes=[...new Set(p.map(r=>String(r&&r.tipo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const tiposSeg=tiposPes.length?(' · '+tiposPes.join(' · ')):'';
+  set('idxKpiPesSub',(avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.')+tiposSeg);
   set('idxKpiOpVal',String(op));
   set('idxKpiOpSub','Con registros');
 }
@@ -6899,38 +6901,50 @@ function renderPResumen(){
   if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+(filtro!=='todos'?' · filtro turno':'')+'.</div>';if(sub)sub.textContent='0 pesajes · '+hoyStr+(lineaVal?' · '+lineaVal:'');return;}
   const hours=_mResumenHourColsFromFiltro(pes,filtro);
   if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin columnas de hora para este filtro.</div>';if(sub)sub.textContent='0 h · '+hoyStr;return;}
-  // rows keyed by trabId+especie
+  // rows keyed by trabajador + tipo + especie (misma persona puede pesar distinto tipo/especie)
   const map={};
   pes.forEach(r=>{
-    const key=(r.trabId||r.nombre)+'||'+(r.especie||'—');
-    if(!map[key])map[key]={nombre:r.nombre||'—',especie:r.especie||'—',byHour:{},tot:0};
+    const tipoLab=String(r&&r.tipo||'').trim()||'—';
+    const key=(r.trabId||r.nombre)+'||'+tipoLab+'||'+(r.especie||'—');
+    if(!map[key])map[key]={nombre:r.nombre||'—',tipo:tipoLab,especie:r.especie||'—',byHour:{},tot:0};
     const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
     if(hh!=null){map[key].byHour[hh]=(map[key].byHour[hh]||0)+(r.kg||0);}
     map[key].tot+=(r.kg||0);
   });
-  const rows=Object.values(map).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const rows=Object.values(map).sort((a,b)=>{
+    const c1=String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'});
+    if(c1)return c1;
+    const c2=String(a.tipo||'').localeCompare(String(b.tipo||''),'es',{sensitivity:'base'});
+    if(c2)return c2;
+    return String(a.especie||'').localeCompare(String(b.especie||''),'es',{sensitivity:'base'});
+  });
   const fmt=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
   const totCol={};let totGrand=0;
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;});
   const filtroSub=_resumenFiltroTurnoSub(filtro);
-  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th>'+
+  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:100px;">TIPO</th><th style="min-width:140px;">ESPECIE</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:100px;">SUMA TOTAL</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
+    <td style="color:var(--text-2);">${esc(r.tipo)}</td>
     <td style="color:var(--text-2);">${esc(r.especie)}</td>
     ${hours.map(h=>`<td class="num">${fmt(r.byHour[h])||'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
     <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
     <tr>
-      <td colspan="2">Total <span style="font-weight:600;">${esc(hoyStr)}</span> · ${esc(filtroSub)}${lineaVal?' · '+esc(lineaVal):''}</td>
+      <td colspan="3">Total <span style="font-weight:600;">${esc(hoyStr)}</span> · ${esc(filtroSub)}${lineaVal?' · '+esc(lineaVal):''}</td>
       ${hours.map(h=>`<td class="num">${fmt(totCol[h])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
   </tfoot>`;
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
-  if(sub)sub.textContent=rows.length+' operarios · '+pes.length+' pesajes · '+fmt(totGrand)+' kg · '+hoyStr+' · '+filtroSub+(lineaVal?' · Línea '+lineaVal:'');
+  if(sub){
+    const tiposPes=[...new Set(pes.map(r=>String(r&&r.tipo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    const tiposTxt=tiposPes.length?(' · '+tiposPes.join(' · ')):'';
+    sub.textContent=rows.length+' operarios · '+pes.length+' pesajes · '+fmt(totGrand)+' kg · '+hoyStr+' · '+filtroSub+(lineaVal?' · Línea '+lineaVal:'')+tiposTxt;
+  }
 }
 
 /* ═══ PESAJE — Consolidado por Especie (pivot) ═════════════════════ */
