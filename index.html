@@ -3991,14 +3991,21 @@ function _tbLoadLastPushSigsFromStorage(){
 const RT={moldes:[],pesajes:[],empacados:[],empaques:[],generales:[],eqState:{},cargas:[],selPresetM:null,selPresetP:null,selPresetE:null,selPresetG:null};
 
 function rtLoad(){
-  try{const raw=localStorage.getItem(RT_KEY);if(raw){Object.assign(RT,JSON.parse(raw));}}catch(e){}
+  let hadPersistedRt=false;
+  try{
+    const raw=localStorage.getItem(RT_KEY);
+    if(raw){Object.assign(RT,JSON.parse(raw));hadPersistedRt=true;}
+  }catch(e){}
+  if(!Array.isArray(RT.moldes))RT.moldes=[];
+  if(!Array.isArray(RT.pesajes))RT.pesajes=[];
   // Migración eqState: claves P-A..P-F → P-01..P-06
   if(RT.eqState){
     const letterMap={'P-A':'P-01','P-B':'P-02','P-C':'P-03','P-D':'P-04','P-E':'P-05','P-F':'P-06'};
     Object.keys(letterMap).forEach(old=>{if(RT.eqState[old]&&!RT.eqState[letterMap[old]]){RT.eqState[letterMap[old]]=RT.eqState[old];delete RT.eqState[old];}});
   }
-  // Semillas iniciales si está vacío — permite ver el UI con algo
-  if(!RT.moldes.length){
+  // Semillas demo solo en el primer arranque (sin `friosur_rt_v1`). Si ya hubo RT guardado,
+  // listas vacías son intencionales (p. ej. borrado en Supabase / limpieza) — no reinyectar 901… ni re-subirlos.
+  if(!RT.moldes.length&&!hadPersistedRt){
     RT.moldes=[
       {id:901,hora:'14:32',linea:'L2',codigo:'D-01',nombre:'MARCELA GARCÍA',ficha:'101',producto:'Filete Reineta Bloque',presetId:6,cant:24,pendiente:24,kg:180,guia:'G-2026-045'},
       {id:902,hora:'14:28',linea:'L2',codigo:'D-02',nombre:'CAROLINA ROJAS',ficha:'102',producto:'Filete Reineta Bloque',presetId:6,cant:22,pendiente:22,kg:165,guia:'G-2026-045'},
@@ -4014,7 +4021,7 @@ function rtLoad(){
   }
   // Healing: agregar pendiente a moldes que no lo tienen
   RT.moldes.forEach(r=>{if(r.pendiente==null)r.pendiente=r.cant;});
-  if(!RT.pesajes.length){
+  if(!RT.pesajes.length&&!hadPersistedRt){
     RT.pesajes=[
       {id:801,hora:'14:28',linea:'L2',nombre:'MARCELA GARCÍA',especie:'Reineta',tipo:'Filete',kg:2.4,guia:'G-2026-045'},
       {id:802,hora:'14:21',linea:'L2',nombre:'CAROLINA ROJAS',especie:'Reineta',tipo:'Filete',kg:3.1,guia:'G-2026-045'},
@@ -4036,7 +4043,7 @@ function rtLoad(){
   RT.generales.forEach(r=>{if(r.pendiente==null)r.pendiente=r.cant;});
   if(!RT.empacados.length){RT.empacados=[];}
   if(!RT.empaques)RT.empaques=[];
-  if(!RT.empaques.length){
+  if(!RT.empaques.length&&!hadPersistedRt){
     RT.empaques=[
       {id:701,hora:'14:15',lote:'L-0428',producto:'Filete Reineta Bloque',presetId:6,cant:48,kgUnit:7.5,kg:360,guia:'G-2026-045',destino:'Cámara 3 — Producto Terminado',qc:'OK'},
       {id:702,hora:'13:42',lote:'L-0427',producto:'Filete Merluza Austral Bloque',presetId:4,cant:36,kgUnit:7.5,kg:270,guia:'G-2026-044',destino:'Cámara 3 — Producto Terminado',qc:'OK'},
