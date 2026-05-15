@@ -3936,6 +3936,45 @@ updateBadges();
 const RT_KEY='friosur_rt_v1';
 /** `app_kv.key`: estado compartido túneles/placas (`eqState` + `eqHist`) entre tablets y admin. */
 const TB_EQ_CLOUD_KEY='friosur_eq_runtime';
+/** Firmas de último push (moldes/pesajes/generales/armado) por usuario — sobreviven al F5 para detectar borrados en Supabase. */
+const TB_PUSH_SIG_PREFIX='friosur_tb_push_sig_v1';
+function _tbPushSigStorageKeyForUser(){
+  return(_tbUser&&_tbUser.id)?TB_PUSH_SIG_PREFIX+'_'+String(_tbUser.id):null;
+}
+function _tbPersistLastPushSigsToStorage(){
+  try{
+    const key=_tbPushSigStorageKeyForUser();
+    if(!key)return;
+    if(typeof TBSync==='undefined'||!TBSync._lastSig)return;
+    const s=TBSync._lastSig;
+    localStorage.setItem(key,JSON.stringify({
+      v:1,
+      at:Date.now(),
+      moldes:s.moldes||'',
+      pesajes:s.pesajes||'',
+      generales:s.generales||'',
+      armado:s.armado||''
+    }));
+  }catch(e){
+    if(e&&e.name==='QuotaExceededError')console.warn('[tb persist push sig] cuota localStorage');
+    else console.warn('[tb persist push sig]',e);
+  }
+}
+function _tbLoadLastPushSigsFromStorage(){
+  try{
+    const key=_tbPushSigStorageKeyForUser();
+    if(!key)return;
+    if(typeof TBSync==='undefined'||!TBSync._lastSig)return;
+    const raw=localStorage.getItem(key);
+    if(!raw)return;
+    const o=JSON.parse(raw);
+    if(!o||typeof o!=='object')return;
+    if(typeof o.moldes==='string')TBSync._lastSig.moldes=o.moldes;
+    if(typeof o.pesajes==='string')TBSync._lastSig.pesajes=o.pesajes;
+    if(typeof o.generales==='string')TBSync._lastSig.generales=o.generales;
+    if(typeof o.armado==='string')TBSync._lastSig.armado=o.armado;
+  }catch(e){console.warn('[tb load push sig]',e);}
+}
 const RT={moldes:[],pesajes:[],empacados:[],empaques:[],generales:[],eqState:{},cargas:[],selPresetM:null,selPresetP:null,selPresetE:null,selPresetG:null};
 
 function rtLoad(){
@@ -10198,6 +10237,7 @@ const TBSync={
       this._lastSig.generales=this._sigRows(generalesRows,'id');
       this.refreshArmadoSigFromLocal();
       try{this._lastSig.eqKv=_tbEqRuntimeSig();}catch(e2){this._lastSig.eqKv='';}
+      _tbPersistLastPushSigsToStorage();
     }catch(e){console.warn('[TBSync.refreshPushSignaturesFromLocal]',e);}
   },
   refreshArmadoSigFromLocal(){
@@ -10307,6 +10347,7 @@ const TBSync={
       }
       this._pushLastAt=Date.now();
       this.setStatus('☁ Sync','#16a34a');
+      _tbPersistLastPushSigsToStorage();
       return{ok:true};
     }catch(e){
       console.warn('[sb pushAll]',e);
@@ -10534,6 +10575,7 @@ async function tbApplySession(session){
     _tbUser={id:session.user.id,email:session.user.email,rol:(data&&data.rol)||'operario',nombre:(data&&data.nombre)||session.user.email.split('@')[0]};
   }catch(e){_tbUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
   tbUpdateUserBadge();
+  try{_tbLoadLastPushSigsFromStorage();}catch(_){}
 }
 async function tbDoLogin(){
   const email=document.getElementById('tbAuthEmail').value.trim();
