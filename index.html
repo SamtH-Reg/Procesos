@@ -2101,13 +2101,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                   <input class="input filled" id="pRegGuia" placeholder="G-2026-000" value="">
                 </div>
                 <div class="form-field">
-                  <label class="form-label">Especie</label>
-                  <select class="select filled" id="pRegEspecie" onchange="onPRegEspecieChange()">
-                    <option value="">— Sin armado / línea —</option>
-                    <option value="Reineta">Reineta</option>
-                    <option value="Merluza Austral">Merluza Austral</option>
-                    <option value="Merluza de Cola">Merluza de Cola</option>
-                  </select>
+                  <label class="form-label">Especie <span class="hint">solo se define en Armado</span></label>
+                  <input type="text" class="input filled" id="pRegEspecie" readonly autocomplete="off" placeholder="— Definir en pestaña Armado —" title="La especie viene de la línea configurada en Pesaje → Armado">
                 </div>
                 <div class="form-field">
                   <label class="form-label">Tipo <span class="hint">solo merluza austral</span></label>
@@ -6232,42 +6227,45 @@ function _pRegNormEspCmp(s){
     return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   }catch(_){return String(s||'').trim().toLowerCase();}
 }
-/** Pone `pRegEspecie` según armado de la línea (especie/producto); true si hubo coincidencia con una opción del select. */
+/** Valores conocidos para alinear texto del armado con etiquetas de presets / tablet. */
+function _pRegPesajeEspeciesUiPool(){
+  const pool=[];
+  const add=s=>{
+    const t=String(s||'').trim();
+    if(!t)return;
+    if(!pool.some(x=>_pRegNormEspCmp(x)===_pRegNormEspCmp(t)))pool.push(t);
+  };
+  ['Reineta','Merluza Austral','Merluza de Cola'].forEach(add);
+  if(typeof _getEspecies==='function')(_getEspecies()||[]).forEach(add);
+  return pool;
+}
+/** Sincroniza `pRegEspecie` con armado de la línea (especie o producto). Solo lectura en Registrar. */
 function _pRegApplyEspecieDesdeArmado(){
   const selL=document.getElementById('pRegLinea');
   const esp=document.getElementById('pRegEspecie');
   if(!selL||!esp||!_pRegHasLineaSeleccionada())return false;
   const data=_pArmGetEntry(String(selL.value||'').trim(),_pArmRegTurno(),_pArmRegFecha());
   const raw=String((data&&data.especie)||(data&&data.producto)||'').trim();
-  if(!raw)return false;
+  if(!raw){esp.value='';return false;}
   const want=_pRegNormEspCmp(raw);
-  const opts=[...esp.options].filter(o=>String(o.value||'').trim());
-  let hit=opts.find(o=>_pRegNormEspCmp(o.value)===want);
-  if(!hit)hit=opts.find(o=>_pRegNormEspCmp((o.textContent||'').replace(/\s+/g,' '))===want);
-  if(!hit)hit=opts.find(o=>{
-    const v=_pRegNormEspCmp(o.value);
+  const pool=_pRegPesajeEspeciesUiPool();
+  let hit=pool.find(e=>_pRegNormEspCmp(e)===want);
+  if(!hit)hit=pool.find(e=>{
+    const v=_pRegNormEspCmp(e);
     return v&&(want.includes(v)||v.includes(want));
   });
-  if(hit){esp.value=hit.value;return true;}
-  if(typeof _getEspecies==='function'){
-    const pool=_getEspecies();
-    const canon=pool.find(e=>_pRegNormEspCmp(e)===want);
-    if(canon){
-      if(![...esp.options].some(o=>String(o.value||'')===canon)){
-        const opt=document.createElement('option');
-        opt.value=canon;
-        opt.textContent=canon;
-        esp.appendChild(opt);
-      }
-      esp.value=canon;
-      return true;
-    }
-  }
-  return false;
+  if(hit){esp.value=hit;return true;}
+  esp.value=raw;
+  return true;
 }
 function _pRegSetUiBloqueadaSinLinea(on){
   const lock=!!on;
-  ['pRegGuia','pRegEspecie','pRegTipo','pRegKg'].forEach(id=>{
+  const esp=document.getElementById('pRegEspecie');
+  if(esp){
+    esp.disabled=lock;
+    esp.readOnly=!lock;
+  }
+  ['pRegGuia','pRegTipo','pRegKg'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.disabled=lock;
   });
   const fi=document.getElementById('pRegFicha');if(fi)fi.disabled=lock;
@@ -6284,23 +6282,12 @@ function _pRegSetUiBloqueadaSinLinea(on){
   const tgl=document.getElementById('pRegKgPadToggleBtn');
   if(tgl)tgl.disabled=lock;
 }
-/** Con línea válida: especie predeterminada = armado de pesaje (si cambia línea/turno/fecha o especie vacía). */
+/** Con línea válida: especie siempre = armado de pesaje; tipo por defecto si vacío. */
 function _pRegFillDefaultsSiVacios(){
   if(!_pRegHasLineaSeleccionada())return;
-  const esp=document.getElementById('pRegEspecie');
   const tip=document.getElementById('pRegTipo');
-  const key=_pRegArmadoScopeKey();
-  const prevKey=String(window.__pRegLastArmadoScope||'');
-  const scopeChanged=key!==prevKey;
-  if(scopeChanged)try{window.__pRegLastArmadoScope=key;}catch(_){}
-  const espEmpty=!esp||!String(esp.value||'').trim();
-  if(scopeChanged||espEmpty){
-    _pRegApplyEspecieDesdeArmado();
-    if(esp&&!String(esp.value||'').trim()){
-      const o=[...esp.options].find(x=>String(x.value||'').trim());
-      if(o)esp.value=o.value;
-    }
-  }
+  try{window.__pRegLastArmadoScope=_pRegArmadoScopeKey();}catch(_){}
+  _pRegApplyEspecieDesdeArmado();
   if(tip&&!String(tip.value||'').trim()){
     const o=[...tip.options].find(x=>String(x.value||'').trim());
     if(o)tip.value=o.value;
@@ -6476,7 +6463,6 @@ function onPRegTurnoChange(){
   else _pRegEnsureFechaDefault();
   renderPRegLinea();
 }
-function onPRegEspecieChange(){/* placeholder */}
 function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const badge=document.getElementById('pRegWorkerBadge');
@@ -6687,7 +6673,7 @@ function regPesaje(){
   if(!guia){showToast('N° Guía es obligatorio','error');document.getElementById('pRegGuia').focus();return;}
   const especieVal=String(document.getElementById('pRegEspecie').value||'').trim();
   const tipoVal=String(document.getElementById('pRegTipo').value||'').trim();
-  if(!especieVal){showToast('Selecciona especie','error');document.getElementById('pRegEspecie').focus();return;}
+  if(!especieVal){showToast('Definí la especie en Pesaje → Armado para esta línea','error');document.getElementById('pRegEspecie').focus();return;}
   if(!tipoVal){showToast('Selecciona tipo','error');document.getElementById('pRegTipo').focus();return;}
   const rec={
     id:nextId(RT.pesajes),hora:nowHM(),fecha:_fechaRegistroOperativo(_pArmRegTurno()||document.getElementById('pRegTurno').value||'dia',_pArmRegFecha()),
@@ -6708,7 +6694,7 @@ function regPesaje(){
   showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
   if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
 }
-window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;window.onPRegEspecieChange=onPRegEspecieChange;
+window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;
 window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
 window.renderPRegLinea=renderPRegLinea;window.renderPRegTrab=renderPRegTrab;window.renderPRegPlanilleros=renderPRegPlanilleros;window._getPRegPickerWorkers=_getPRegPickerWorkers;window._getPRegPickerPlanilleros=_getPRegPickerPlanilleros;window.onPRegLineaChange=onPRegLineaChange;
 window.pRegKgPadToggleMode=pRegKgPadToggleMode;window.pRegKgPadApplyMode=pRegKgPadApplyMode;window.pRegKgPadKey=pRegKgPadKey;window.pRegKgPadIsCustom=pRegKgPadIsCustom;window.pRegHasWorkerSelected=pRegHasWorkerSelected;
