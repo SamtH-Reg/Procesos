@@ -3512,6 +3512,7 @@ const SEED={
     {id:11,codigo:'N-03',nombre:'VERÓNICA LEIVA',ficha:'N03',area:'pesaje',turno:'noche',rol:'operario',activo:true},
     {id:12,codigo:'N-04',nombre:'RICARDO MORENO',ficha:'N04',area:'empaque',turno:'noche',rol:'operario',activo:true},
   ],
+  planilleros:[],
   turnos:[
     {id:1,nombre:'Día',codigo:'dia',inicio:'07:00',fin:'19:00',color:'amber',activo:true},
     {id:2,nombre:'Noche',codigo:'noche',inicio:'19:00',fin:'07:00',color:'blue',activo:true},
@@ -3604,6 +3605,25 @@ const DB={
         if(nk==='tuneles'&&k!=='tuneles')delete r.permisos[k];
       });
     });
+    // Catálogo simple de nombres (admin) + tablet armado · picker planillero
+    if(!Array.isArray(this.data.planilleros))this.data.planilleros=[];
+    const pl=this.data.planilleros;
+    let mxId=0;
+    pl.forEach(p=>{if(p&&+p.id>mxId)mxId=+p.id;});
+    pl.forEach(p=>{
+      if(!p||typeof p!=='object')return;
+      p.nombre=String(p.nombre||'').trim().toUpperCase();
+      const idNum=+p.id;
+      if(!p.id||!Number.isFinite(idNum)||idNum<=0){mxId++;p.id=mxId;}
+      else mxId=Math.max(mxId,idNum);
+    });
+      if(!p||typeof p!=='object')return;
+      p.nombre=String(p.nombre||'').trim().toUpperCase();
+      const idNum=+p.id;
+      if(!p.id||!Number.isFinite(idNum)||idNum<=0){mxId++;p.id=mxId;}
+      else mxId=Math.max(mxId,idNum);
+    });
+    this.data.planilleros=pl.filter(p=>p&&String(p.nombre||'').trim());
   },
   addDictValue(field,value){
     const v=String(value||'').trim();if(!v)return false;
@@ -8245,8 +8265,15 @@ function renderPArmModal(){
 function _pArmSetPlanillero(id,nombre){
   let trabId=null,realNombre=nombre;
   if(id!=='__manual__'){
-    const t=DB.data.trabajadores.find(x=>x.id===id);
-    if(t){realNombre=t.nombre;trabId=t.id;}
+    if(String(id).startsWith('pln:')){
+      const pid=String(id).slice(4);
+      const p=(DB.data.planilleros||[]).find(x=>String(x.id)===pid);
+      if(p)realNombre=p.nombre;
+      trabId=null;
+    }else{
+      const t=DB.data.trabajadores.find(x=>String(x.id)===String(id));
+      if(t){realNombre=t.nombre;trabId=t.id;}
+    }
   }
   _editPArmado.planillero={trabId,nombre:realNombre};
   renderPArmModal();
@@ -8984,11 +9011,36 @@ function _pickRandom5(arr){
   for(let i=copy.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[copy[i],copy[j]]=[copy[j],copy[i]];}
   return copy.slice(0,5);
 }
+/** Lista para picker de planillero en armado: catálogo admin + trabajadores con rol planillero (sin duplicar por nombre). */
+function _planilleroPickerMergedList(){
+  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  const cats=Array.isArray(DB&&DB.data&&DB.data.planilleros)?DB.data.planilleros:[];
+  const seen=new Set();
+  const out=[];
+  cats.forEach(p=>{
+    if(!p)return;
+    const n=String(p.nombre||'').trim().toUpperCase();
+    if(!n)return;
+    const k=n;
+    if(seen.has(k))return;
+    seen.add(k);
+    out.push({id:'pln:'+p.id,nombre:n,codigo:'',ficha:'',activo:true});
+  });
+  pool.filter(t=>t&&t.activo!==false&&String(t.rol||'').toLowerCase()==='planillero').forEach(t=>{
+    const k=String(t.nombre||'').trim().toUpperCase();
+    if(!k||seen.has(k))return;
+    seen.add(k);
+    out.push(t);
+  });
+  return out.sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+}
 function openIosPicker(mode,cb,trabsList){
   // trabsList: lista ya filtrada (modo registro) → mostrar todos
   // null      : modo armado → mostrar 5 aleatorios, buscar en todos
   const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
-  const allTrabs=Array.isArray(trabsList)?trabsList:pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  const isArmadoPlanillero=(mode==='planillero'&&!Array.isArray(trabsList));
+  const defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  const allTrabs=Array.isArray(trabsList)?trabsList:defaultPool;
   const isRegistro=Array.isArray(trabsList); // registro = array (incluso vacío); armado = null
   const hideManual=!!(isRegistro&&trabsList&&trabsList._enArmadoLinea&&allTrabs.length>0);
   // Lista inicial: registro→todos ; armado→5 aleatorios
@@ -9000,11 +9052,12 @@ function openIosPicker(mode,cb,trabsList){
     :'';
   const placeholder=isRegistro?'Buscar: nombre, código o nº ficha…':'Buscar: nombre, código o nº ficha…';
   const overlay=document.createElement('div');overlay.className='ios-picker-overlay';overlay.id='iosPicker';
+  const titlePlan=mode==='planillero'||String(mode||'').toLowerCase().includes('planillero');
   overlay.innerHTML=`
     <div class="ios-picker-sheet" onclick="event.stopPropagation()">
       <div class="ios-picker-handle"></div>
       <div class="ios-picker-hdr">
-        <span class="ios-picker-title">${mode==='planillero'?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}${badge}</span>
+        <span class="ios-picker-title">${titlePlan?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}${badge}</span>
         <button class="ios-picker-cancel" onclick="closeIosPicker()">Cancelar</button>
       </div>
       <div class="ios-picker-search-wrap">
@@ -9072,7 +9125,10 @@ function _renderIosItems(trabs,q){
     const nombreHi=_hi(t.nombre||'');
     const codigoHi=_hi(t.codigo||'');
     const fichaHi=_hi((t.ficha||'').toString());
-    html+=`<div class="ios-picker-item" onclick="selectIosWorker(${t.id},'${(t.nombre||'').replace(/'/g,"\\'")}','${(t.codigo||'').replace(/'/g,"\\'")}')">
+    const idArg=(typeof t.id==='number'&&Number.isFinite(t.id))?String(t.id):("'"+String(t.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'");
+    const nomEsc=String(t.nombre||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const codEsc=String(t.codigo||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html+=`<div class="ios-picker-item" onclick="selectIosWorker(${idArg},'${nomEsc}','${codEsc}')">
       <div class="ios-picker-av">${esc(ini)}</div>
       <div class="ios-picker-info">
         <div class="ios-picker-line-ficha"><span class="ios-picker-ficha-label">Ficha:</span><span class="ios-picker-ficha">${fichaHi||'—'}</span></div>
@@ -9089,7 +9145,8 @@ function _renderIosItems(trabs,q){
 function filterIosPicker(q){
   const list=document.getElementById('iosPickerList');if(!list)return;
   const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
-  const trabs=_iosPicker.trabsList||pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  const fallback=_iosPicker&&_iosPicker.mode==='planillero'&&!_iosPicker.isRegistro?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  const trabs=_iosPicker.trabsList||fallback;
   const trimQ=(q||'').trim();
   if(!trimQ){
     // Registro: mostrar todos los asignados ; Armado: volver a 5 aleatorios
@@ -9485,8 +9542,15 @@ function renderMArmModal(){
 function _mArmSetPlanillero(id,nombre,codigo){
   let trabId=null,realNombre=nombre;
   if(id!=='__manual__'){
-    const t=DB.data.trabajadores.find(x=>x.id===id);
-    if(t){realNombre=t.nombre;trabId=t.id;}
+    if(String(id).startsWith('pln:')){
+      const pid=String(id).slice(4);
+      const p=(DB.data.planilleros||[]).find(x=>String(x.id)===pid);
+      if(p)realNombre=p.nombre;
+      trabId=null;
+    }else{
+      const t=DB.data.trabajadores.find(x=>String(x.id)===String(id));
+      if(t){realNombre=t.nombre;trabId=t.id;}
+    }
   }
   _editMArmado.planillero={trabId,nombre:realNombre};
   renderMArmModal();
