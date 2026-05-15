@@ -4189,9 +4189,8 @@ function idxRefreshMoldesKpis(){
   set('idxKpiKgVal',Math.round(kgTot).toLocaleString('es-CL')+' kg');
   set('idxKpiKgSub','Mol '+Math.round(kgM).toLocaleString('es-CL')+' + Pes '+Math.round(kgP).toLocaleString('es-CL'));
   set('idxKpiPesVal',String(pesN));
-  const tiposPes=[...new Set(p.map(r=>String(r&&r.tipo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const tiposSeg=tiposPes.length?(' · '+tiposPes.join(' · ')):'';
-  set('idxKpiPesSub',(avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.')+tiposSeg);
+  const mixK=_pesajeEspecieTipoWidgetLabel(p);
+  set('idxKpiPesSub',(avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.')+(mixK?' · '+mixK:''));
   set('idxKpiOpVal',String(op));
   set('idxKpiOpSub','Con registros');
 }
@@ -6878,13 +6877,21 @@ function renderPesajesRecientes(){
       <div class="worker-avatar" style="width:36px;height:36px;font-size:12px;background:linear-gradient(135deg,#3b6fb8,#15294a);color:white;">${esc(ini)}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:600;">${esc(r.nombre)}</div>
-        <div style="font-size:11px;color:var(--slate-500);">${esc(r.hora)} · ${esc(r.especie)} · ${esc(r.guia)}</div>
+        <div style="font-size:11px;color:var(--slate-500);">${esc(r.especie||'—')} · ${esc(r.tipo||'—')} · ${esc(r.hora)} · ${esc(r.guia)}</div>
       </div>
       <div class="mono" style="font-weight:700;color:var(--navy-900);">${r.kg.toString().replace('.',',')} kg</div>
     </div>`;
   }).join('');
 }
 window.renderPesajeTable=renderPesajeTable;window.renderPesajesRecientes=renderPesajesRecientes;
+
+/** Especies únicas y luego tipos únicos (mismo orden que columnas Nombre → Especie → Tipo). Para subtítulos KPI/listas. */
+function _pesajeEspecieTipoWidgetLabel(rows){
+  const pes=Array.isArray(rows)?rows:[];
+  const esps=[...new Set(pes.map(r=>String(r&&r.especie||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  const tipos=[...new Set(pes.map(r=>String(r&&r.tipo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  return[...esps,...tipos].join(' · ');
+}
 
 /* ═══ PESAJE — Resumen por Hora (pivot) ═══════════════════════════ */
 function renderPResumen(){
@@ -6901,12 +6908,13 @@ function renderPResumen(){
   if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+(filtro!=='todos'?' · filtro turno':'')+'.</div>';if(sub)sub.textContent='0 pesajes · '+hoyStr+(lineaVal?' · '+lineaVal:'');return;}
   const hours=_mResumenHourColsFromFiltro(pes,filtro);
   if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin columnas de hora para este filtro.</div>';if(sub)sub.textContent='0 h · '+hoyStr;return;}
-  // rows keyed by trabajador + tipo + especie (misma persona puede pesar distinto tipo/especie)
+  // rows keyed por trabajador + especie + tipo (misma persona puede combinar distintas)
   const map={};
   pes.forEach(r=>{
     const tipoLab=String(r&&r.tipo||'').trim()||'—';
-    const key=(r.trabId||r.nombre)+'||'+tipoLab+'||'+(r.especie||'—');
-    if(!map[key])map[key]={nombre:r.nombre||'—',tipo:tipoLab,especie:r.especie||'—',byHour:{},tot:0};
+    const espLab=r.especie||'—';
+    const key=(r.trabId||r.nombre)+'||'+espLab+'||'+tipoLab;
+    if(!map[key])map[key]={nombre:r.nombre||'—',tipo:tipoLab,especie:espLab,byHour:{},tot:0};
     const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
     if(hh!=null){map[key].byHour[hh]=(map[key].byHour[hh]||0)+(r.kg||0);}
     map[key].tot+=(r.kg||0);
@@ -6914,21 +6922,21 @@ function renderPResumen(){
   const rows=Object.values(map).sort((a,b)=>{
     const c1=String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'});
     if(c1)return c1;
-    const c2=String(a.tipo||'').localeCompare(String(b.tipo||''),'es',{sensitivity:'base'});
+    const c2=String(a.especie||'').localeCompare(String(b.especie||''),'es',{sensitivity:'base'});
     if(c2)return c2;
-    return String(a.especie||'').localeCompare(String(b.especie||''),'es',{sensitivity:'base'});
+    return String(a.tipo||'').localeCompare(String(b.tipo||''),'es',{sensitivity:'base'});
   });
   const fmt=v=>v?v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}):'';
   const totCol={};let totGrand=0;
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;});
   const filtroSub=_resumenFiltroTurnoSub(filtro);
-  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:100px;">TIPO</th><th style="min-width:140px;">ESPECIE</th>'+
+  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th><th style="min-width:100px;">TIPO</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:100px;">SUMA TOTAL</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
-    <td style="color:var(--text-2);">${esc(r.tipo)}</td>
     <td style="color:var(--text-2);">${esc(r.especie)}</td>
+    <td style="color:var(--text-2);">${esc(r.tipo)}</td>
     ${hours.map(h=>`<td class="num">${fmt(r.byHour[h])||'<span style=\"color:var(--text-3);\">—</span>'}</td>`).join('')}
     <td class="num" style="font-weight:700;">${fmt(r.tot)}</td>
   </tr>`).join('')+'</tbody>';
@@ -6941,9 +6949,8 @@ function renderPResumen(){
   </tfoot>`;
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
   if(sub){
-    const tiposPes=[...new Set(pes.map(r=>String(r&&r.tipo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-    const tiposTxt=tiposPes.length?(' · '+tiposPes.join(' · ')):'';
-    sub.textContent=rows.length+' operarios · '+pes.length+' pesajes · '+fmt(totGrand)+' kg · '+hoyStr+' · '+filtroSub+(lineaVal?' · Línea '+lineaVal:'')+tiposTxt;
+    const mix=_pesajeEspecieTipoWidgetLabel(pes);
+    sub.textContent=rows.length+' operarios · '+pes.length+' pesajes · '+fmt(totGrand)+' kg · '+hoyStr+' · '+filtroSub+(lineaVal?' · Línea '+lineaVal:'')+(mix?' · '+mix:'');
   }
 }
 
@@ -9447,7 +9454,8 @@ function renderAnalisis(){
   const kgTotEl=document.getElementById('analKgTot');if(kgTotEl)kgTotEl.innerHTML=kgMol.toLocaleString('es-CL',{maximumFractionDigits:0})+'<small>kg</small>';
   setEl('analKgTotSub',cantMol+' moldes · '+moldes.length+' registros');
   const kgPesEl=document.getElementById('analKgPes');if(kgPesEl)kgPesEl.innerHTML=kgPes.toLocaleString('es-CL',{maximumFractionDigits:1})+'<small>kg</small>';
-  setEl('analKgPesSub',pesajes.length+' pesajes');
+  const mixAnal=_pesajeEspecieTipoWidgetLabel(pesajes);
+  setEl('analKgPesSub',pesajes.length+' pesajes'+(mixAnal?' · '+mixAnal:''));
   const eqOccEl=document.getElementById('analEqOcc');if(eqOccEl)eqOccEl.innerHTML=ocupados+'<small>/'+eqs.length+'</small>';
   setEl('analEqOccSub',libres+' libres');
   // Especie top (combina moldes + pesaje)
@@ -9491,16 +9499,17 @@ function renderAnalisis(){
   const topBox=document.getElementById('analTopTrab');
   if(topBox){
     const trabMap={};
-    pesajes.forEach(r=>{const k=r.nombre||'—';if(!trabMap[k])trabMap[k]={kg:0,n:0,linea:r.linea};trabMap[k].kg+=(r.kg||0);trabMap[k].n++;});
-    const list=Object.entries(trabMap).map(([n,v])=>({n,...v})).sort((a,b)=>b.kg-a.kg).slice(0,5);
+    pesajes.forEach(r=>{const k=r.nombre||'—';if(!trabMap[k])trabMap[k]={kg:0,cnt:0,linea:r.linea,_rows:[]};trabMap[k].kg+=(r.kg||0);trabMap[k].cnt++;trabMap[k]._rows.push(r);});
+    const list=Object.entries(trabMap).map(([nome,v])=>({nome,...v})).sort((a,b)=>b.kg-a.kg).slice(0,5);
     if(!list.length){topBox.innerHTML='<div style="padding:30px;text-align:center;color:var(--text-3);font-size:12px;">Sin pesajes</div>';}
     else topBox.innerHTML=list.map((t,i)=>{
       const last=i===list.length-1;
       const bg=i===0?'var(--safety-amber-bg)':'var(--slate-100)';
       const fg=i===0?'var(--safety-amber-dark)':'var(--slate-600)';
+      const mixT=_pesajeEspecieTipoWidgetLabel(t._rows);
       return `<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;${last?'':'border-bottom:1px solid var(--slate-100);'}">
         <div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${fg};display:grid;place-items:center;font-weight:700;font-size:12px;">${i+1}</div>
-        <div style="flex:1;min-width:0;"><div style="font-weight:600;">${esc(t.n)}</div><div style="font-size:11px;color:var(--slate-500);">${esc(t.linea||'')} · ${t.n} pesajes</div></div>
+        <div style="flex:1;min-width:0;"><div style="font-weight:600;">${esc(t.nome)}</div><div style="font-size:11px;color:var(--slate-500);">${mixT?esc(mixT)+' · ':''}${esc(t.linea||'')} · ${t.cnt} pesajes</div></div>
         <div class="mono" style="font-weight:700;">${t.kg.toLocaleString('es-CL',{maximumFractionDigits:1})} kg</div>
       </div>`;
     }).join('');
@@ -9575,15 +9584,16 @@ function renderAnalisis(){
   const pTr=document.getElementById('analPesajeTrab');
   if(pTr){
     const map={};
-    pesajes.forEach(r=>{const k=r.nombre||'—';if(!map[k])map[k]={kg:0,n:0,linea:r.linea,ficha:r.ficha};map[k].kg+=(r.kg||0);map[k].n++;});
-    const list=Object.entries(map).map(([n,v])=>({n,...v})).sort((a,b)=>b.kg-a.kg);
+    pesajes.forEach(r=>{const k=r.nombre||'—';if(!map[k])map[k]={kg:0,cnt:0,linea:r.linea,ficha:r.ficha,_rows:[]};map[k].kg+=(r.kg||0);map[k].cnt++;map[k]._rows.push(r);});
+    const list=Object.entries(map).map(([nome,v])=>({nome,...v})).sort((a,b)=>b.kg-a.kg);
     if(!list.length){pTr.innerHTML='<div style="padding:30px;text-align:center;color:var(--text-3);font-size:12px;">Sin pesajes</div>';}
     else pTr.innerHTML=list.map((t,i)=>{
       const last=i===list.length-1;
+      const mixP=_pesajeEspecieTipoWidgetLabel(t._rows);
       return `<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;${last?'':'border-bottom:1px solid var(--slate-100);'}">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--safety-green-bg);color:var(--safety-green-dark);display:grid;place-items:center;font-weight:700;font-size:12px;">${i+1}</div>
-        <div style="flex:1;min-width:0;"><div style="font-weight:600;">${esc(t.n)}</div><div style="font-size:11px;color:var(--slate-500);">Ficha ${esc(t.ficha||'—')} · ${esc(t.linea||'')}</div></div>
-        <div style="text-align:right;"><div class="mono" style="font-weight:700;">${t.kg.toLocaleString('es-CL',{maximumFractionDigits:1})} kg</div><div class="mono" style="font-size:11px;color:var(--slate-500);">${t.n} pesajes</div></div>
+        <div style="flex:1;min-width:0;"><div style="font-weight:600;">${esc(t.nome)}</div><div style="font-size:11px;color:var(--slate-500);">${mixP?esc(mixP)+' · ':''}Ficha ${esc(t.ficha||'—')} · ${esc(t.linea||'')}</div></div>
+        <div style="text-align:right;"><div class="mono" style="font-weight:700;">${t.kg.toLocaleString('es-CL',{maximumFractionDigits:1})} kg</div><div class="mono" style="font-size:11px;color:var(--slate-500);">${t.cnt} pesajes</div></div>
       </div>`;
     }).join('');
   }
