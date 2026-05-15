@@ -3075,6 +3075,18 @@ function _idxPerm(key){
     return true;
   }
 }
+/** Editar/eliminar en Moldes › Ver registros y Pesaje › Ver registros (p. ej. corrección de tipeo). Incluye planillero aunque el JSON del rol en Supabase no traiga `eliminar`. */
+function _idxPermCorregirRegistrosVer(){
+  try{
+    if(typeof _idxPerm==='function'&&_idxPerm('eliminar'))return true;
+    return _idxRolTabletNormalizado()==='planillero';
+  }catch(e){return false;}
+}
+function _tbPushOperativoTrasCorreccion(){
+  try{
+    if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate().catch(e=>console.warn('[tb push corrección]',e));
+  }catch(e){console.warn('[tb push corrección]',e);}
+}
 function _idxFirstAllowedPanel(){
   if(_idxPerm('moldes'))return'panelMoldes';
   if(_idxPerm('tuneles'))return'panelTuneles';
@@ -3116,6 +3128,7 @@ function _idxApplyModuleRestrictions(){
   }
 }
 window._idxPerm=_idxPerm;
+window._idxPermCorregirRegistrosVer=_idxPermCorregirRegistrosVer;
 window._idxApplyModuleRestrictions=_idxApplyModuleRestrictions;
 /** Solo administradores ven el enlace a `admin.html` en la tab bar (código `admin` en perfil / usuario). */
 function _idxUsuarioEsAdminRolTablet(){
@@ -5216,12 +5229,15 @@ function renderMoldesTable(){
     tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-3);">'+(RT.moldes.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde la pestaña "Registrar".')+'</td></tr>';
     return;
   }
-  const canDel=typeof _idxPerm!=='function'||_idxPerm('eliminar');
+  const canCor=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
   tb.innerHTML=rows.map(r=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
     const pendBadge=pend===0?'<span class="badge slate" style="font-size:10px;">Cargado</span>':pend<r.cant?`<span class="badge amber" style="font-size:10px;">${pend}/${r.cant} pend.</span>`:'';
     const kg=r.kg||0;
     const fechaDisp=r.fecha?r.fecha.split('-').reverse().join('/'):'—';
+    const actBtns=canCor
+      ?`<button class="row-icon-btn" onclick="editMolde(${r.id})" aria-label="Editar" style="margin-right:4px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="row-icon-btn danger" onclick="delMolde(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`
+      :'';
     return `<tr>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(fechaDisp)}</td>
     <td class="mono">${esc(r.hora)}</td>
@@ -5231,13 +5247,11 @@ function renderMoldesTable(){
     <td class="num">${r.cant||0}</td>
     <td class="num">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
-    <td style="white-space:nowrap;">
-      <button class="row-icon-btn" onclick="editMolde(${r.id})" aria-label="Editar" style="margin-right:4px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-      ${canDel?`<button class="row-icon-btn danger" onclick="delMolde(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`:''}
-    </td>
+    <td style="white-space:nowrap;">${actBtns}</td>
   </tr>`;}).join('');
 }
 function editMolde(id){
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
   const r=RT.moldes.find(x=>x.id===id);if(!r)return;
   const presetsOpt=DB.data.presets.filter(p=>p.activo).map(p=>`<option value="${p.id}" ${p.id===r.presetId?'selected':''}>${esc(p.nombre)} (${p.kgRef} kg/u)</option>`).join('');
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='editMoldeModal';
@@ -5262,6 +5276,7 @@ function editMolde(id){
 }
 function closeEditMolde(){const m=document.getElementById('editMoldeModal');if(m)m.remove();}
 function saveEditMolde(id){
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
   const r=RT.moldes.find(x=>x.id===id);if(!r){closeEditMolde();return;}
   const presetId=parseInt(document.getElementById('emPreset').value);
   const p=DB.data.presets.find(x=>x.id===presetId);if(!p){showToast('Preset inválido','error');return;}
@@ -5279,15 +5294,15 @@ function saveEditMolde(id){
   r.guia=guia;
   r.linea=document.getElementById('emLinea').value.trim()||r.linea;
   r.nombre=document.getElementById('emNombre').value.trim()||r.nombre;
-  rtSave();renderMoldesTable();renderPorCargar();renderAnalisis();
+  rtSave();_tbPushOperativoTrasCorreccion();renderMoldesTable();renderPorCargar();renderAnalisis();
   closeEditMolde();
   showToast('Registro actualizado','success');
 }
 window.editMolde=editMolde;window.closeEditMolde=closeEditMolde;window.saveEditMolde=saveEditMolde;
 function delMolde(id){
-  if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
-  if(!confirm('¿Eliminar este registro?'))return;
-  RT.moldes=RT.moldes.filter(r=>r.id!==id);rtSave();renderMoldesTable();renderPorCargar();renderAnalisis();showToast('Registro eliminado','success');
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
+  if(!confirm('¿Eliminar este registro? Se borrará también en la nube si hay sesión.'))return;
+  RT.moldes=RT.moldes.filter(r=>r.id!==id);rtSave();_tbPushOperativoTrasCorreccion();renderMoldesTable();renderPorCargar();renderAnalisis();showToast('Registro eliminado','success');
 }
 window.delMolde=delMolde;window.renderMoldesTable=renderMoldesTable;
 function exportarMoldesExcel(){
@@ -6784,8 +6799,12 @@ function renderPesajeTable(){
     tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.</td></tr>';
     return;
   }
-  const canDelP=typeof _idxPerm!=='function'||_idxPerm('eliminar');
-  tb.innerHTML=rows.map(r=>`<tr>
+  const canCorP=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
+  tb.innerHTML=rows.map(r=>{
+    const pBtns=canCorP
+      ?`<button class="btn ghost sm icon" type="button" title="Editar" onclick="editPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="btn ghost sm icon" type="button" title="Eliminar" onclick="delPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`
+      :'';
+    return `<tr>
     <td class="mono">${esc(r.hora)}</td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
@@ -6793,23 +6812,22 @@ function renderPesajeTable(){
     <td><span class="badge blue">${esc(r.tipo)}</span></td>
     <td class="num">${r.kg.toString().replace('.',',')}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
-    <td style="white-space:nowrap;">
-      <button class="btn ghost sm icon" type="button" title="Editar" onclick="editPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-      ${canDelP?`<button class="btn ghost sm icon" type="button" title="Eliminar" onclick="delPesaje(${r.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--safety-red);"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`:''}
-    </td>
-  </tr>`).join('');
+    <td style="white-space:nowrap;">${pBtns}</td>
+  </tr>`;
+  }).join('');
 }
 function delPesaje(id){
-  if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
-  if(!confirm('¿Eliminar pesaje de '+r.nombre+' ('+r.kg+' kg)?'))return;
-  RT.pesajes.splice(i,1);rtSave();
+  if(!confirm('¿Eliminar pesaje de '+r.nombre+' ('+r.kg+' kg)? Se borrará también en la nube si hay sesión.'))return;
+  RT.pesajes.splice(i,1);rtSave();_tbPushOperativoTrasCorreccion();
   renderPesajeTable();renderAnalisis();
   if(window.renderPResumen)renderPResumen();if(window.renderPConsol)renderPConsol();
   showToast('Pesaje eliminado','success');
 }
 function editPesaje(id){
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   const modal=document.createElement('div');modal.className='modal-backdrop';modal.id='pEditModal';
@@ -6836,6 +6854,7 @@ function editPesaje(id){
 }
 function closePEdit(){const m=document.getElementById('pEditModal');if(m)m.remove();}
 function savePEdit(id){
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   r.hora=document.getElementById('pEdHora').value.trim();
@@ -6846,7 +6865,7 @@ function savePEdit(id){
   r.tipo=document.getElementById('pEdTipo').value.trim();
   r.kg=parseFloat(document.getElementById('pEdKg').value)||0;
   r.guia=document.getElementById('pEdGuia').value.trim();
-  rtSave();closePEdit();
+  rtSave();_tbPushOperativoTrasCorreccion();closePEdit();
   renderPesajeTable();renderAnalisis();
   if(window.renderPResumen)renderPResumen();if(window.renderPConsol)renderPConsol();
   showToast('Pesaje actualizado','success');
