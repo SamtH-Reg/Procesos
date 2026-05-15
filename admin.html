@@ -2326,8 +2326,8 @@ function drawTableWidget(w,moldes,pesajes){
   if(w.type==='tbl-moldes'){
     const rows=moldes.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,200);
     if(!rows.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
-    html=`<table><thead><tr><th>Hora</th><th>L.</th><th>Trab.</th><th>Producto</th><th class="num">Cant</th><th class="num">Kg</th><th>Guía</th></tr></thead><tbody>`+
-      rows.map(r=>`<tr><td>${esc(r.hora||'')}</td><td>${esc(r.linea||'')}</td><td>${esc(r.nombre||'')}</td><td>${esc(r.producto||r.preset||'')}</td><td class="num">${_fmtInt(r.cant)}</td><td class="num">${_fmt(r.kg)}</td><td>${esc(r.guia||'')}</td></tr>`).join('')+`</tbody></table>`;
+    html=`<table><thead><tr><th>Hora</th><th>L.</th><th>Trab.</th><th>Especie</th><th>Producto</th><th class="num">Cant</th><th class="num">Kg</th><th>Guía</th></tr></thead><tbody>`+
+      rows.map(r=>{const eR=_adminEspecieForRec(r);const esp=(eR&&String(eR).trim())?String(eR).toUpperCase():'';return`<tr><td>${esc(r.hora||'')}</td><td>${esc(r.linea||'')}</td><td>${esc(r.nombre||'')}</td><td>${esc(esp)}</td><td>${esc(r.producto||r.preset||'')}</td><td class="num">${_fmtInt(r.cant)}</td><td class="num">${_fmt(r.kg)}</td><td>${esc(r.guia||'')}</td></tr>`;}).join('')+`</tbody></table>`;
   } else if(w.type==='tbl-pesaje'){
     const rows=pesajes.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,200);
     if(!rows.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin pesajes</div>';return;}
@@ -2354,9 +2354,11 @@ function drawTableWidget(w,moldes,pesajes){
       const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1],10):null;
       if(isMol){
         const prod=String(r.producto||r.preset||'—').trim()||'—';
+        const espRaw=_adminEspecieForRec(r);
+        const esp=(espRaw&&String(espRaw).trim())?String(espRaw).toUpperCase():'—';
         const tid=String(r.trabId||nom);
-        const k=tid+'\u0001'+prod;
-        if(!map[k])map[k]={nom, prod, byHKg:{},totCant:0,totKg:0};
+        const k=tid+'\u0001'+esp+'\u0001'+prod;
+        if(!map[k])map[k]={nom, esp, prod, byHKg:{},totCant:0,totKg:0};
         const cant=+r.cant||0,kg=+r.kg||0;
         if(hh!=null)map[k].byHKg[hh]=(map[k].byHKg[hh]||0)+kg;
         map[k].totCant+=cant;
@@ -2371,7 +2373,7 @@ function drawTableWidget(w,moldes,pesajes){
       }
     });
     const rows=Object.values(map).sort((a,b)=>{
-      if(isMol)return a.nom.localeCompare(b.nom)||a.prod.localeCompare(b.prod);
+      if(isMol)return a.nom.localeCompare(b.nom)||String(a.esp||'').localeCompare(String(b.esp||''))||a.prod.localeCompare(b.prod);
       return a.nom.localeCompare(b.nom)||a.esp.localeCompare(b.esp);
     });
     const totCol={};
@@ -2390,13 +2392,14 @@ function drawTableWidget(w,moldes,pesajes){
       const fs='background:#0f172a;color:#fff;font-weight:700;padding:8px 10px;';
       html=`<table>
       <thead><tr>
-        <th>Operario</th><th>Producto</th>
+        <th>Operario</th><th>Especie</th><th>Producto</th>
         ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}
         <th class="num">Moldes</th><th class="num">KG</th>
       </tr></thead>
       <tbody>`+
       rows.map(r=>`<tr>
         <td><strong>${esc(r.nom)}</strong></td>
+        <td style="color:var(--text-2);font-size:12px;">${esc(r.esp)}</td>
         <td style="color:var(--text-2);">${esc(r.prod)}</td>
         ${hours.map(h=>`<td class="num">${cellKgH(r.byHKg[h])}</td>`).join('')}
         <td class="num"><strong>${locMol(r.totCant)}</strong></td>
@@ -2404,7 +2407,7 @@ function drawTableWidget(w,moldes,pesajes){
       </tr>`).join('')+
       `</tbody>
       <tfoot><tr>
-        <td colspan="2" style="${fs}">TOTAL</td>
+        <td colspan="3" style="${fs}">TOTAL</td>
         ${hours.map(h=>`<td class="num" style="${fs}">${footKg(h)}</td>`).join('')}
         <td class="num" style="${fs}">${locMol(totGrandCant)}</td>
         <td class="num" style="${fs}">${locKg(totGrandKg)}</td>
