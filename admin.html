@@ -4310,7 +4310,19 @@ function sbSubscribeRealtime(){
       if(document.visibilityState!=='visible'||sbRtCatalogRealtimeEnabled())return;
       if(!_sb||!_currentUser||!isSbAdmin())return;
       clearTimeout(window._sbCatVisT);
-      window._sbCatVisT=setTimeout(()=>{void sbPullDbCatalogOnly();},2800);
+      window._sbCatVisT=setTimeout(async ()=>{
+        try{RT.load();}catch(_e){}
+        try{await sbPullDbCatalogOnly();}catch(_e){}
+        try{
+          if(await _adminPullArmadoLineasFromCloud()){
+            try{RT._ensureShape&&RT._ensureShape();}catch(_e2){}
+            try{if(RT.save)RT.save();}catch(_e2){}
+            sbLog('armado_lineas ↓ (visibilidad)',true);
+          }
+        }catch(_e){}
+        try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros ↓ (visibilidad)',true);}catch(_e){}
+        _doRender(null);
+      },2800);
     });
   }
 }
@@ -4412,8 +4424,26 @@ async function _pollFresh(){
     _doRender(new Set(['moldes','pesajes','generales']));
   }
 }
+/** Consola: catálogo + armado + planilleros desde la nube (otros equipos), sin toast. */
+function adminSyncFromCloudQuiet(){
+  if(!_sb||!_currentUser||!isSbAdmin())return;
+  void (async()=>{
+    try{RT.load();}catch(e){}
+    try{await sbPullDbCatalogOnly();}catch(e){sbLog('adminSync cat: '+(e&&e.message?e.message:String(e)),false);}
+    try{
+      if(await _adminPullArmadoLineasFromCloud()){
+        try{RT._ensureShape&&RT._ensureShape();}catch(_e){}
+        try{if(RT.save)RT.save();}catch(_e){}
+        sbLog('armado_lineas ↓ (auto)',true);
+      }
+    }catch(e){}
+    try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros ↓ (auto)',true);}catch(e){}
+    _doRender(null);
+  })();
+}
 function sbStartPoll(){
   if(_pollInterval)clearInterval(_pollInterval);
+  if(window._adminCloudPullInt){clearInterval(window._adminCloudPullInt);window._adminCloudPullInt=null;}
   // Inicializar counts actuales para no disparar render al arrancar
   (async()=>{
     for(const t of['moldes','pesajes','generales']){
@@ -4425,8 +4455,9 @@ function sbStartPoll(){
     sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes+' generales='+_pollCounts.generales);
   })();
   _pollInterval=setInterval(_pollFresh,60000);
+  window._adminCloudPullInt=setInterval(adminSyncFromCloudQuiet,120000);
 }
-function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}}
+function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}if(window._adminCloudPullInt){clearInterval(window._adminCloudPullInt);window._adminCloudPullInt=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
 async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}try{const{data,error}=await _sb.from('presets').select('*').limit(1);if(error)throw error;toast('Conexión OK ('+data.length+' fila)','success');sbLog('Test OK: '+data.length+' filas');}catch(e){toast('Error: '+e.message,'err');sbLog('Test fallo: '+e.message,false);}}
 /* ── Mappers JS (camelCase) ↔ SQL (snake_case) ── */

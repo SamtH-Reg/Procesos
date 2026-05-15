@@ -4372,6 +4372,7 @@ function idxRefreshMoldesKpis(){
 async function tbManualPullMoldesPesajes(opts){
   opts=opts||{};
   const silent=!!opts.silent;
+  const skipPostPush=!!opts.skipPostPush;
   if(!_tbSb){if(!silent&&typeof showToast==='function')showToast('Sin conexión a Supabase','warn');return;}
   if(!_tbUser){if(!silent&&typeof showToast==='function')showToast('Inicia sesión para leer moldes, pesajes y registros generales','warn');return;}
   try{
@@ -4394,16 +4395,34 @@ async function tbManualPullMoldesPesajes(opts){
     idxRefreshMoldesKpis();
     /* Subir antes de refreshPushSignaturesFromLocal: si no, las firmas quedan alineadas al merge local
        y pushAll puede no detectar filas que aún no existían en la nube. */
-    try{
-      if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function')
-        await TBSync.pushAll();
-    }catch(ePush){console.warn('[tb push tras pull operativos]',ePush);}
+    if(!skipPostPush){
+      try{
+        if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function')
+          await TBSync.pushAll();
+      }catch(ePush){console.warn('[tb push tras pull operativos]',ePush);}
+    }
     if(typeof TBSync!=='undefined'&&typeof TBSync.refreshPushSignaturesFromLocal==='function')TBSync.refreshPushSignaturesFromLocal();
     if(!silent&&typeof showToast==='function')showToast('Moldes, pesajes y registros generales actualizados desde Supabase','success');
   }catch(e){if(!silent&&typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
 }
 window.idxRefreshMoldesKpis=idxRefreshMoldesKpis;
 window.tbManualPullMoldesPesajes=tbManualPullMoldesPesajes;
+/** Trae catálogo + operativos desde Supabase (otros equipos). `skipPostPush` en pull manual evita doble push con el periódico. */
+let _tbCloudPullMultiInFlight=false;
+async function tbPullCloudMultiDevice(opts){
+  const silent=!!(opts&&opts.silent);
+  if(!_tbSb||!_tbUser)return false;
+  if(_tbCloudPullMultiInFlight)return false;
+  _tbCloudPullMultiInFlight=true;
+  try{
+    if(typeof TBSync!=='undefined'&&typeof TBSync.pullCatalogs==='function')await TBSync.pullCatalogs();
+    if(typeof tbManualPullMoldesPesajes==='function')await tbManualPullMoldesPesajes({silent,skipPostPush:true});
+    if(typeof TBSync!=='undefined'&&typeof TBSync.schedulePush==='function')TBSync.schedulePush();
+    return true;
+  }catch(e){console.warn('[tbPullCloudMultiDevice]',e);return false;}
+  finally{_tbCloudPullMultiInFlight=false;}
+}
+window.tbPullCloudMultiDevice=tbPullCloudMultiDevice;
 function idxFsActive(){
   return !!(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement);
 }
@@ -11030,8 +11049,17 @@ function tbUpdateUserBadge(){
 
 // Auth en cuanto existe el cliente (sin delay: evita flash de UI y doble lectura con INITIAL_SESSION)
 requestAnimationFrame(()=>{try{tbInitAuth();}catch(e){console.warn('[tb] tbInitAuth',e);}});
-window.addEventListener('online',()=>{TBSync.setStatus('☁ Sync','#16a34a');if(_tbUser)TBSync.pushAll();});
+window.addEventListener('online',async ()=>{
+  TBSync.setStatus('☁ Sync','#16a34a');
+  if(!_tbUser)return;
+  try{
+    await tbPullCloudMultiDevice({silent:true});
+    if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function')await TBSync.pushAll();
+  }catch(e){console.warn('[tb online sync]',e);}
+});
 window.addEventListener('offline',()=>TBSync.setStatus('⚠ Offline','#dc2626'));
+/* Tablet: la nube es la fuente entre dispositivos — pull periódico con sesión (además del push cada 3 min). */
+setInterval(()=>{try{if(!navigator.onLine||!_tbSb||!_tbUser)return;void tbPullCloudMultiDevice({silent:true});}catch(e){console.warn('[tb periodic cloud pull]',e);}},120000);
 /* Respaldo periódico a la nube (varios dispositivos / pestañas en segundo plano). */
 setInterval(()=>{
   try{
@@ -11039,6 +11067,11 @@ setInterval(()=>{
     if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();
   }catch(e){console.warn('[tb periodic cloud push]',e);}
 },180000);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||!_tbSb||!_tbUser)return;
+  try{clearTimeout(window._tbVisPullT);}catch(_){}
+  window._tbVisPullT=setTimeout(()=>{void tbPullCloudMultiDevice({silent:true});},2200);
+});
 </script>
 
 </body>
