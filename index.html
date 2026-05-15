@@ -5918,6 +5918,11 @@ function openEqModal(codigo){
   const capRestPlaca=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):null;
   const placaFull=capRestPlaca!=null&&capRestPlaca<=0;
   const canLoadUi=(rt.estado==='libre'||rt.estado==='cargando')||(rt.estado==='congelando'&&eq.tipo==='placa');
+  let finCongMeta='';
+  if(rt.estado==='congelando'&&rt.horaInicio&&(Number(rt.horasTotal)||0)>0){
+    const fin=_eqHoraFinCongelacion(rt.horaInicio,rt.horasTotal);
+    if(fin&&fin.hhmm&&fin.hhmm!=='—')finCongMeta=fin.siguienteDia?`Término: ${fin.hhmm} (+1 día)`:`Término: ${fin.hhmm}`;
+  }
   const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>{
     const enFrio=rt.estado==='congelando';
     const rowCls=enFrio?'eq-item-congelando':'';
@@ -5926,9 +5931,10 @@ function openEqModal(codigo){
       ?`display:flex;align-items:center;gap:10px;padding:${rowPad};border-radius:var(--radius-sm);`
       :`display:flex;align-items:center;gap:10px;padding:${rowPad};background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);`;
     const badge=enFrio?'<span class="eq-item-congelando__badge" title="Congelación en curso"><span class="eq-freeze-dot" aria-hidden="true"></span>En frío</span>':'';
+    const metaFin=enFrio&&finCongMeta?` · <span style="font-weight:700;color:var(--safety-blue,#0369a1);font-family:var(--mono,monospace);">${esc(finCongMeta)}</span>`:'';
     return`<div class="${rowCls}" style="${rowBase}">
       ${badge}
-      <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.producto)}</div><div style="font-size:11px;color:var(--text-3);">Cant: <strong>${it.cant}</strong> · Guía ${esc(it.guia)} · ${it.horasTotal}h</div></div>
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.producto)}</div><div style="font-size:11px;color:var(--text-3);">Cant: <strong>${it.cant}</strong> · Guía ${esc(it.guia)} · ${it.horasTotal}h${metaFin}</div></div>
       ${rt.estado==='libre'||rt.estado==='cargando'?`<button class="btn btn-danger-outline" type="button" onclick="removeEqItem(${i})">Quitar</button>`:''}
     </div>`;
   }).join('')+'</div>'):'<div style="padding:18px;text-align:center;color:var(--text-3);font-size:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">Sin productos cargados</div>';
