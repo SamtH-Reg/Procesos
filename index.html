@@ -7194,8 +7194,9 @@ function renderMResumen(){
   if(!hours.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin horas en datos ni en Admin → Turnos para este filtro.</div>';if(sub)sub.textContent='0 h · '+hoyStr+(lineaVal?' · '+esc(lineaVal):'');return;}
   const map={};
   mol.forEach(row=>{
-    const key=(row.trabId||row.nombre||'—')+'||'+(row.producto||'—');
-    if(!map[key])map[key]={nombre:row.nombre||'—',producto:row.producto||'—',byHourKg:{},tot:0,totKg:0};
+    const esp=_especieDe(row);
+    const key=(row.trabId||row.nombre||'—')+'||'+esp+'||'+(row.producto||'—');
+    if(!map[key])map[key]={nombre:row.nombre||'—',especie:esp,producto:row.producto||'—',byHourKg:{},tot:0,totKg:0};
     const h=(row.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
     const cant=+row.cant||0;
     const kgRow=+row.kg||0;
@@ -7203,7 +7204,13 @@ function renderMResumen(){
     map[key].tot+=cant;
     map[key].totKg+=kgRow;
   });
-  const rows=Object.values(map).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const rows=Object.values(map).sort((a,b)=>{
+    const c=a.nombre.localeCompare(b.nombre);
+    if(c)return c;
+    const c2=String(a.especie||'').localeCompare(String(b.especie||''));
+    if(c2)return c2;
+    return String(a.producto||'').localeCompare(String(b.producto||''));
+  });
   const fmtMol=v=>{if(v==null||v===''||Number.isNaN(+v))return'—';return(+v).toLocaleString('es-CL',{maximumFractionDigits:0});};
   const fmtKg=v=>{
     if(v==null||v===''||Number.isNaN(+v))return'—';
@@ -7218,11 +7225,12 @@ function renderMResumen(){
   const hoy=new Date().toLocaleDateString('es-CL');
   const cellKg=kg=>{const n=+kg||0;if(!n)return'<span style="color:var(--text-3);">—</span>';return`<span style="font-weight:700;">${fmtKg(n)}</span>`;};
   const fs='background:#0f172a;color:#fff;font-weight:700;padding:10px 12px;';
-  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">PRODUCTO</th>'+
+  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:120px;">ESPECIE</th><th style="min-width:140px;">PRODUCTO</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:88px;">MOLDES</th><th class="num" style="min-width:100px;">KG</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
+    <td style="color:var(--text-2);font-size:12px;">${esc(r.especie)}</td>
     <td style="color:var(--text-2);">${esc(r.producto)}</td>
     ${hours.map(h=>`<td class="num">${cellKg(r.byHourKg[h])}</td>`).join('')}
     <td class="num" style="font-weight:700;">${fmtMol(r.tot)}</td>
@@ -7231,7 +7239,7 @@ function renderMResumen(){
   const footKg=h=>{const n=+(totColKg[h]||0);if(!n)return'<span style="opacity:.85">—</span>';return fmtKg(n);};
   const foot=`<tfoot>
     <tr>
-      <td colspan="2" style="${fs}">Total ${esc(hoy)}</td>
+      <td colspan="3" style="${fs}">Total ${esc(hoy)}</td>
       ${hours.map(h=>`<td class="num" style="${fs}">${footKg(h)}</td>`).join('')}
       <td class="num" style="${fs}">${fmtMol(totGrand)}</td>
       <td class="num" style="${fs}">${fmtKg(totGrandKg)}</td>
