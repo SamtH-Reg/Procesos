@@ -38,6 +38,8 @@ create table if not exists trabajadores(
   rol        text,        -- 'operario' | 'planillero' | 'supervisor' | ...
   turno      text,        -- 'dia' | 'noche'
   linea      text,        -- 'L1' | 'L2' | 'L3' | null
+  centro_costo text,     -- origen Asistencia (sync multi-equipo)
+  contrato   text,        -- ej. Indefinido | Temporeros
   activo     boolean default true,
   created_at timestamptz default now(),
   updated_at timestamptz default now()

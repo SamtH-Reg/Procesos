@@ -631,8 +631,9 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <!-- ═══ TRABAJADORES ═══ -->
 <div class="page" id="page-trabajadores">
   <div class="page-hdr">
-    <div><h1 class="page-title">Trabajadores</h1><div class="page-sub">Sincronizados desde proyecto Asistencia · solo lectura</div></div>
+    <div><h1 class="page-title">Trabajadores</h1><div class="page-sub">Asistencia o edición local → se suben a Supabase (sesión admin) para otros equipos y la tablet</div></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn ghost sm" type="button" onclick="void adminPushTrabajadoresToCloud({silent:false})" title="Sube el catálogo actual a Supabase">☁ Subir a nube</button>
       <button class="btn ghost sm" onclick="exportExcel('trabajadores')" title="Descargar Excel">📤 Exportar Excel</button>
     </div>
   </div>
@@ -1244,6 +1245,7 @@ const EQ_RUNTIME_CLOUD_KEY='friosur_eq_runtime';
 /** Paridad con tablet `TB_PLANILLEROS_CLOUD_KEY`: catálogo planilleros en `app_kv`. */
 const PLANILLEROS_CLOUD_KEY='friosur_planilleros_catalog';
 let _plKvPushTimer=null;
+let _trabPushTimer=null;
 let dashLayouts={};
 let _dashApplyingFromCloud=false;
 let _dashCloudPushTimer=null;
@@ -1670,6 +1672,37 @@ function schedulePlanillerosCloudPush(){
   if(!_sb||!_currentUser||!isSbAdmin())return;
   if(_plKvPushTimer)clearTimeout(_plKvPushTimer);
   _plKvPushTimer=setTimeout(()=>{_plKvPushTimer=null;void adminPushPlanillerosToCloud({silent:true});},1200);
+}
+/** Sube catálogo trabajadores a Supabase (multi-equipo / tablet pullCatalogs). */
+async function adminPushTrabajadoresToCloud(opts){
+  const silent=opts&&opts.silent;
+  if(!_sb||!_currentUser||!isSbAdmin()){
+    if(!silent)toast('Iniciá sesión como admin en Supabase para subir trabajadores','warn');
+    return false;
+  }
+  try{
+    const rows=DB.data.trabajadores||[];
+    if(!rows.length){
+      if(!silent)toast('No hay trabajadores para subir','warn');
+      return false;
+    }
+    const mapped=_sbRows('trabajadores',rows).map(r=>_sbSanitizeRow(r));
+    const{error}=await _sb.from('trabajadores').upsert(mapped,{onConflict:'id'});
+    if(error)throw error;
+    if(!silent)toast(rows.length+' trabajadores guardados en la nube','success');
+    sbLog('trabajadores: '+rows.length+' filas ↑',true);
+    return true;
+  }catch(e){
+    const msg=e&&e.message?e.message:String(e);
+    if(!silent)toast('Trabajadores: no se pudo subir a la nube. '+msg,'err');
+    sbLog('push trabajadores: '+msg,false);
+    return false;
+  }
+}
+function scheduleTrabajadoresCloudPush(){
+  if(!_sb||!_currentUser||!isSbAdmin())return;
+  if(_trabPushTimer)clearTimeout(_trabPushTimer);
+  _trabPushTimer=setTimeout(()=>{_trabPushTimer=null;void adminPushTrabajadoresToCloud({silent:true});},1800);
 }
 /** Catálogo simple planilleros (nombre) — compartido con tablet vía DB local + app_kv. */
 function _adminNextPlanilleroId(){
@@ -3019,17 +3052,26 @@ async function testSyncCfg(){
 }
 /* Mapeo campos empleados (Asistencia) → trabajadores (Procesos)
    Se preservan los campos originales tal cual para mostrarlos sin transformar */
-function _mapEmpleado(emp,idx){
+function _trabLookupKey(t){
+  if(!t)return '';
+  return String(t.ficha||t.codigo||'').trim()||String(t.nombre||'').trim().toUpperCase();
+}
+function _adminNextTrabId(){
+  return (DB.data.trabajadores||[]).reduce((m,x)=>Math.max(m,+x.id||0),0)+1;
+}
+function _mapEmpleado(emp,idx,prevByKey,nextIdRef){
+  const codigo=emp.codigo||String(idx+1);
+  const key=String(emp.codigo||emp.ficha||'').trim()||String((emp.nombre||'').trim()).toUpperCase();
+  const prev=key?prevByKey.get(key):null;
+  const id=prev?prev.id:(nextIdRef.n++);
   return {
-    id: idx+1,
-    codigo: emp.codigo||String(idx+1),
+    id,
+    codigo,
     nombre: (emp.nombre||'').trim(),
-    // Campos originales preservados
     centro_costo: emp.centro_costo||null,
     contrato: emp.contrato||null,
     activo: emp.activo!==false,
-    // Campos auxiliares para compatibilidad con el resto del sistema
-    ficha: emp.codigo||null,
+    ficha: emp.codigo||emp.ficha||null,
     area: emp.area||null,
     rol: emp.rol||'operario',
     turno: emp.turno||null,
@@ -3063,14 +3105,21 @@ async function runSyncEmpleados(){
       btn.disabled=false;btn.textContent='↓ Sincronizar ahora';return;
     }
     _syncLog(`${all.length} empleados descargados — mapeando…`);
-    // 2. Mapear a formato trabajadores
-    const mapped=all.map((e,i)=>_mapEmpleado(e,i));
-    // 3. Guardar SOLO en localStorage (no pushear a Supabase Procesos
-    //    porque su tabla no tiene centro_costo/contrato y el RT event los borraría)
+    const prevByKey=new Map();
+    (DB.data.trabajadores||[]).forEach(t=>{const k=_trabLookupKey(t);if(k)prevByKey.set(k,t);});
+    const nextIdRef={n:_adminNextTrabId()};
+    const mapped=all.map((e,i)=>_mapEmpleado(e,i,prevByKey,nextIdRef));
     DB.data.trabajadores=mapped;DB.save();
     renderTrabs();
-    _syncLog(`✓ ${mapped.length} trabajadores sincronizados desde Asistencia`,true);
-    toast(mapped.length+' trabajadores importados desde Asistencia','success');
+    _syncLog(`✓ ${mapped.length} trabajadores en local — subiendo a Supabase…`);
+    const pushed=await adminPushTrabajadoresToCloud({silent:true});
+    if(pushed){
+      _syncLog(`✓ ${mapped.length} trabajadores sincronizados (Asistencia → nube Procesos)`,true);
+      toast(mapped.length+' trabajadores en la nube','success');
+    }else{
+      _syncLog('⚠ Guardados en este equipo. Para otros PCs: sesión admin y «Subir todo» o reintentá sync.',false);
+      toast('Importados localmente; no se subieron a la nube (¿sesión admin?)','warn');
+    }
   }catch(e){_syncLog('Error: '+e.message,false);toast('Error sync: '+e.message,'err');}
   btn.disabled=false;btn.textContent='↓ Sincronizar ahora';
 }
@@ -3099,7 +3148,7 @@ function renderTrabs(){
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3);">Sin resultados</td></tr>';
 }
 function openTrabModal(id){
-  const t=id?DB.data.trabajadores.find(x=>x.id===id):{id:Date.now(),codigo:'',nombre:'',ficha:'',area:'moldes',turno:'dia',rol:'operario',linea:'L1',activo:true};
+  const t=id?DB.data.trabajadores.find(x=>x.id===id):{id:_adminNextTrabId(),codigo:'',nombre:'',ficha:'',area:'moldes',turno:'dia',rol:'operario',linea:'L1',activo:true};
   openModal('Trabajador',`
     <div class="grid-2">
       <div class="form-field"><label class="form-label">Código</label><input class="input" id="f_codigo" value="${esc(t.codigo||'')}"></div>
@@ -3115,10 +3164,20 @@ function openTrabModal(id){
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
     const i=DB.data.trabajadores.findIndex(x=>x.id===n.id);
     if(i>=0)DB.data.trabajadores[i]=n;else DB.data.trabajadores.push(n);
-    DB.save();renderTrabs();toast('Trabajador guardado','success');return true;
+    DB.save();renderTrabs();scheduleTrabajadoresCloudPush();toast('Trabajador guardado','success');return true;
   });
 }
-function delTrab(id){if(!confirm('¿Eliminar trabajador?'))return;DB.data.trabajadores=DB.data.trabajadores.filter(t=>t.id!==id);DB.save();renderTrabs();}
+function delTrab(id){
+  if(!confirm('¿Eliminar trabajador?'))return;
+  DB.data.trabajadores=DB.data.trabajadores.filter(t=>t.id!==id);
+  DB.save();renderTrabs();
+  scheduleTrabajadoresCloudPush();
+  if(_sb&&_currentUser&&isSbAdmin()){
+    _sb.from('trabajadores').delete().eq('id',id).then(({error})=>{
+      if(error)sbLog('delete trabajador '+id+': '+error.message,false);
+    });
+  }
+}
 function importTrabsExcel(file){
   if(!file)return;
   const r=new FileReader();
@@ -3151,7 +3210,7 @@ function importTrabsExcel(file){
           else DB.data.trabajadores.push(n);
         });
       }
-      DB.save();renderTrabs();toast(nuevos.length+' trabajadores importados','success');
+      DB.save();renderTrabs();scheduleTrabajadoresCloudPush();toast(nuevos.length+' trabajadores importados','success');
     }catch(err){console.error(err);toast('Error leyendo Excel','err');}
   };
   r.readAsBinaryString(file);
@@ -4321,8 +4380,8 @@ const SB_MAP={
     in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo,usoEquipo:r.uso_equipo})
   },
   trabajadores:{
-    out:r=>({id:r.id,codigo:r.codigo||null,nombre:r.nombre,ficha:r.ficha||null,area:r.area||null,rol:r.rol||null,turno:r.turno||null,linea:r.linea||null,activo:r.activo!==false}),
-    in:r=>r
+    out:r=>({id:r.id,codigo:r.codigo||null,nombre:r.nombre,ficha:r.ficha||null,area:r.area||null,rol:r.rol||null,turno:r.turno||null,linea:r.linea||null,centro_costo:r.centro_costo||null,contrato:r.contrato||null,activo:r.activo!==false}),
+    in:r=>({id:r.id,codigo:r.codigo,nombre:r.nombre,ficha:r.ficha,area:r.area,rol:r.rol,turno:r.turno,linea:r.linea,centro_costo:r.centro_costo,contrato:r.contrato,activo:r.activo})
   },
   turnos:{
     out:r=>({codigo:r.codigo,nombre:r.nombre||null,inicio:r.inicio||null,fin:r.fin||null,activo:r.activo!==false}),
