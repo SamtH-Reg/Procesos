@@ -379,6 +379,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="nav-sec">Catálogos</div>
   <div class="nav-item" data-page="presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Productos / Presets</div>
   <div class="nav-item" data-page="trabajadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Trabajadores</div>
+  <div class="nav-item" data-page="planilleros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>Planilleros</div>
   <div class="nav-item" data-page="turnos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Turnos y horarios</div>
   <div class="nav-item" data-page="equipos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Equipos</div>
 
@@ -699,6 +700,28 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   </table></div>
 </div>
 
+<!-- ═══ PLANILLEROS (desde armado Pesaje / Moldes) ═══ -->
+<div class="page" id="page-planilleros">
+  <div class="page-hdr">
+    <div>
+      <h1 class="page-title">Planilleros</h1>
+      <div class="page-sub">Personas asignadas como <strong>planillero</strong> en <strong>Armado de línea</strong> (Pesaje y Moldes). Desde acá podés incorporarlas al <strong>catálogo de trabajadores</strong> con rol planillero para la tablet y los pickers.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button type="button" class="btn ghost sm" onclick="void adminPullArmadoThenPlanilleros()" title="Lee armado_lineas en Supabase y actualiza esta lista">↓ Traer armado desde nube</button>
+      <button type="button" class="btn ghost sm" onclick="renderPlanillerosArmado()">↻ Refrescar</button>
+      <button type="button" class="btn sm" onclick="adminImportAllPendingPlanilleros()">+ Añadir todos los pendientes</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px;padding:12px 16px;font-size:12px;color:var(--text-2);line-height:1.55;">
+    Los datos se leen del runtime local (<span class="mono">armadoPesaje</span> / <span class="mono">armadoMolde</span>). Si no ves filas, conectá Supabase y pulsá <strong>Traer armado desde nube</strong> o abrí antes la pestaña Supabase para sincronizar.
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Nombre</th><th class="num">ID tablet</th><th>Ficha</th><th>Área armado</th><th>Referencias (línea · turno · fecha)</th><th>Estado</th><th></th></tr></thead>
+    <tbody id="tbPlanillerosArmado"></tbody>
+  </table></div>
+</div>
+
 <!-- ═══ TURNOS ═══ -->
 <div class="page" id="page-turnos">
   <div class="page-hdr">
@@ -958,7 +981,7 @@ const DB={data:null,
     d.presets=d.presets||[];d.trabajadores=d.trabajadores||[];d.turnos=d.turnos||[];d.equipos=d.equipos||[];
     d.presets.forEach(p=>{p.usoEquipo=inferUsoEquipo(p);});
     d.roles=d.roles||[{id:1,nombre:'Admin',codigo:'admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
-                     {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
+                     {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,planilleros:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
                      {id:3,nombre:'Operario',codigo:'operario',permisos:{dashboard:true,reportes:false,presets:false,trabajadores:false,turnos:false,equipos:false,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:false,pesaje:true,general:true,eliminar:false}}];
     let adminPermHeal=false;
     (d.roles||[]).forEach(r=>{
@@ -969,9 +992,10 @@ const DB={data:null,
       if(!r.codigo||!String(r.codigo).trim())r.codigo=_slugCodigoRol(r.nombre||'rol');
       r.codigo=String(r.codigo).trim().toLowerCase();
       if(r.codigo==='admin'){
-        const full=['dashboard','reportes','analisis','presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes','moldes','tuneles','pesaje','general','eliminar'];
+        const full=['dashboard','reportes','analisis','presets','trabajadores','planilleros','turnos','equipos','roles','import','supabase','ajustes','moldes','tuneles','pesaje','general','eliminar'];
         full.forEach(k=>{if(!r.permisos[k])adminPermHeal=true;r.permisos[k]=true;});
       }
+      if((r.codigo==='supervisor'||r.codigo==='planillero')&&r.permisos.planilleros==null)r.permisos.planilleros=true;
     });
     if(adminPermHeal)try{localStorage.setItem(STORE_KEY,JSON.stringify(d));}catch(e){}
     d.usuario=d.usuario||{nombre:'C. Rodríguez',rol:'Admin'};
@@ -1120,6 +1144,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='analisis')renderAnalisis();
     if(id==='presets')renderPresets();
     if(id==='trabajadores')renderTrabs();
+    if(id==='planilleros'&&typeof renderPlanillerosArmado==='function')renderPlanillerosArmado();
     if(id==='turnos')renderTurnos();
     if(id==='equipos')renderEquipos();
     if(id==='roles'){renderRoles();void resyncAuthThenRefreshRoles();}
@@ -1597,6 +1622,190 @@ async function _adminPullArmadoLineasFromCloud(){
     return true;
   }catch(e){sbLog('pull armado_lineas: '+(e&&e.message?e.message:String(e)),false);return false;}
 }
+
+/** Planilleros detectados en armado local (Pesaje / Moldes) → alta en catálogo trabajadores. */
+function _adminCollectPlanillerosFromArmado(){
+  try{RT._ensureShape&&RT._ensureShape();}catch(_){}
+  const ap=(RT.data&&RT.data.armadoPesaje)||{};
+  const am=(RT.data&&RT.data.armadoMolde)||{};
+  const byKey=new Map();
+  function parseStoreKey(storeKey){
+    const s=String(storeKey||'');
+    const parts=s.split(_ADMIN_ARM_SCOPE_SEP);
+    if(parts.length>=3)return{linea:parts[0].trim().toUpperCase(),turno:parts[1].trim(),fecha:parts[2].trim()};
+    return{linea:s.trim().toUpperCase(),turno:'',fecha:''};
+  }
+  function ingest(area,storeKey,data){
+    if(!data||typeof data!=='object')return;
+    const p=data.planillero;
+    if(!p||typeof p!=='object')return;
+    const tid=p.trabId;
+    const nombreBase=String(p.nombre||'').trim();
+    let nombreShow=nombreBase?nombreBase.toUpperCase():'';
+    if(!nombreShow&&tid!=null&&String(tid).trim()!==''){
+      const t=(DB.data.trabajadores||[]).find(x=>String(x.id)===String(tid));
+      if(t&&t.nombre)nombreShow=String(t.nombre).trim().toUpperCase();
+    }
+    if(!nombreShow&&(tid==null||String(tid).trim()===''))return;
+    const dedupe=(tid!=null&&String(tid).trim()!=='')
+      ?('id:'+String(tid).trim())
+      :('nom:'+String(nombreBase||nombreShow||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+    const meta=parseStoreKey(storeKey);
+    const linea=meta.linea||String(data.linea||'').trim().toUpperCase()||'—';
+    const turno=meta.turno||String(data.turno||'').trim()||'—';
+    const fecha=meta.fecha||String(data.fecha||'').trim()||'—';
+    const refShort=linea+' · '+turno+' · '+fecha;
+    let row=byKey.get(dedupe);
+    if(!row){
+      row={dedupe,trabId:(tid!=null&&String(tid).trim()!==''?tid:null),nombre:nombreShow,ficha:String(p.ficha||'').trim(),areas:new Set(),refs:[]};
+      byKey.set(dedupe,row);
+    }else{
+      if(nombreBase&&(!row.nombre||row.nombre.length<nombreBase.length))row.nombre=nombreBase.toUpperCase();
+      if(!row.ficha&&p.ficha)row.ficha=String(p.ficha).trim();
+      if(!row.trabId&&tid!=null&&String(tid).trim()!=='')row.trabId=tid;
+    }
+    row.areas.add(area);
+    row.refs.push({area,linea,turno,fecha,refShort});
+  }
+  Object.keys(ap).forEach(k=>ingest('pesaje',k,ap[k]));
+  Object.keys(am).forEach(k=>ingest('moldes',k,am[k]));
+  return[...byKey.values()].sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+}
+function _adminPlanilleroCatalogStatus(row){
+  const list=DB.data.trabajadores||[];
+  const fn=s=>String(s||'').trim().toLowerCase();
+  const hit=list.find(t=>{
+    if(row.trabId!=null&&String(row.trabId)!==''){
+      if(String(t.id)===String(row.trabId))return true;
+    }
+    if(fn(t.nombre)&&fn(t.nombre)===fn(row.nombre))return true;
+    if(row.ficha&&String(t.ficha||'')===String(row.ficha))return true;
+    return false;
+  });
+  if(!hit)return{kind:'pendiente'};
+  if(String(hit.rol||'').toLowerCase()==='planillero')return{kind:'ok',trab:hit};
+  return{kind:'otro_rol',trab:hit};
+}
+function _adminNextTrabajadorId(){
+  const list=DB.data.trabajadores||[];
+  const nums=list.map(t=>+t.id||0).filter(n=>n===n);
+  return(Math.max(0,...nums,0)+1);
+}
+function _adminUniquePlanilleroCodigo(base){
+  const list=DB.data.trabajadores||[];
+  const ex=new Set(list.map(x=>String(x.codigo||'').toLowerCase()));
+  let c=String(base||'PL').trim()||'PL';
+  let out=c;
+  let i=0;
+  while(ex.has(String(out).toLowerCase())){i++;out=c+(i?('-'+i):'');}
+  return out;
+}
+function adminImportPlanilleroRow(dedupe){
+  const rows=window._adminPlanilleroArmadoCache||[];
+  const row=rows.find(r=>r.dedupe===dedupe);
+  if(!row){toast('Fila no encontrada · pulsá Refrescar','err');return;}
+  const st=_adminPlanilleroCatalogStatus(row);
+  if(st.kind==='ok'){toast('Ya está en el catálogo como planillero','info');return;}
+  const list=DB.data.trabajadores;
+  const idx=list.findIndex(t=>{
+    if(row.trabId!=null&&String(row.trabId)!=='')return String(t.id)===String(row.trabId);
+    const fn=s=>String(s||'').trim().toLowerCase();
+    if(fn(t.nombre)===fn(row.nombre))return true;
+    if(row.ficha&&String(t.ficha||'')===String(row.ficha))return true;
+    return false;
+  });
+  const area=row.areas.has('pesaje')?'pesaje':'moldes';
+  const firstRef=(row.refs&&row.refs[0])||{};
+  let turno=String(firstRef.turno||'').trim().toLowerCase();
+  if(turno!=='noche')turno='dia';
+  const lineaGuess=(firstRef.linea&&/^L\d/i.test(String(firstRef.linea)))?String(firstRef.linea).toUpperCase():'';
+  if(idx>=0){
+    const t={...list[idx]};
+    t.rol='planillero';
+    const nm=String(row.nombre||t.nombre||'').trim().toUpperCase();
+    if(nm)t.nombre=nm;
+    if(row.ficha)t.ficha=String(row.ficha);
+    if(t.activo===undefined)t.activo=true;
+    if(!t.area)t.area=area;
+    if(lineaGuess&&!String(t.linea||'').trim())t.linea=lineaGuess;
+    list[idx]=t;
+  }else{
+    let baseCod='PL-'+(row.trabId!=null&&String(row.trabId)!==''?String(row.trabId):_slugCodigoRol(row.nombre||'x').toUpperCase().replace(/_/g,'-'));
+    if(baseCod==='PL-'||baseCod.length<4)baseCod='PL-'+Date.now();
+    const cod=_adminUniquePlanilleroCodigo(baseCod);
+    list.push({
+      id:_adminNextTrabajadorId(),
+      codigo:cod,
+      nombre:String(row.nombre||'SIN NOMBRE').trim().toUpperCase(),
+      ficha:String(row.ficha||row.trabId||'').trim()||String(row.trabId||''),
+      area,
+      turno,
+      rol:'planillero',
+      linea:lineaGuess||'',
+      activo:true
+    });
+  }
+  DB.save();
+  renderPlanillerosArmado();
+  try{renderTrabs();}catch(_){}
+  toast('Planillero incorporado al catálogo','success');
+}
+function adminImportPlanilleroAtIndex(i){
+  const rows=window._adminPlanilleroArmadoCache||[];
+  const r=rows[+i];
+  if(!r)return;
+  adminImportPlanilleroRow(r.dedupe);
+}
+function adminImportAllPendingPlanilleros(){
+  const rows=window._adminPlanilleroArmadoCache||[];
+  const pend=rows.filter(r=>_adminPlanilleroCatalogStatus(r).kind!=='ok');
+  if(!pend.length){toast('No hay pendientes','info');return;}
+  if(!confirm('Se incorporarán '+pend.length+' persona(s) al catálogo (rol planillero). ¿Continuar?'))return;
+  pend.forEach(r=>adminImportPlanilleroRow(r.dedupe));
+  toast('Listo: '+pend.length+' procesado(s)','success');
+}
+async function adminPullArmadoThenPlanilleros(){
+  if(typeof _adminPullArmadoLineasFromCloud!=='function'){toast('Supabase no disponible','err');return;}
+  const ok=await _adminPullArmadoLineasFromCloud();
+  if(ok){
+    try{RT.save();}catch(_){}
+    toast('Armado actualizado desde la nube','success');
+  }else toast('No se pudo traer armado (conexión o sesión)','warn');
+  renderPlanillerosArmado();
+}
+function renderPlanillerosArmado(){
+  const tb=document.getElementById('tbPlanillerosArmado');
+  if(!tb)return;
+  const rows=_adminCollectPlanillerosFromArmado();
+  window._adminPlanilleroArmadoCache=rows;
+  if(!rows.length){
+    tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:22px;color:var(--text-3);">No hay planilleros en armado (Pesaje/Moldes). Configuralos en la tablet o traé el armado desde la nube.</td></tr>';
+    return;
+  }
+  tb.innerHTML=rows.map((r,idx)=>{
+    const st=_adminPlanilleroCatalogStatus(r);
+    const areas=[...r.areas].sort().map(a=>a==='pesaje'?'Pesaje':'Moldes').join(' + ')||'—';
+    const refs=r.refs.slice(0,4).map(x=>esc(x.refShort)).join('<br>');
+    const more=r.refs.length>4?'<br><span style="color:var(--text-3);font-size:11px;">… +'+(r.refs.length-4)+' más</span>':'';
+    const badge=st.kind==='ok'?'<span class="badge ok">En catálogo</span>':st.kind==='otro_rol'?'<span class="badge warn">Existe · otro rol</span>':'<span class="badge info">Pendiente</span>';
+    const btn=st.kind==='ok'?'—':'<button type="button" class="btn sm" onclick="adminImportPlanilleroAtIndex('+idx+')">Añadir</button>';
+    return'<tr>'+
+      '<td><strong>'+esc(String(r.nombre||'').toUpperCase())+'</strong></td>'+
+      '<td class="num">'+(r.trabId!=null?esc(String(r.trabId)):'—')+'</td>'+
+      '<td>'+(r.ficha?esc(r.ficha):'—')+'</td>'+
+      '<td>'+esc(areas)+'</td>'+
+      '<td style="font-size:12px;line-height:1.35;">'+refs+more+'</td>'+
+      '<td>'+badge+'</td>'+
+      '<td style="white-space:nowrap;">'+btn+'</td>'+
+    '</tr>';
+  }).join('');
+}
+window.renderPlanillerosArmado=renderPlanillerosArmado;
+window.adminImportPlanilleroRow=adminImportPlanilleroRow;
+window.adminImportPlanilleroAtIndex=adminImportPlanilleroAtIndex;
+window.adminImportAllPendingPlanilleros=adminImportAllPendingPlanilleros;
+window.adminPullArmadoThenPlanilleros=adminPullArmadoThenPlanilleros;
+
 function _adminTurnoArmadoMoldesForLinea(linea,fecha){
   if(!linea)return null;
   const am=(RT.data&&RT.data.armadoMolde)||{};
@@ -3132,8 +3341,8 @@ function openEqModal(cod){
 function delEq(cod){if(!confirm('¿Eliminar equipo?'))return;DB.data.equipos=DB.data.equipos.filter(e=>e.codigo!==cod);DB.save();renderEquipos();}
 
 /* ════════════ ROLES ════════════ */
-const CONSOLE_MODULES=['dashboard','reportes','analisis','presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes'];
-const CONSOLE_MODULE_LABELS={dashboard:'Dashboard',reportes:'Reportes',analisis:'Análisis',presets:'Productos / Presets',trabajadores:'Trabajadores',turnos:'Turnos y horarios',equipos:'Equipos',roles:'Permisos y roles',import:'Importar / Exportar',supabase:'Supabase',ajustes:'Ajustes generales'};
+const CONSOLE_MODULES=['dashboard','reportes','analisis','presets','trabajadores','planilleros','turnos','equipos','roles','import','supabase','ajustes'];
+const CONSOLE_MODULE_LABELS={dashboard:'Dashboard',reportes:'Reportes',analisis:'Análisis',presets:'Productos / Presets',trabajadores:'Trabajadores',planilleros:'Planilleros',turnos:'Turnos y horarios',equipos:'Equipos',roles:'Permisos y roles',import:'Importar / Exportar',supabase:'Supabase',ajustes:'Ajustes generales'};
 const TABLET_TAB_KEYS=['moldes','tuneles','pesaje','general','eliminar'];
 const TABLET_TAB_LABELS={moldes:'Moldes (barra)',tuneles:'Túneles (barra)',pesaje:'Pesaje (barra)',general:'General (barra)',eliminar:'Eliminar en tablet'};
 function _rolTabletResumen(r){
@@ -3942,7 +4151,7 @@ function applyRolePermissions(){
   // supervisor: casi todo excepto ajustes/supabase
   // admin: todo
   const hidden={
-    operario:['presets','trabajadores','turnos','equipos','roles','import','supabase','ajustes'],
+    operario:['presets','trabajadores','planilleros','turnos','equipos','roles','import','supabase','ajustes'],
     planillero:['turnos','equipos','roles','supabase','ajustes'],
     supervisor:['roles','supabase'],
     admin:[]
@@ -4100,6 +4309,7 @@ function _doRender(dirty){
     if(id==='page-analisis'&&dataChanged&&typeof renderAnalisis==='function')renderAnalisis();
     if(id==='page-presets'&&(!dirty||dirty.has('presets'))&&typeof renderPresets==='function')renderPresets();
     if(id==='page-trabajadores'&&(!dirty||dirty.has('trabajadores'))&&typeof renderTrabs==='function')renderTrabs();
+    if(id==='page-planilleros'&&(!dirty||dirty.has('armado')||dirty.has('trabajadores'))&&typeof renderPlanillerosArmado==='function')renderPlanillerosArmado();
     if(id==='page-turnos'&&(!dirty||dirty.has('turnos'))&&typeof renderTurnos==='function')renderTurnos();
     if(id==='page-equipos'&&(!dirty||dirty.has('equipos'))&&typeof renderEquipos==='function')renderEquipos();
     if(id==='page-roles'&&(!dirty||dirty.has('roles'))&&typeof renderRoles==='function')renderRoles();
