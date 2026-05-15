@@ -4115,6 +4115,12 @@ async function tbManualPullMoldesPesajes(opts){
     if(typeof initRuntime==='function')initRuntime();
     try{if(typeof _tbPullEqRuntimeFromCloud==='function')await _tbPullEqRuntimeFromCloud({silent});}catch(e){console.warn('[tb pull eq_runtime]',e);}
     idxRefreshMoldesKpis();
+    /* Subir antes de refreshPushSignaturesFromLocal: si no, las firmas quedan alineadas al merge local
+       y pushAll puede no detectar filas que aún no existían en la nube. */
+    try{
+      if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function')
+        await TBSync.pushAll();
+    }catch(ePush){console.warn('[tb push tras pull operativos]',ePush);}
     if(typeof TBSync!=='undefined'&&typeof TBSync.refreshPushSignaturesFromLocal==='function')TBSync.refreshPushSignaturesFromLocal();
     if(!silent&&typeof showToast==='function')showToast('Moldes, pesajes y registros generales actualizados desde Supabase','success');
   }catch(e){if(!silent&&typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
@@ -9671,6 +9677,7 @@ let _lastSbVisiblePull=0;
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible')return;
   syncCatalogFromStorage({source:'visibility'});
+  if(_tbSb&&_tbUser&&typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();
   if(!_tbSb||typeof TBSync==='undefined'||!TBSync.pullCatalogs)return;
   const now=Date.now();
   if(now-_lastSbVisiblePull<45000)return;
@@ -10079,7 +10086,7 @@ const TBSync={
   _pushQueued:false,
   _pushTimer:null,
   schedulePush(){
-    if(!_tbSb||this._pushQueued)return;
+    if(!_tbSb||!_tbUser||this._pushQueued)return;
     const eco=tbMsgEconomy();
     const deb=eco?9000:this._pushDebounceMs;
     const gap=eco?14000:this._pushMinGapMs;
@@ -10091,7 +10098,7 @@ const TBSync={
   },
   /** Sube ya moldes/pesajes/armado (cancela el debounce). Tras registrar en planta. */
   pushImmediate(){
-    if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
+    if(!_tbSb||!_tbUser)return Promise.resolve({ok:true,skipped:true});
     if(this._pushTimer){clearTimeout(this._pushTimer);this._pushTimer=null;}
     this._pushQueued=false;
     return this.pushAll();
@@ -10154,6 +10161,7 @@ const TBSync={
   },
   async pushAll(){
     if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
+    if(!_tbUser)return Promise.resolve({ok:true,skipped:true,reason:'no_session'});
     this.setStatus('☁ …','#f59e0b');
     try{
       const{moldesRows,pesajesRows,generalesRows}=this._rowsForCloudPush();
@@ -10515,6 +10523,13 @@ function tbUpdateUserBadge(){
 requestAnimationFrame(()=>{try{tbInitAuth();}catch(e){console.warn('[tb] tbInitAuth',e);}});
 window.addEventListener('online',()=>{TBSync.setStatus('☁ Sync','#16a34a');if(_tbUser)TBSync.pushAll();});
 window.addEventListener('offline',()=>TBSync.setStatus('⚠ Offline','#dc2626'));
+/* Respaldo periódico a la nube (varios dispositivos / pestañas en segundo plano). */
+setInterval(()=>{
+  try{
+    if(!navigator.onLine||!_tbSb||!_tbUser)return;
+    if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();
+  }catch(e){console.warn('[tb periodic cloud push]',e);}
+},180000);
 </script>
 
 </body>
