@@ -3617,12 +3617,6 @@ const DB={
       if(!p.id||!Number.isFinite(idNum)||idNum<=0){mxId++;p.id=mxId;}
       else mxId=Math.max(mxId,idNum);
     });
-      if(!p||typeof p!=='object')return;
-      p.nombre=String(p.nombre||'').trim().toUpperCase();
-      const idNum=+p.id;
-      if(!p.id||!Number.isFinite(idNum)||idNum<=0){mxId++;p.id=mxId;}
-      else mxId=Math.max(mxId,idNum);
-    });
     this.data.planilleros=pl.filter(p=>p&&String(p.nombre||'').trim());
   },
   addDictValue(field,value){
