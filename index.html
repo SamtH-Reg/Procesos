@@ -4055,8 +4055,9 @@ function rtLoad(){
   DB.data.equipos.forEach(eq=>{
     if(!RT.eqState[eq.codigo])RT.eqState[eq.codigo]={estado:'libre',items:[],congelando:false,horaInicio:null,horaFinEst:null,horasTotal:0};
   });
-  // Demo: marcar algunos equipos con estado — sólo primera carga
-  if(!localStorage.getItem(RT_KEY)){
+  // Demo: marcar algunos equipos con estado — mismo criterio que semillas moldes/pesajes (solo primer arranque).
+  // No usar solo getItem(RT_KEY): el bloque de healing de pesajes puede escribir la clave antes de llegar aquí.
+  if(!hadPersistedRt){
     const t1=RT.eqState['T-01'];if(t1){t1.estado='congelando';t1.congelando=true;t1.items=[{producto:'Filete Reineta Bloque',presetId:6,cant:5,guia:'G-2026-045',horasTotal:8}];t1.horasTotal=8;t1.horaInicio='12:00';t1.progreso=60;}
     const pd=RT.eqState['P-04'];if(pd){pd.estado='listo';pd.items=[{producto:'Filete Merluza Austral Bloque',presetId:4,cant:80,guia:'G-2026-044',horasTotal:4.5}];pd.horasTotal=4.5;pd.horaInicio='09:30';pd.progreso=100;}
     const pc=RT.eqState['P-03'];if(pc){pc.estado='cargando';pc.items=[{producto:'Filete Merluza 170-UP Bloque',presetId:1,cant:40,guia:'G-2026-044',horasTotal:4.5}];}
