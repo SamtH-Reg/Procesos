@@ -804,6 +804,8 @@ td.num,th.num{font-family:var(--mono);font-weight:600;text-align:center;}
 .badge.blue{background:var(--safety-blue-bg);color:var(--safety-blue);}
 .badge.slate{background:var(--surface-alt);color:var(--text-2);}
 .badge.navy{background:var(--brand);color:white;}
+.badge.ice{background:linear-gradient(180deg,#e0f2fe,#bae6fd);color:#0c4a6e;border:1px solid #7dd3fc;}
+body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,178,.35),rgba(12,74,110,.55));color:#e0f2fe;border-color:rgba(125,211,252,.35);}
 .badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
 
 /* ═══ EQUIPMENT TILES (túneles/placas) ════════════════════════ */
@@ -5642,7 +5644,7 @@ window.regGeneral=regGeneral;window.clearGReg=clearGReg;window.selectPresetG=sel
 window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;
 
 /* ═══ TÚNELES / PLACAS — render + state machine ════════════════ */
-const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'navy',t:'Listo'}};
+const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'navy',t:'Listo'},deshielando:{c:'ice',t:'Deshielando'}};
 
 function getEqRT(cod){return RT.eqState[cod]||(RT.eqState[cod]={estado:'libre',items:[],congelando:false});}
 /** Unidades (moldes) ya en la placa / equipo — suma de cant por línea. */
@@ -5697,6 +5699,10 @@ function _eqHoraFinCongelacion(horaInicio,horasTotal){
 function calcEqProgreso(eq,rt){
   if(rt.estado==='listo')return 100;
   if(rt.estado==='libre')return 0;
+  if(rt.estado==='deshielando'){
+    const m=_eqMinutosDesdeHoraHm(rt.deshieloHoraInicio);
+    return Math.min(92,18+Math.round((m%120)/120*74));
+  }
   if(rt.estado==='congelando'&&rt.horaInicio&&rt.horasTotal){
     const [h,m]=rt.horaInicio.split(':').map(Number);
     const start=h*60+m;
@@ -5723,6 +5729,9 @@ function renderEqTile(eq){
     const done=totalMin*progreso/100;
     const rest=Math.max(0,totalMin-done);
     tiempo=`${Math.floor(done/60)}h ${Math.round(done%60)}m · falta ${Math.floor(rest/60)}h ${Math.round(rest%60).toString().padStart(2,'0')}m`;
+  } else if(rt.estado==='deshielando'){
+    const m=_eqMinutosDesdeHoraHm(rt.deshieloHoraInicio);
+    tiempo='Deshielo · '+Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m · inicio '+(rt.deshieloHoraInicio||'—');
   } else if(rt.estado==='listo')tiempo='Listo para descargar';
   return `<button class="eq-tile ${rt.estado}" type="button" onclick="openEqModal('${eq.codigo}')" style="text-align:left;">
     <div class="eq-hdr">
@@ -5802,7 +5811,7 @@ function updateEqStats(){
   DB.data.equipos.filter(e=>e.activo!==false).forEach(eq=>{
     const rt=getEqRT(eq.codigo);
     if(rt.estado==='libre')libres++;
-    else if(rt.estado==='cargando')cargando++;
+    else if(rt.estado==='cargando'||rt.estado==='deshielando')cargando++;
     else if(rt.estado==='congelando')congelando++;
     else if(rt.estado==='listo')listos++;
   });
@@ -5825,6 +5834,18 @@ function _eqDiffMinutosHoraIniFin(horaInicio,horaFin){
   if(diff<0)diff+=1440;
   return diff;
 }
+/** Minutos transcurridos desde una HH:MM del mismo día (para barra / UI deshielo). */
+function _eqMinutosDesdeHoraHm(horaHm){
+  const parts=String(horaHm||'').trim().split(':');
+  const h=parseInt(parts[0],10),m=parseInt(parts[1],10);
+  if(isNaN(h)||isNaN(m))return 0;
+  const start=h*60+m;
+  const d=new Date();
+  const now=d.getHours()*60+d.getMinutes();
+  let diff=now-start;
+  if(diff<0)diff+=1440;
+  return diff;
+}
 /** Guías únicas del ciclo: `items[].guia` y, si existe, `h.guia` (legacy / sync). */
 function _eqHistGuiasFromItems(h){
   const set=new Set();
@@ -5843,11 +5864,12 @@ function _eqModalHistorialDescargasHtml(codigo){
   const list=(RT.eqHist&&RT.eqHist[codigo])?RT.eqHist[codigo].slice(0,10):[];
   if(!list.length){
     return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
-      <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimas descargas</div>
-      <div style="font-size:12px;color:var(--text-3);padding:10px 12px;background:var(--surface-alt);border-radius:8px;border:1px dashed var(--border);">Sin descargas registradas en este equipo.</div>
+      <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimos registros</div>
+      <div style="font-size:12px;color:var(--text-3);padding:10px 12px;background:var(--surface-alt);border-radius:8px;border:1px dashed var(--border);">Sin registros de frío ni deshielo en este equipo.</div>
     </div>`;
   }
   const rows=list.map(h=>{
+    const esDesh=h.tipoEvento==='deshielo';
     const prod=Array.isArray(h.productos)?h.productos.join(', '):String(h.productos||'—');
     const guias=_eqHistGuiasFromItems(h);
     const hi=esc(h.horaInicio||'—');
@@ -5866,6 +5888,22 @@ function _eqModalHistorialDescargasHtml(codigo){
           ${tieneFalt?`<div style="margin-top:4px;"><span style="font-weight:700;">Faltaba congelar (aprox.):</span> ${esc(faltTxt)}</div>`:''}
         </div>`
       :'';
+    if(esDesh){
+      return`<div style="padding:10px 12px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #7dd3fc;border-radius:10px;font-size:12px;">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.45;">
+          <span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#0369a1;color:white;text-transform:uppercase;letter-spacing:.05em;">Deshielo</span>
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Inicio</span>
+          <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hi}</span>
+          <span style="color:var(--text-3);">·</span>
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Término</span>
+          <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hf}</span>
+          <span style="color:var(--text-3);">·</span>
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Duración</span>
+          <span style="font-weight:700;color:var(--text);">${esc(durTxt)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-top:6px;font-weight:600;">Registro de deshielo (equipo vacío)</div>
+      </div>`;
+    }
     return`<div style="padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;font-size:12px;">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.45;">
         <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Inicio</span>
@@ -5888,7 +5926,7 @@ function _eqModalHistorialDescargasHtml(codigo){
     </div>`;
   }).join('');
   return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
-    <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimas ${list.length} descarga(s)</div>
+    <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimos ${list.length} registro(s)</div>
     <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:2px;">${rows}</div>
   </div>`;
 }
@@ -5914,10 +5952,10 @@ function openEqModal(codigo){
     if(eq.tipo==='placa'&&uso==='tunel')return false;
     return true;
   });
-  const b=estadoBadgeTP[rt.estado];
+  const b=estadoBadgeTP[rt.estado]||estadoBadgeTP.libre;
   const capRestPlaca=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):null;
   const placaFull=capRestPlaca!=null&&capRestPlaca<=0;
-  const canLoadUi=(rt.estado==='libre'||rt.estado==='cargando')||(rt.estado==='congelando'&&eq.tipo==='placa');
+  const canLoadUi=rt.estado!=='deshielando'&&((rt.estado==='libre'||rt.estado==='cargando')||(rt.estado==='congelando'&&eq.tipo==='placa'));
   let finCongMeta='';
   if(rt.estado==='congelando'&&rt.horaInicio&&(Number(rt.horasTotal)||0)>0){
     const fin=_eqHoraFinCongelacion(rt.horaInicio,rt.horasTotal);
@@ -5993,18 +6031,34 @@ function openEqModal(codigo){
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Descargar
             </button>`;
+  } else if(rt.estado==='deshielando'){
+    footer=`<button class="btn ghost" type="button" onclick="closeEqModal()">Cerrar</button>
+            <button class="btn success" type="button" onclick="finalizarDeshieloEq()">Finalizar deshielo</button>`;
+  } else if(rt.estado==='libre'&&!(rt.items||[]).length){
+    footer=`<button class="btn ghost" type="button" onclick="closeEqModal()">Cerrar</button>
+            <button class="btn" type="button" style="background:linear-gradient(180deg,#e0f2fe,#bae6fd);color:#0c4a6e;border:1px solid #38bdf8;font-weight:700;" onclick="iniciarDeshieloEq()">Iniciar deshielo</button>`;
   } else {
     footer=`<button class="btn ghost" type="button" onclick="closeEqModal()">Cerrar</button>`;
   }
 
+  const eqLibreVacio=rt.estado==='libre'&&!(rt.items||[]).length;
+  const deshieloVacíoHint=eqLibreVacio?`<div style="font-size:12px;color:var(--text-3);margin:0 0 12px;padding:10px 12px;background:var(--surface-alt);border-radius:8px;border:1px dashed var(--border);line-height:1.45;">Equipo <strong>vacío</strong>. Si corresponde un ciclo de deshielo / limpieza de serpentín o placa, pulsa <strong>Iniciar deshielo</strong> (abajo). Quedará registrado inicio y término en el historial.</div>`:'';
+  const deshieloEnCurso=rt.estado==='deshielando'?`<div style="margin-bottom:14px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);border:1px solid #7dd3fc;">
+    <div style="font-weight:800;font-size:12px;color:#0369a1;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Deshielo en curso</div>
+    <div style="font-size:13px;color:var(--text);">Hora de inicio: <strong style="font-family:var(--mono,monospace);">${esc(rt.deshieloHoraInicio||'—')}</strong></div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:8px;line-height:1.45;">No cargues productos hasta pulsar <strong>Finalizar deshielo</strong>. El término quedará guardado en el historial.</div>
+  </div>`:'';
   document.getElementById('modalTitle').textContent=eq.nombre+' · '+eq.codigo;
   const restCong=rt.estado==='congelando'?_eqMinutosRestantesCongelacion(rt):0;
   document.getElementById('modalBody').innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
       <span class="badge ${b.c}" style="font-size:12px;"><span class="badge-dot"></span>${b.t}</span>
       <span style="font-size:12px;color:var(--text-3);">${eq.tipo==='tunel'?'Túnel':'Placa'} · Capacidad ${eq.capacidad} ${esc(eq.unidad)}${eq.tipo==='placa'?' · En placa: <strong>'+_eqUnitsOnPlate(rt)+'</strong> / '+eq.capacidad:''}</span>
-      ${rt.horaInicio?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Inicio: <strong>${esc(rt.horaInicio)}</strong></span>`:''}
+      ${rt.horaInicio&&rt.estado!=='deshielando'?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Inicio: <strong>${esc(rt.horaInicio)}</strong></span>`:''}
+      ${rt.estado==='deshielando'&&rt.deshieloHoraInicio?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Deshielo · inicio <strong style="font-family:var(--mono,monospace);">${esc(rt.deshieloHoraInicio)}</strong></span>`:''}
     </div>
+    ${deshieloEnCurso}
+    ${deshieloVacíoHint}
     ${rt.estado==='congelando'&&restCong>0?`<div style="font-size:12px;color:var(--text-2);margin:-6px 0 12px;padding:8px 10px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">Tiempo de frío: <strong>${esc(String(rt.horasTotal||0))} h</strong> · Resta aprox.: <strong>${esc(_eqFmtMinutosHM(restCong))}</strong></div>`:''}
     ${rt.estado==='listo'&&rt.cierreAnticipado?`<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:12px;padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">Frío finalizado <strong>antes de tiempo</strong>${rt.cierreMinRestantes!=null?' (faltaban ~'+esc(_eqFmtMinutosHM(rt.cierreMinRestantes))+')':''}.<br><span style="color:var(--text-2);font-weight:600;">Causal:</span> ${esc(rt.cierreCausal||'—')}</div>`:''}
     <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Productos cargados</label>
@@ -6019,6 +6073,7 @@ function closeEqModal(){closeModal();_eqModalCode=null;}
 function addEqItem(){
   if(!_idxGuardTunelesInteract('cargar productos'))return;
   const rt=getEqRT(_eqModalCode);
+  if(rt.estado==='deshielando'){showToast('Finaliza el deshielo antes de cargar productos','error');return;}
   const pid=parseInt(document.getElementById('eqAddPreset').value);
   const p=DB.data.presets.find(x=>x.id===pid);
   const cant=parseInt(document.getElementById('eqAddCant').value);
@@ -6064,6 +6119,7 @@ function cargarDesdeConteo(presetId){
   const eq=DB.data.equipos.find(e=>e.codigo===_eqModalCode);if(!eq)return;
   const p=DB.data.presets.find(x=>x.id===presetId);if(!p)return;
   const rt=getEqRT(_eqModalCode);
+  if(rt.estado==='deshielando'){showToast('Finaliza el deshielo antes de cargar desde conteo','error');return;}
   const pend=aggregatePendientes(eq.tipo==='placa'?'molde':null).find(x=>x.preset.id===presetId);
   if(!pend||pend.cant<=0){showToast('Sin pendientes','error');return;}
   const capLeft=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):pend.cant;
@@ -6116,6 +6172,7 @@ function removeEqItem(idx){
 function iniciarCongelacion(){
   if(!_idxGuardTunelesInteract('iniciar congelación'))return;
   const rt=getEqRT(_eqModalCode);
+  if(rt.estado==='deshielando'){showToast('Finaliza el deshielo antes de iniciar congelación','error');return;}
   if(!rt.items||!rt.items.length){showToast('Carga productos primero','error');return;}
   delete rt.cierreAnticipado;
   delete rt.cierreCausal;
@@ -6125,6 +6182,54 @@ function iniciarCongelacion(){
   rt.progreso=0;
   rtSave();closeEqModal();renderEquipos();
   showToast('Congelación iniciada','success');
+}
+function iniciarDeshieloEq(){
+  if(!_idxGuardTunelesInteract('iniciar deshielo'))return;
+  const cod=_eqModalCode;if(!cod){showToast('Abre de nuevo el equipo','error');return;}
+  const rt=getEqRT(cod);
+  if(rt.estado!=='libre'){showToast('Solo con equipo en estado Libre','error');return;}
+  if(rt.items&&rt.items.length){showToast('El equipo tiene productos cargados; quítalos antes del deshielo','error');return;}
+  rt.estado='deshielando';
+  rt.deshieloHoraInicio=nowHM();
+  delete rt.deshieloHoraFin;
+  rtSave();
+  openEqModal(cod);
+  renderEquipos();
+  showToast('Deshielo iniciado','success');
+}
+function finalizarDeshieloEq(){
+  if(!_idxGuardTunelesInteract('finalizar deshielo'))return;
+  const cod=_eqModalCode;if(!cod){showToast('Abre de nuevo el equipo','error');return;}
+  const eq=DB.data.equipos.find(e=>e.codigo===cod);if(!eq)return;
+  const rt=getEqRT(cod);
+  if(rt.estado!=='deshielando'||!rt.deshieloHoraInicio){showToast('No hay deshielo en curso','error');return;}
+  const finHm=nowHM();
+  const durMin=_eqDiffMinutosHoraIniFin(rt.deshieloHoraInicio,finHm);
+  const horasTotal=durMin!=null?Math.max(0,Math.round(durMin/60*100)/100):0;
+  if(!RT.eqHist)RT.eqHist={};
+  if(!RT.eqHist[eq.codigo])RT.eqHist[eq.codigo]=[];
+  RT.eqHist[eq.codigo].unshift({
+    id:Date.now(),
+    tipoEvento:'deshielo',
+    horaInicio:rt.deshieloHoraInicio,
+    horaDescarga:finHm,
+    horasTotal,
+    cant:0,
+    productos:'Deshielo',
+    items:[],
+    cierreAnticipado:false,
+    cierreCausal:null,
+    cierreMinRestantes:null
+  });
+  RT.eqHist[eq.codigo]=RT.eqHist[eq.codigo].slice(0,20);
+  rt.estado='libre';
+  delete rt.deshieloHoraInicio;
+  delete rt.deshieloHoraFin;
+  rtSave();
+  openEqModal(cod);
+  renderEquipos();
+  try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}
+  showToast('Deshielo finalizado · registrado','success');
 }
 function _finalizarCongelacionAplicar(cod,meta){
   const rt=getEqRT(cod);
@@ -6191,6 +6296,7 @@ function descargarEq(){
   const cicloProds=[...new Set((rt.items||[]).map(i=>i.producto))].join(', ');
   RT.eqHist[eq.codigo].unshift({
     id:Date.now(),
+    tipoEvento:'ciclo_frio',
     horaDescarga:nowHM(),
     horaInicio:rt.horaInicio,
     horasTotal:rt.horasTotal||0,
@@ -6212,6 +6318,7 @@ function descargarEq(){
 }
 window.openEqModal=openEqModal;window.closeEqModal=closeEqModal;window.addEqItem=addEqItem;window.removeEqItem=removeEqItem;
 window.iniciarCongelacion=iniciarCongelacion;window.finalizarCongelacion=finalizarCongelacion;window.descargarEq=descargarEq;
+window.iniciarDeshieloEq=iniciarDeshieloEq;window.finalizarDeshieloEq=finalizarDeshieloEq;
 window.renderEquipos=renderEquipos;
 
 /* ═══ PESAJE — Registrar ═══════════════════════════════════════ */
@@ -9621,14 +9728,14 @@ function renderAnalisis(){
   // Tuneles estado
   const tunBody=document.getElementById('analTunelesBody');
   if(tunBody){
-    const estadoL={libre:'Libre',cargando:'Cargando',congelando:'Congelando',listo:'Listo'};
+    const estadoL={libre:'Libre',cargando:'Cargando',congelando:'Congelando',listo:'Listo',deshielando:'Deshielando'};
     tunBody.innerHTML='<div class="tbl-wrap"><table><thead><tr><th>Equipo</th><th>Tipo</th><th>Estado</th><th>Productos</th><th class="num">Cantidad</th><th>Inicio</th></tr></thead><tbody>'+
       eqs.map(e=>{
         const rt=RT.eqState[e.codigo]||{estado:'libre'};
         const items=(rt.items||[]);
         const prods=items.map(i=>i.producto).join(', ')||'—';
         const cant=items.reduce((s,i)=>s+(i.cant||0),0);
-        const b={libre:'green',cargando:'amber',congelando:'blue',listo:'navy'}[rt.estado]||'slate';
+        const b={libre:'green',cargando:'amber',congelando:'blue',listo:'navy',deshielando:'slate'}[rt.estado]||'slate';
         return `<tr>
           <td style="font-weight:700;">${esc(e.nombre)} <span class="mono" style="font-size:11px;color:var(--slate-500);">${esc(e.codigo)}</span></td>
           <td>${e.tipo==='tunel'?'Túnel':'Placa'}</td>
