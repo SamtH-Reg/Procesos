@@ -423,13 +423,15 @@ body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
 .card-sub{font-size:12px;color:var(--text-3);margin-left:auto;}
 .card-body{padding:20px;}
 .card-body.tight{padding:14px 16px;}
-/* Consolidado moldes — paridad visual con panel Pesaje › section-hdr */
+/* Consolidado moldes — misma lógica que Pesaje › section-hdr: bloque sobre --app-bg (no card blanca),
+   título + subtítulo; la tabla (.tbl-wrap) queda en superficie blanca como el contenido bajo Pesaje. */
 .m-consol-intro-hdr.section-hdr{
   margin-bottom:0;
-  padding:18px 20px 16px;
-  border-bottom:1px solid var(--border);
-  background:var(--surface);
+  padding:20px 20px 18px;
   align-items:flex-start;
+  background:var(--app-bg);
+  border-bottom:1px solid var(--border);
+  border-radius:0;
 }
 
 /* ═══ TABS (dentro de paneles) ════════════════════════════════ */
@@ -2044,8 +2046,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
         <div class="card-hdr"><div class="card-title">Consolidado — Kg por operario, especie y producto</div><div class="card-sub" id="mConsolSub">—</div></div>
         <div class="section-hdr m-consol-intro-hdr">
           <div>
-            <div class="section-title">Conteo de molde</div>
-            <div class="section-sub">Suma de moldes y kilos por trabajador, especie y producto</div>
+            <div class="section-title">Conteo de moldes</div>
+            <div class="section-sub">Registro agregado de moldes y kilos por trabajador</div>
           </div>
         </div>
         <div class="tbl-wrap" id="mConsolWrap"></div>
