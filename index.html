@@ -421,35 +421,18 @@ body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
 .card-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.01em;display:flex;align-items:center;gap:8px;}
 .card-title svg{width:18px;height:18px;color:var(--text-3);}
 .card-sub{font-size:12px;color:var(--text-3);margin-left:auto;}
-/* Panel Túneles/Placas: encabezados claros (túnel tinte agua; placa neutro gris) */
-#panelTuneles .card.card-tunel-hdr > .card-hdr{
-  background:linear-gradient(135deg,#ccfbf1 0%,#e0f7fa 45%,#e0f2fe 100%);
-  border-bottom-color:#a5f3fc;
-}
-#panelTuneles .card.card-tunel-hdr > .card-hdr .card-title{color:#0f766e;}
-#panelTuneles .card.card-tunel-hdr > .card-hdr .card-title svg{color:#0d9488;}
-#panelTuneles .card.card-tunel-hdr > .card-hdr .card-sub{color:#115e59;}
+/* Panel Túneles/Placas: encabezados minimalistas (gris plano, sin degradado) */
+#panelTuneles .card.card-tunel-hdr > .card-hdr,
 #panelTuneles .card.card-placa-hdr > .card-hdr{
-  background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 50%,#eef2f7 100%);
-  border-bottom-color:var(--border);
+  background:#64748b;
+  border-bottom:1px solid #575f6a;
 }
-#panelTuneles .card.card-placa-hdr > .card-hdr .card-title{color:#334155;}
-#panelTuneles .card.card-placa-hdr > .card-hdr .card-title svg{color:#64748b;}
-#panelTuneles .card.card-placa-hdr > .card-hdr .card-sub{color:#475569;}
-body[data-theme="dark"] #panelTuneles .card.card-tunel-hdr > .card-hdr{
-  background:linear-gradient(135deg,rgba(45,212,191,.2) 0%,rgba(56,189,248,.12) 100%);
-  border-bottom-color:rgba(45,212,191,.35);
-}
-body[data-theme="dark"] #panelTuneles .card.card-tunel-hdr > .card-hdr .card-title{color:#99f6e4;}
-body[data-theme="dark"] #panelTuneles .card.card-tunel-hdr > .card-hdr .card-title svg{color:#5eead4;}
-body[data-theme="dark"] #panelTuneles .card.card-tunel-hdr > .card-hdr .card-sub{color:#94a3b8;}
-body[data-theme="dark"] #panelTuneles .card.card-placa-hdr > .card-hdr{
-  background:linear-gradient(135deg,rgba(148,163,184,.16) 0%,rgba(100,116,139,.1) 100%);
-  border-bottom-color:var(--border);
-}
-body[data-theme="dark"] #panelTuneles .card.card-placa-hdr > .card-hdr .card-title{color:#e2e8f0;}
-body[data-theme="dark"] #panelTuneles .card.card-placa-hdr > .card-hdr .card-title svg{color:#cbd5e1;}
-body[data-theme="dark"] #panelTuneles .card.card-placa-hdr > .card-hdr .card-sub{color:#94a3b8;}
+#panelTuneles .card.card-tunel-hdr > .card-hdr .card-title,
+#panelTuneles .card.card-placa-hdr > .card-hdr .card-title{color:#fff;}
+#panelTuneles .card.card-tunel-hdr > .card-hdr .card-title svg,
+#panelTuneles .card.card-placa-hdr > .card-hdr .card-title svg{color:rgba(255,255,255,.92);}
+#panelTuneles .card.card-tunel-hdr > .card-hdr .card-sub,
+#panelTuneles .card.card-placa-hdr > .card-hdr .card-sub{color:rgba(255,255,255,.88);}
 .card-body{padding:20px;}
 .card-body.tight{padding:14px 16px;}
 /* Consolidado moldes — misma lógica que Pesaje › section-hdr: bloque sobre --app-bg (no card blanca),
