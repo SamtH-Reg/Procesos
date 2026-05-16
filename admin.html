@@ -1123,14 +1123,6 @@ function _adminResumenHourColsFromFiltro(rows,filtro){
   return _adminSortHoursChronologicalInTurn(arr,a,b);
 }
 function _adminFmtHoraResumenTh(h){return String(h)+':'+String(0).padStart(2,'0');}
-/** Tras traer de Supabase: conserva filas que solo existen en esta PC (tablet sin subir aún). */
-function _rtMergeRemoteWithLocal(localArr,remoteArr){
-  const remote=Array.isArray(remoteArr)?remoteArr:[];
-  const local=Array.isArray(localArr)?localArr:[];
-  const remoteIds=new Set(remote.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
-  const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id)));
-  return remote.concat(extra);
-}
 
 /* ─── Toast ─────────────────────────────── */
 function toast(msg,type='info'){const c=document.getElementById('toasts');const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;c.appendChild(t);setTimeout(()=>t.remove(),2800);}
@@ -3908,11 +3900,10 @@ async function bindSupabaseAuth(){
     })();
   },2800);
 }
-/** Resumen de kg y conteos tras traer RT (totales + según filtros del dashboard). */
+/** Resumen de kg y conteos según RT en memoria (sin `RT.load()`: no reinyectar moldes/pesajes viejos desde localStorage). */
 function dashRefreshKgSummary(opts){
   opts=opts||{};
   try{
-    RT.load();
     const m=RT.data.moldes||[],p=RT.data.pesajes||[];
     const kgM=m.reduce((s,r)=>s+(+r.kg||0),0),kgP=p.reduce((s,r)=>s+(+r.kg||0),0);
     const fm=typeof _filterRecs==='function'?_filterRecs(m,'molde'):m;
@@ -3990,21 +3981,18 @@ async function adminPushEqRuntimeToCloud(opts){
     return false;
   }
 }
-/** Moldes/pesajes desde la nube (tablets / otros admins). Necesario para tiempo real entre dispositivos — localStorage no cruza equipos. */
+/** Moldes/pesajes/generales desde Supabase solamente (sin fusionar caché local). La consola admin refleja la nube; la tablet sigue usando merge donde aplique. */
 async function sbPullRuntimeFromCloud(){
   if(!_sb)return;
   if(!_currentUser||!isSbAdmin())return;
   try{
     if(!RT.data)RT.data={};
-    for(const t of['moldes','pesajes']){
-      const localBefore=Array.isArray(RT.data[t])?[...RT.data[t]]:[];
+    for(const t of['moldes','pesajes','generales']){
       const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
       if(error){sbLog('pull RT '+t+': '+error.message,false);continue;}
       const remote=_sbParse(t,data||[]);
-      const merged=_rtMergeRemoteWithLocal(localBefore,remote);
-      RT.data[t]=merged;
-      const added=merged.length-remote.length;
-      if(added>0)sbLog(t+': nube '+remote.length+' + solo-local '+added+' (conservados)',true);
+      RT.data[t]=remote;
+      sbLog(t+': '+remote.length+' filas ↓ (solo nube)',true);
     }
     const armOk=await _adminPullArmadoLineasFromCloud();
     if(armOk)sbLog('armado_lineas aplicado desde nube',true);
@@ -4014,11 +4002,13 @@ async function sbPullRuntimeFromCloud(){
     try{
       const{count:cm}=await _sb.from('moldes').select('*',{count:'exact',head:true});
       const{count:cp}=await _sb.from('pesajes').select('*',{count:'exact',head:true});
+      const{count:cg}=await _sb.from('generales').select('*',{count:'exact',head:true});
       if(cm!=null)_pollCounts.moldes=cm|0;
       if(cp!=null)_pollCounts.pesajes=cp|0;
+      if(cg!=null)_pollCounts.generales=cg|0;
     }catch(_){}
-    _doRender(new Set(['moldes','pesajes']));
-    sbLog('Moldes/pesajes sincronizados desde nube (multi-dispositivo)');
+    _doRender(new Set(['moldes','pesajes','generales']));
+    sbLog('Moldes/pesajes/generales sincronizados desde nube (solo servidor)');
   }catch(e){sbLog('pull RT: '+e.message,false);}
 }
 async function applySession(session){
@@ -4097,6 +4087,16 @@ async function applySession(session){
   }catch(e){
     sbLog('Catálogo inicial desde nube: '+(e&&e.message?e.message:String(e)),false);
   }
+  /* No mostrar moldes/pesajes/generales viejos de localStorage hasta traer la nube (misma idea que tablet cloud-first). */
+  try{
+    if(RT.data){
+      RT.data.moldes=[];
+      RT.data.pesajes=[];
+      RT.data.generales=[];
+      RT._ensureShape();
+    }
+    _doRender(new Set(['moldes','pesajes','generales']));
+  }catch(_e){}
   setTimeout(async()=>{
     await sbPullRuntimeFromCloud();
     await sbPullDashboardCloud({silent:true});
@@ -4318,15 +4318,8 @@ function sbSubscribeRealtime(){
       if(!_sb||!_currentUser||!isSbAdmin())return;
       clearTimeout(window._sbCatVisT);
       window._sbCatVisT=setTimeout(async ()=>{
-        try{RT.load();}catch(_e){}
         try{await sbPullDbCatalogOnly();}catch(_e){}
-        try{
-          if(await _adminPullArmadoLineasFromCloud()){
-            try{RT._ensureShape&&RT._ensureShape();}catch(_e2){}
-            try{if(RT.save)RT.save();}catch(_e2){}
-            sbLog('armado_lineas ↓ (visibilidad)',true);
-          }
-        }catch(_e){}
+        try{await sbPullRuntimeFromCloud();}catch(_e){}
         try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros ↓ (visibilidad)',true);}catch(_e){}
         _doRender(null);
       },2800);
@@ -4435,15 +4428,8 @@ async function _pollFresh(){
 function adminSyncFromCloudQuiet(){
   if(!_sb||!_currentUser||!isSbAdmin())return;
   void (async()=>{
-    try{RT.load();}catch(e){}
     try{await sbPullDbCatalogOnly();}catch(e){sbLog('adminSync cat: '+(e&&e.message?e.message:String(e)),false);}
-    try{
-      if(await _adminPullArmadoLineasFromCloud()){
-        try{RT._ensureShape&&RT._ensureShape();}catch(_e){}
-        try{if(RT.save)RT.save();}catch(_e){}
-        sbLog('armado_lineas ↓ (auto)',true);
-      }
-    }catch(e){}
+    try{await sbPullRuntimeFromCloud();}catch(e){sbLog('adminSync RT: '+(e&&e.message?e.message:String(e)),false);}
     try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros ↓ (auto)',true);}catch(e){}
     _doRender(null);
   })();
@@ -4620,14 +4606,13 @@ async function pullAll(){
       const{data,error}=await _sb.from(t).select('*');
       if(error)throw error;DB.data[t]=_sbParse(t,data);sbLog(t+': '+data.length+' filas ↓');
     }
-    // Operacionales (fusionar: no borrar registros hechos en tablet y aún no en la nube)
+    // Operacionales: solo nube (misma política que sbPullRuntimeFromCloud / Traer moldes y pesajes)
     for(const t of['moldes','pesajes','generales']){
-      const localBefore=Array.isArray(RT.data&&RT.data[t])?[...RT.data[t]]:[];
       const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
       if(error)throw error;if(!RT.data)RT.data={};
       const remote=_sbParse(t,data||[]);
-      RT.data[t]=_rtMergeRemoteWithLocal(localBefore,remote);
-      sbLog(t+': '+RT.data[t].length+' filas ↓ (nube '+remote.length+')');
+      RT.data[t]=remote;
+      sbLog(t+': '+remote.length+' filas ↓ (solo nube)',true);
     }
     if(await _adminPullArmadoLineasFromCloud())sbLog('armado_lineas ↓',true);
     try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) desde app_kv ↓',true);}catch(_e){}
