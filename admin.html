@@ -2751,8 +2751,10 @@ function renderTunReport(){
     if(!pend||pend<=0)return;
     const p=(DB.data.presets||[]).find(x=>x.id===r.presetId);if(!p)return;
     const key=r.presetId;
-    if(!pendMap[key])pendMap[key]={preset:p,cant:0,kg:0};
+    if(!pendMap[key])pendMap[key]={preset:p,cant:0,kg:0,especieRow:''};
     pendMap[key].cant+=pend;pendMap[key].kg+=(pend*(p.kgRef||p.kg_ref||0));
+    const rowEsp=String(r.especie||'').trim();
+    if(rowEsp&&!pendMap[key].especieRow)pendMap[key].especieRow=rowEsp;
   });
   const pendArr=Object.values(pendMap).sort((a,b)=>b.cant-a.cant);
   const pendWrap=document.getElementById('tunPendWrap');
@@ -2762,8 +2764,11 @@ function renderTunReport(){
   } else {
     const totU=pendArr.reduce((s,x)=>s+x.cant,0);
     const totKg=pendArr.reduce((s,x)=>s+x.kg,0);
-    pendWrap.innerHTML='<table><thead><tr><th>Producto</th><th>Tipo</th><th>Destino</th><th>Calibre</th><th class="num">Unidades</th><th class="num">Kg aprox.</th></tr></thead><tbody>'+
-      pendArr.map(p=>`<tr><td><strong>${esc(p.preset.nombre)}</strong></td><td>${esc(p.preset.tipo||'—')}</td><td>${esc(p.preset.destino||'—')}</td><td>${esc(p.preset.calibre||'—')}</td><td class="num">${p.cant}</td><td class="num">${p.kg.toFixed(1)}</td></tr>`).join('')+
+    pendWrap.innerHTML='<table><thead><tr><th>Producto</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">Unidades</th><th class="num">Kg aprox.</th></tr></thead><tbody>'+
+      pendArr.map(p=>{
+        const espCell=String(p.preset.especie||'').trim()||p.especieRow||'—';
+        return`<tr><td><strong>${esc(p.preset.nombre)}</strong></td><td>${esc(p.preset.tipo||'—')}</td><td>${esc(p.preset.destino||'—')}</td><td>${esc(espCell)}</td><td>${esc(p.preset.calibre||'—')}</td><td class="num">${p.cant}</td><td class="num">${p.kg.toFixed(1)}</td></tr>`;
+      }).join('')+
       '</tbody></table>';
     document.getElementById('tunPendSub').textContent=totU+' unidades · '+totKg.toFixed(0)+' kg aprox.';
   }
