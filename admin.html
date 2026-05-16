@@ -167,16 +167,26 @@ tbody tr:hover{background:var(--surface-alt);}
 .tbl-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);}
 .num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);}
 
-/* Reporte Túneles y Placas: encabezados de tabla (pendiente = teal; estado equipos = violeta) */
+/* Reporte Túneles y Placas: encabezados de tabla claros (pendiente agua; estado neutro) */
 #page-tuneles #tunPendWrap thead th{
-  background:linear-gradient(90deg,#0f766e 0%,#0d9488 55%,#14b8a6 100%);
-  color:#ecfdf5;
-  border-bottom:1px solid rgba(255,255,255,.14);
+  background:linear-gradient(90deg,#ccfbf1 0%,#e0f7fa 50%,#e0f2fe 100%);
+  color:#134e4a;
+  border-bottom:1px solid #99f6e4;
 }
 #page-tuneles #tunEstadoWrap thead th{
-  background:linear-gradient(90deg,#5b21b6 0%,#6d28d9 50%,#7c3aed 100%);
-  color:#faf5ff;
-  border-bottom:1px solid rgba(255,255,255,.12);
+  background:linear-gradient(90deg,#f8fafc 0%,#f1f5f9 50%,#eef2f7 100%);
+  color:#334155;
+  border-bottom:1px solid var(--border);
+}
+body[data-theme="dark"] #page-tuneles #tunPendWrap thead th{
+  background:linear-gradient(90deg,rgba(45,212,191,.22) 0%,rgba(56,189,248,.14) 100%);
+  color:#ccfbf1;
+  border-bottom-color:rgba(45,212,191,.32);
+}
+body[data-theme="dark"] #page-tuneles #tunEstadoWrap thead th{
+  background:linear-gradient(90deg,rgba(148,163,184,.2) 0%,rgba(100,116,139,.12) 100%);
+  color:#e2e8f0;
+  border-bottom-color:var(--border);
 }
 
 .stat{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);}
