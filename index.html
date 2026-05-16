@@ -4337,6 +4337,10 @@ async function tbManualPullMoldesPesajes(opts){
   const skipPostPush=!!opts.skipPostPush;
   if(!_tbSb){if(!silent&&typeof showToast==='function')showToast('Sin conexión a Supabase','warn');return;}
   if(!_tbUser){if(!silent&&typeof showToast==='function')showToast('Inicia sesión para leer moldes, pesajes y registros generales','warn');return;}
+  if(!tbNavigatorOnline()){
+    if(!silent&&typeof showToast==='function')showToast('Sin conexión: los conteos quedan en la tablet; al volver Internet se subirán y podrás traer datos de otros equipos.','info');
+    return;
+  }
   try{
     const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
     for(const t of['moldes','pesajes','generales']){
@@ -4369,11 +4373,19 @@ async function tbManualPullMoldesPesajes(opts){
 }
 window.idxRefreshMoldesKpis=idxRefreshMoldesKpis;
 window.tbManualPullMoldesPesajes=tbManualPullMoldesPesajes;
+/** True si el navegador reporta conexión (moldes/pesajes: local siempre; push/pull solo con esto). */
+function tbNavigatorOnline(){
+  return typeof navigator==='undefined'||navigator.onLine!==false;
+}
 /** Trae catálogo + operativos desde Supabase (otros equipos). `skipPostPush` en pull manual evita doble push con el periódico. */
 let _tbCloudPullMultiInFlight=false;
 async function tbPullCloudMultiDevice(opts){
   const silent=!!(opts&&opts.silent);
   if(!_tbSb||!_tbUser)return false;
+  if(!tbNavigatorOnline()){
+    if(!silent&&typeof showToast==='function')showToast('Sin conexión: los conteos quedan en la tablet; al volver Internet se subirán a la nube.','info');
+    return false;
+  }
   if(_tbCloudPullMultiInFlight)return false;
   _tbCloudPullMultiInFlight=true;
   try{
@@ -10523,6 +10535,7 @@ const TBSync={
   },
   async pullCatalogs(){
     if(!_tbSb)return;
+    if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return;}
     try{
       const tables=['presets','trabajadores','turnos','equipos','roles'];
       for(const t of tables){
@@ -10571,6 +10584,7 @@ const TBSync={
   _pushTimer:null,
   schedulePush(){
     if(!_tbSb||!_tbUser||this._pushQueued)return;
+    if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return;}
     const eco=tbMsgEconomy();
     const deb=eco?9000:this._pushDebounceMs;
     const gap=eco?14000:this._pushMinGapMs;
@@ -10583,6 +10597,7 @@ const TBSync={
   /** Sube ya moldes/pesajes/armado (cancela el debounce). Tras registrar en planta. */
   pushImmediate(){
     if(!_tbSb||!_tbUser)return Promise.resolve({ok:true,skipped:true});
+    if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return Promise.resolve({ok:true,skipped:true,reason:'offline'});}
     if(this._pushTimer){clearTimeout(this._pushTimer);this._pushTimer=null;}
     this._pushQueued=false;
     return this.pushAll();
@@ -10647,6 +10662,10 @@ const TBSync={
   async pushAll(){
     if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
     if(!_tbUser)return Promise.resolve({ok:true,skipped:true,reason:'no_session'});
+    if(!tbNavigatorOnline()){
+      this.setStatus('⚠ Offline','#dc2626');
+      return Promise.resolve({ok:true,skipped:true,reason:'offline'});
+    }
     this.setStatus('☁ …','#f59e0b');
     try{
       const{moldesRows,pesajesRows,generalesRows}=this._rowsForCloudPush();
@@ -11035,6 +11054,7 @@ setInterval(()=>{
 },180000);
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible'||!_tbSb||!_tbUser)return;
+  if(!tbNavigatorOnline())return;
   try{clearTimeout(window._tbVisPullT);}catch(_){}
   window._tbVisPullT=setTimeout(()=>{void tbPullCloudMultiDevice({silent:true});},2200);
 });
