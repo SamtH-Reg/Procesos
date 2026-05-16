@@ -421,6 +421,21 @@ body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
 .card-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.01em;display:flex;align-items:center;gap:8px;}
 .card-title svg{width:18px;height:18px;color:var(--text-3);}
 .card-sub{font-size:12px;color:var(--text-3);margin-left:auto;}
+/* Panel Túneles/Placas: encabezados de tarjeta con color distinto por tipo de equipo */
+#panelTuneles .card.card-tunel-hdr > .card-hdr{
+  background:linear-gradient(135deg,#0f766e 0%,#0d9488 55%,#14b8a6 100%);
+  border-bottom-color:rgba(255,255,255,.14);
+}
+#panelTuneles .card.card-tunel-hdr > .card-hdr .card-title{color:#f0fdfa;}
+#panelTuneles .card.card-tunel-hdr > .card-hdr .card-title svg{color:rgba(240,253,250,.88);}
+#panelTuneles .card.card-tunel-hdr > .card-hdr .card-sub{color:rgba(240,253,250,.82);}
+#panelTuneles .card.card-placa-hdr > .card-hdr{
+  background:linear-gradient(135deg,#5b21b6 0%,#6d28d9 50%,#7c3aed 100%);
+  border-bottom-color:rgba(255,255,255,.12);
+}
+#panelTuneles .card.card-placa-hdr > .card-hdr .card-title{color:#faf5ff;}
+#panelTuneles .card.card-placa-hdr > .card-hdr .card-title svg{color:rgba(250,245,255,.88);}
+#panelTuneles .card.card-placa-hdr > .card-hdr .card-sub{color:rgba(250,245,255,.82);}
 .card-body{padding:20px;}
 .card-body.tight{padding:14px 16px;}
 /* Consolidado moldes — misma lógica que Pesaje › section-hdr: bloque sobre --app-bg (no card blanca),
@@ -2115,7 +2130,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       </div>
     </div>
 
-    <div class="card">
+    <div class="card card-tunel-hdr">
       <div class="card-hdr">
         <div class="card-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>
@@ -2128,7 +2143,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       </div>
     </div>
 
-    <div class="card">
+    <div class="card card-placa-hdr">
       <div class="card-hdr">
         <div class="card-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>

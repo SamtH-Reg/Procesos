@@ -167,6 +167,18 @@ tbody tr:hover{background:var(--surface-alt);}
 .tbl-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);}
 .num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);}
 
+/* Reporte Túneles y Placas: encabezados de tabla (pendiente = teal; estado equipos = violeta) */
+#page-tuneles #tunPendWrap thead th{
+  background:linear-gradient(90deg,#0f766e 0%,#0d9488 55%,#14b8a6 100%);
+  color:#ecfdf5;
+  border-bottom:1px solid rgba(255,255,255,.14);
+}
+#page-tuneles #tunEstadoWrap thead th{
+  background:linear-gradient(90deg,#5b21b6 0%,#6d28d9 50%,#7c3aed 100%);
+  color:#faf5ff;
+  border-bottom:1px solid rgba(255,255,255,.12);
+}
+
 .stat{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);}
 .stat--kpi{border-left:4px solid var(--stat-accent,#3b6fb8);}
 .stat-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);font-weight:700;}
