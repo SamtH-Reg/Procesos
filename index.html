@@ -423,6 +423,16 @@ body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
 .card-sub{font-size:12px;color:var(--text-3);margin-left:auto;}
 .card-body{padding:20px;}
 .card-body.tight{padding:14px 16px;}
+/* Encabezado extra — Consolidado moldes (tabla por operario) */
+.m-consol-encabezado{
+  padding:14px 20px 10px;
+  font-size:15px;
+  font-weight:800;
+  color:var(--text);
+  letter-spacing:-.02em;
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
 
 /* ═══ TABS (dentro de paneles) ════════════════════════════════ */
 .tabs{
@@ -2034,6 +2044,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
     <div id="mConsol" class="mold-tab hidden">
       <div class="card">
         <div class="card-hdr"><div class="card-title">Consolidado — Kg por operario, especie y producto</div><div class="card-sub" id="mConsolSub">—</div></div>
+        <div class="m-consol-encabezado" role="heading" aria-level="2">Conteo de molde</div>
         <div class="tbl-wrap" id="mConsolWrap"></div>
       </div>
     </div>
