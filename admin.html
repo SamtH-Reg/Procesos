@@ -1459,6 +1459,73 @@ function _dashHoraRecToMin(hora){
   if(!m)return null;
   return Math.min(23*60+59,Math.max(0,parseInt(m[1],10)*60+parseInt(m[2],10)));
 }
+/** Inicio del día civil local a partir de un Date (solo y-m-d). */
+function _adminDayStartFromDate(dt){
+  if(!dt||isNaN(dt.getTime()))return null;
+  return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate());
+}
+/**
+ * Fecha+hora del registro vs filtros del dashboard.
+ * Franja que cruza medianoche (ej. noche 19:00–06:59): no basta con filtrar la hora sola sobre el día civil,
+ * o 15/05 03:00 (madrugada del turno anterior) quedaría incluido por error.
+ */
+function _adminDashRecordMatchesDateTimeFilters(r){
+  const hasFecha=!!(_filters.desde||_filters.hasta);
+  const a=_filters.horaDesdeMin,b=_filters.horaHastaMin;
+  const hasHora=a!=null&&b!=null;
+  if(!hasHora){
+    if(!hasFecha)return true;
+    const d=_recDate(r);if(!d)return true;
+    if(_filters.desde&&d.getTime()<_filters.desde.getTime())return false;
+    if(_filters.hasta&&d.getTime()>_filters.hasta.getTime())return false;
+    return true;
+  }
+  const tms=_recMs(r);
+  if(tms==null){
+    if(!hasFecha)return true;
+    const d=_recDate(r);if(!d)return true;
+    if(_filters.desde&&d.getTime()<_filters.desde.getTime())return false;
+    if(_filters.hasta&&d.getTime()>_filters.hasta.getTime())return false;
+    return true;
+  }
+  const MS_DAY=864e5;
+  if(a<=b){
+    if(!hasFecha){
+      const d=new Date(tms);
+      const hm=d.getHours()*60+d.getMinutes();
+      return hm>=a&&hm<=b;
+    }
+    const d0=_adminDayStartFromDate(_filters.desde)||_adminDayStartFromDate(new Date(tms));
+    const d1=_adminDayStartFromDate(_filters.hasta)||d0;
+    for(let cur=new Date(d0);cur.getTime()<=d1.getTime();cur=new Date(cur.getTime()+MS_DAY)){
+      const st=new Date(cur);st.setHours(Math.floor(a/60),a%60,0,0);
+      const en=new Date(cur);en.setHours(Math.floor(b/60),b%60,59,999);
+      if(tms>=st.getTime()&&tms<=en.getTime())return true;
+    }
+    return false;
+  }
+  if(!hasFecha){
+    const d=new Date(tms);
+    const hm=d.getHours()*60+d.getMinutes();
+    return hm>=a||hm<=b;
+  }
+  const d0=_adminDayStartFromDate(_filters.desde);
+  const d1=_adminDayStartFromDate(_filters.hasta||_filters.desde);
+  if(!d0)return true;
+  const span=Math.max(0,Math.round((d1.getTime()-d0.getTime())/MS_DAY));
+  if(span===0){
+    const st=new Date(d0);st.setHours(Math.floor(a/60),a%60,0,0);
+    const en=new Date(d0.getTime()+MS_DAY);en.setHours(Math.floor(b/60),b%60,59,999);
+    return tms>=st.getTime()&&tms<=en.getTime();
+  }
+  for(let k=0;k<span;k++){
+    const anchor=new Date(d0.getTime()+k*MS_DAY);
+    const st=new Date(anchor);st.setHours(Math.floor(a/60),a%60,0,0);
+    const en=new Date(anchor.getTime()+MS_DAY);en.setHours(Math.floor(b/60),b%60,59,999);
+    if(tms>=st.getTime()&&tms<=en.getTime())return true;
+  }
+  return false;
+}
 function _minutesToHHMM(mins){
   if(mins==null||isNaN(mins))return'';
   const m=Math.max(0,Math.min(23*60+59,mins|0));
@@ -1848,20 +1915,7 @@ function _filterRecs(recs, kind){
       }
       if(!okLn)return false;
     }
-    if(_filters.desde||_filters.hasta){
-      const d=_recDate(r);if(!d)return true;
-      if(_filters.desde&&d.getTime()<_filters.desde.getTime())return false;
-      if(_filters.hasta&&d.getTime()>_filters.hasta.getTime())return false;
-    }
-    if(_filters.horaDesdeMin!=null&&_filters.horaHastaMin!=null){
-      const hm=_dashHoraRecToMin(r&&r.hora);
-      if(hm==null)return true;
-      const a=_filters.horaDesdeMin,b=_filters.horaHastaMin;
-      let ok=false;
-      if(a<=b)ok=hm>=a&&hm<=b;
-      else ok=hm>=a||hm<=b;
-      if(!ok)return false;
-    }
+    if(!_adminDashRecordMatchesDateTimeFilters(r))return false;
     return true;
   });
 }
