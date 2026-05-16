@@ -4349,8 +4349,7 @@ function idxRefreshMoldesKpis(){
   set('idxKpiKgVal',Math.round(kgTot).toLocaleString('es-CL')+' kg');
   set('idxKpiKgSub','Mol '+Math.round(kgM).toLocaleString('es-CL')+' + Pes '+Math.round(kgP).toLocaleString('es-CL'));
   set('idxKpiPesVal',String(pesN));
-  const mixK=_pesajeEspecieTipoWidgetLabel(p);
-  set('idxKpiPesSub',(avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.')+(mixK?' · '+mixK:''));
+  set('idxKpiPesSub',avgPes?avgPes.toFixed(1).replace('.',',')+' kg prom.':'0 kg prom.');
   set('idxKpiOpVal',String(op));
   set('idxKpiOpSub','Con registros');
 }
