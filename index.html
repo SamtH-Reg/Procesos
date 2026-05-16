@@ -366,7 +366,6 @@ body.idx-rol-lock .tabbar .tabbar-divider{display:none!important;}
   gap:14px;
   margin-bottom:20px;
 }
-#panelMoldes .moldes-dash-kpis > .stats-grid{grid-template-columns:repeat(4,1fr);}
 .stat-card{
   background:var(--surface);
   border:1px solid var(--border);
@@ -1829,43 +1828,6 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 
   <!-- ═══ PANEL: MOLDES ═══════════════════════════════════════ -->
   <div class="panel active" id="panelMoldes" data-screen-label="01 Moldes">
-
-    <div class="moldes-dash-kpis">
-      <div class="stats-grid" id="idxMoldesKpiWrap" aria-label="Resumen moldes y pesaje">
-        <div class="stat-card blue">
-          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Moldes</div>
-            <div class="stat-value" id="idxKpiMolVal">0</div>
-            <div class="stat-trend" id="idxKpiMolSub">0 registros</div>
-          </div>
-        </div>
-        <div class="stat-card green">
-          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Kg totales</div>
-            <div class="stat-value" id="idxKpiKgVal">0<small>kg</small></div>
-            <div class="stat-trend" id="idxKpiKgSub">Mol 0 + Pes 0</div>
-          </div>
-        </div>
-        <div class="stat-card navy">
-          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Pesajes</div>
-            <div class="stat-value" id="idxKpiPesVal">0</div>
-            <div class="stat-trend" id="idxKpiPesSub">0 kg prom.</div>
-          </div>
-        </div>
-        <div class="stat-card amber">
-          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Operarios activos</div>
-            <div class="stat-value" id="idxKpiOpVal">0</div>
-            <div class="stat-trend" id="idxKpiOpSub">Con registros</div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <div class="tabs">
       <button class="tab" onclick="setMoldTab(this,'mArmado')">
