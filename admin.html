@@ -3935,6 +3935,7 @@ async function sbManualPullTabletRegs(){
   if(!_sb){toast('Conecta Supabase primero','warn');return;}
   if(!_currentUser||!isSbAdmin()){toast('Solo sesión admin puede traer datos operativos','warn');return;}
   try{
+    await sbPullDbCatalogOnly();
     await sbPullRuntimeFromCloud();
     await sbPullDashboardCloud({silent:true});
     dashRefreshKgSummary({silent:false});
@@ -4090,6 +4091,12 @@ async function applySession(session){
   updateUserBadge();
   sbLog('Sesión admin: '+_currentUser.email+' ('+_currentUser.rol+')');
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
+  /* Catálogo desde la nube antes que moldes/pesajes (paridad index: pullCatalogs antes del merge RT). */
+  try{
+    await sbPullDbCatalogOnly();
+  }catch(e){
+    sbLog('Catálogo inicial desde nube: '+(e&&e.message?e.message:String(e)),false);
+  }
   setTimeout(async()=>{
     await sbPullRuntimeFromCloud();
     await sbPullDashboardCloud({silent:true});
@@ -4589,7 +4596,7 @@ async function pushAll(){
   document.getElementById('sbDot').className='status-dot online';
   toast('Push: '+ok+' OK, '+err+' err',err?'warn':'success');
 }
-/** Solo catálogo DB por HTTP (sin moldes/pesajes) — refresco cuando Realtime catálogo está apagado. */
+/** Solo catálogo DB por HTTP (sin moldes/pesajes) — mismo orden que index `TBSync.pullCatalogs`: la nube define presets/turnos/equipos/roles antes de confiar en localStorage. */
 async function sbPullDbCatalogOnly(){
   if(!_sb||!_currentUser||!isSbAdmin())return;
   try{
