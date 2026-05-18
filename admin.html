@@ -306,6 +306,16 @@ tbody tr:hover{background:var(--surface-alt);}
 .tabs-inline{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto;}
 .tabs-inline button{background:transparent;border:none;padding:10px 18px;font-weight:600;font-size:13px;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
 .tabs-inline button.active{color:var(--brand);border-bottom-color:var(--brand);}
+.resumen-pivot-filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px 14px;padding:14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;}
+.resumen-pivot-filters .rp-filt label.form-label{display:block;margin:0 0 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);}
+.resumen-pivot-filters .slicer-multi{min-height:36px;max-height:108px;overflow-y:auto;}
+.resumen-pivot-head th{background:#4a7cc9;color:#fff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;padding:10px 12px;border:none;white-space:nowrap;}
+.resumen-pivot-head th.num{text-align:right;}
+.resumen-pivot-tbl tbody td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;}
+.resumen-pivot-tbl tbody tr:hover td{background:var(--surface-alt);}
+.resumen-pivot-tbl tfoot td{background:#1e3a5f;color:#fff;font-weight:700;padding:10px 12px;}
+.resumen-pivot-tbl .num{text-align:right;font-variant-numeric:tabular-nums;}
+.resumen-pivot-meta{font-size:12px;color:var(--text-3);margin-bottom:10px;}
 
 pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius);overflow-x:auto;font:500 12px var(--mono);line-height:1.5;max-height:480px;}
 .kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
@@ -385,6 +395,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="nav-item" data-page="reportes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Reportes</div>
   <div class="nav-item" data-page="tuneles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>Túneles y Placas</div>
   <div class="nav-item" data-page="analisis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Análisis</div>
+  <div class="nav-item" data-page="resumen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 3v18"/></svg>Resumen molde / pesaje</div>
 
   <div class="nav-sec">Catálogos</div>
   <div class="nav-item" data-page="presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Productos / Presets</div>
@@ -600,6 +611,28 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div id="anPivotOp" class="anal-tab hidden"><div class="tbl-wrap"><table id="anTblOp"></table></div></div>
   <div id="anPivotEsp" class="anal-tab hidden"><div class="tbl-wrap"><table id="anTblEsp"></table></div></div>
   <div id="anHist" class="anal-tab hidden"><div class="tbl-wrap"><table id="anTblHist"></table></div></div>
+</div>
+
+<!-- ═══ RESUMEN MOLDE / PESAJE (tabla dinámica) ═══ -->
+<div class="page" id="page-resumen">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Consolidado por turno, especie, guía, operario, calibre y destino — filtros tipo tabla dinámica</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn ghost sm" onclick="renderResumen()">↻ Actualizar</button>
+      <button type="button" class="btn ghost sm" onclick="exportResumenExcel()">Exportar Excel</button>
+      <button type="button" class="btn ghost sm" onclick="clearResumenPivotFilters()">Limpiar filtros pivot</button>
+    </div>
+  </div>
+  <div class="resumen-pivot-meta" id="resumenDashHint">Usa los filtros del <strong>Dashboard</strong> (fecha, turno, especie, línea) y los filtros por columna abajo. Datos desde Supabase.</div>
+  <div class="tabs-inline" id="resumenTabs">
+    <button type="button" class="active" data-resumen-mod="mol" onclick="setResumenMod(this,'mol')">Recolección moldes</button>
+    <button type="button" data-resumen-mod="pes" onclick="setResumenMod(this,'pes')">Pesaje</button>
+  </div>
+  <div id="resumenPivotFilters" class="resumen-pivot-filters"></div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-title" id="resumenTblTitle">Moldes</div><div class="card-sub" id="resumenTblSub">—</div></div>
+    <div class="tbl-wrap"><table class="resumen-pivot-tbl" id="resumenPivotTbl"><thead class="resumen-pivot-head"></thead><tbody></tbody><tfoot></tfoot></table></div>
+  </div>
 </div>
 
 <!-- ═══ PRESETS ═══ -->
@@ -1182,6 +1215,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='tuneles')renderTunReport();
     if(id==='import')populateIEFilters();
     if(id==='analisis')renderAnalisis();
+    if(id==='resumen')renderResumen();
     if(id==='presets')renderPresets();
     if(id==='trabajadores')renderTrabs();
     if(id==='planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
@@ -2320,6 +2354,7 @@ function applyFilters(){
   }
   renderKPIs();renderDashGrid();
   try{if(document.getElementById('dashLastKgSync'))dashRefreshKgSummary({silent:true});}catch(e){}
+  try{if(document.getElementById('page-resumen')&&document.getElementById('page-resumen').classList.contains('active'))renderResumen();}catch(e2){}
 }
 function clearFilters(){
   _dashSlicersUserCleared=true;
@@ -3009,6 +3044,212 @@ function exportReport(fmt){
   } else {window.print();}
 }
 
+/* ════════════ RESUMEN MOLDE / PESAJE (tabla dinámica) ════════════ */
+const _RESUMEN_PIVOT_DIMS_MOL=[
+  {key:'turno',label:'Turno'},
+  {key:'especie',label:'Especie'},
+  {key:'guia',label:'Guía'},
+  {key:'nombre',label:'Nombre'},
+  {key:'calibre',label:'Calibre'},
+  {key:'destino',label:'Destino'},
+  {key:'linea',label:'Línea'},
+  {key:'producto',label:'Producto'}
+];
+const _RESUMEN_PIVOT_DIMS_PES=[
+  {key:'turno',label:'Turno'},
+  {key:'especie',label:'Especie'},
+  {key:'guia',label:'Guía'},
+  {key:'nombre',label:'Nombre'},
+  {key:'calibre',label:'Calibre'},
+  {key:'destino',label:'Destino'},
+  {key:'linea',label:'Línea'},
+  {key:'tipo',label:'Tipo pesaje'}
+];
+let _resumenMod='mol';
+const _resumenPivotFilt={mol:{},pes:{}};
+function _resumenPivotStore(mod){return _resumenPivotFilt[mod==='pes'?'pes':'mol'];}
+function _resumenPivotEnsure(mod){
+  const st=_resumenPivotStore(mod);
+  const dims=mod==='pes'?_RESUMEN_PIVOT_DIMS_PES:_RESUMEN_PIVOT_DIMS_MOL;
+  dims.forEach(d=>{if(!st[d.key])st[d.key]=new Set();});
+  return st;
+}
+function _adminPresetForRec(r){
+  const pres=(DB.data&&DB.data.presets)||[];
+  if(r&&r.presetId!=null){const p=pres.find(x=>x.id===r.presetId);if(p)return p;}
+  const prod=String((r&&r.producto)||'').trim();
+  if(prod){const p=pres.find(x=>String(x.nombre||'').trim()===prod);if(p)return p;}
+  const tipo=String((r&&r.tipo)||'').trim();
+  if(tipo){const p=pres.find(x=>String(x.nombre||'').trim()===tipo);if(p)return p;}
+  return null;
+}
+function _adminResumenTurnoLabel(r,kind){
+  let cod=String((r&&r.turno)||'').trim();
+  if(!cod){
+    if(kind==='pesaje')cod=_adminTurnoArmadoPesajeForLinea(r.linea,r&&r.fecha)||'';
+    else cod=_adminTurnoArmadoMoldesForLinea(r.linea,r&&r.fecha)||'';
+  }
+  cod=_adminCycleTurnoNorm(cod||'dia');
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo)===cod);
+  return t?(t.nombre||t.codigo):(cod==='noche'?'Noche':cod==='dia'?'Día':cod||'—');
+}
+function _adminResumenRowFromMolde(r){
+  const pr=_adminPresetForRec(r);
+  return{
+    turno:_adminResumenTurnoLabel(r,'molde'),
+    especie:_adminEspecieForRec(r)||'—',
+    guia:String(r.guia||'').trim()||'—',
+    nombre:String(r.nombre||'').trim()||'—',
+    calibre:String(r.calibre||'').trim()||(pr&&pr.calibre)||'—',
+    destino:String(r.destino||'').trim()||(pr&&pr.destino)||'—',
+    linea:String(r.linea||'').trim().toUpperCase()||'—',
+    producto:String(r.producto||'').trim()||'—',
+    cant:+r.cant||0,
+    kg:+r.kg||0
+  };
+}
+function _adminResumenRowFromPesaje(r){
+  const pr=_adminPresetForRec(r);
+  return{
+    turno:_adminResumenTurnoLabel(r,'pesaje'),
+    especie:_adminEspecieForRec(r)||'—',
+    guia:String(r.guia||'').trim()||'—',
+    nombre:String(r.nombre||'').trim()||'—',
+    calibre:String(r.tipo||'').trim()||(pr&&pr.calibre)||'—',
+    destino:(pr&&pr.destino)||'—',
+    linea:String(r.linea||'').trim().toUpperCase()||'—',
+    tipo:String(r.tipo||'').trim()||'—',
+    cant:1,
+    kg:+r.kg||0
+  };
+}
+function _resumenBaseRecs(mod){
+  if(!RT.data)return[];
+  if(mod==='pes')return _filterRecs(RT.data.pesajes||[],'pesaje');
+  return _filterRecs((RT.data.moldes||[]).filter(r=>!r.esGeneral),'molde');
+}
+function _resumenNormRows(mod){
+  const base=_resumenBaseRecs(mod);
+  return base.map(r=>mod==='pes'?_adminResumenRowFromPesaje(r):_adminResumenRowFromMolde(r));
+}
+function _resumenRowPassesPivot(row,st,dims){
+  for(const d of dims){
+    const set=st[d.key];
+    if(!set||!set.size)continue;
+    const v=String(row[d.key]||'—');
+    if(!set.has(v))return false;
+  }
+  return true;
+}
+function _resumenTogglePivot(mod,dim,val,el){
+  const st=_resumenPivotEnsure(mod);
+  const set=st[dim];
+  if(!set)return;
+  if(set.has(val))set.delete(val);else set.add(val);
+  if(el&&el.classList)el.classList.toggle('on',set.has(val));
+  renderResumen();
+}
+function _resumenSelectAllPivot(mod,dim,on){
+  const st=_resumenPivotEnsure(mod);
+  const rows=_resumenNormRows(mod);
+  const vals=[...new Set(rows.map(r=>String(r[dim]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  st[dim]=on?new Set(vals):new Set();
+  renderResumen();
+}
+function clearResumenPivotFilters(){
+  _resumenPivotFilt.mol={};
+  _resumenPivotFilt.pes={};
+  _resumenPivotEnsure('mol');
+  _resumenPivotEnsure('pes');
+  renderResumen();
+  toast('Filtros de tabla dinámica limpiados','info');
+}
+function setResumenMod(btn,mod){
+  _resumenMod=mod==='pes'?'pes':'mol';
+  document.querySelectorAll('#resumenTabs button').forEach(b=>{
+    b.classList.toggle('active',b===btn||b.getAttribute('data-resumen-mod')===_resumenMod);
+  });
+  renderResumen();
+}
+function _renderResumenPivotFilters(mod){
+  const host=document.getElementById('resumenPivotFilters');
+  if(!host)return;
+  const st=_resumenPivotEnsure(mod);
+  const dims=mod==='pes'?_RESUMEN_PIVOT_DIMS_PES:_RESUMEN_PIVOT_DIMS_MOL;
+  const rows=_resumenNormRows(mod);
+  host.innerHTML=dims.map(d=>{
+    const vals=[...new Set(rows.map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+    const chips=vals.map(v=>{
+      const on=st[d.key]&&st[d.key].has(v);
+      return `<div class="slicer-chip ${on?'on':''}" onclick="_resumenTogglePivot(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this)">${esc(v)}</div>`;
+    }).join('');
+    return `<div class="rp-filt"><label class="form-label">${esc(d.label)}</label>
+      <div style="display:flex;gap:4px;margin-bottom:4px;">
+        <button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:10px;" onclick="_resumenSelectAllPivot('${mod}','${d.key}',true)">Todos</button>
+        <button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:10px;" onclick="_resumenSelectAllPivot('${mod}','${d.key}',false)">Ninguno</button>
+      </div>
+      <div class="slicer-multi">${chips||'<span style="font-size:11px;color:var(--text-3);">Sin valores</span>'}</div></div>`;
+  }).join('');
+}
+function renderResumen(){
+  const mod=_resumenMod;
+  const dims=mod==='pes'?_RESUMEN_PIVOT_DIMS_PES:_RESUMEN_PIVOT_DIMS_MOL;
+  const st=_resumenPivotEnsure(mod);
+  _renderResumenPivotFilters(mod);
+  const rows=_resumenNormRows(mod).filter(r=>_resumenRowPassesPivot(r,st,dims));
+  const map={};
+  rows.forEach(r=>{
+    const key=dims.map(d=>String(r[d.key]||'—')).join('\u0001');
+    if(!map[key])map[key]={...r,tot:0,kg:0};
+    map[key].tot+=+r.cant||0;
+    map[key].kg+=+r.kg||0;
+  });
+  const agg=Object.values(map).sort((a,b)=>{
+    for(const d of dims){
+      const c=String(a[d.key]||'').localeCompare(String(b[d.key]||''),'es',{sensitivity:'base'});
+      if(c)return c;
+    }
+    return 0;
+  });
+  let totN=0,totKg=0;
+  agg.forEach(x=>{totN+=x.tot;totKg+=x.kg;});
+  const tbl=document.getElementById('resumenPivotTbl');
+  const title=document.getElementById('resumenTblTitle');
+  const sub=document.getElementById('resumenTblSub');
+  if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
+  const fd=document.getElementById('slFechaDesde'),fh=document.getElementById('slFechaHasta'),tur=document.getElementById('slTurno');
+  const rango=fd&&fd.value?(fd.value+(fh&&fh.value&&fh.value!==fd.value?' → '+fh.value:'')):'sin filtro fecha';
+  const turnoDash=tur&&tur.value?tur.options[tur.selectedIndex].text:'Todos los turnos';
+  if(sub)sub.textContent=agg.length+' filas · '+rows.length+' registros · '+rango+' · '+turnoDash;
+  if(!tbl)return;
+  const hdrCols=dims.map(d=>`<th>${esc(d.label.toUpperCase())}</th>`).join('')+
+    '<th class="num">TOTAL</th><th class="num">TOTAL KILOS</th>';
+  const body=agg.length?agg.map(r=>'<tr>'+
+    dims.map(d=>`<td>${esc(r[d.key])}</td>`).join('')+
+    `<td class="num">${(r.tot).toLocaleString('es-CL',{maximumFractionDigits:0})}</td>`+
+    `<td class="num">${(r.kg).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>`+
+    '</tr>').join(''):`<tr><td colspan="${dims.length+2}" style="text-align:center;padding:28px;color:var(--text-3);">Sin datos con los filtros actuales</td></tr>`;
+  const foot=`<tr><td colspan="${dims.length}">Total general</td><td class="num">${totN.toLocaleString('es-CL',{maximumFractionDigits:0})}</td><td class="num">${totKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td></tr>`;
+  tbl.querySelector('thead').innerHTML='<tr>'+hdrCols+'</tr>';
+  tbl.querySelector('tbody').innerHTML=body;
+  tbl.querySelector('tfoot').innerHTML=foot;
+}
+function exportResumenExcel(){
+  const tbl=document.getElementById('resumenPivotTbl');
+  if(!tbl||typeof XLSX==='undefined'){toast('Tabla o librería Excel no disponible','warn');return;}
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.table_to_sheet(tbl);
+  XLSX.utils.book_append_sheet(wb,ws,_resumenMod==='pes'?'Pesaje':'Moldes');
+  XLSX.writeFile(wb,'resumen_'+(_resumenMod==='pes'?'pesaje':'moldes')+'_'+Date.now()+'.xlsx');
+  toast('Excel generado','success');
+}
+window.renderResumen=renderResumen;
+window.setResumenMod=setResumenMod;
+window.clearResumenPivotFilters=clearResumenPivotFilters;
+window.exportResumenExcel=exportResumenExcel;
+window._resumenTogglePivot=_resumenTogglePivot;
+window._resumenSelectAllPivot=_resumenSelectAllPivot;
+
 /* ════════════ ANÁLISIS (pivots) ════════════ */
 function setAnalTab(btn,id){
   document.querySelectorAll('.tabs-inline button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
@@ -3514,8 +3755,8 @@ async function delEq(cod){
 }
 
 /* ════════════ ROLES ════════════ */
-const CONSOLE_MODULES=['dashboard','reportes','analisis','presets','trabajadores','planilleros','turnos','equipos','roles','import','supabase','ajustes'];
-const CONSOLE_MODULE_LABELS={dashboard:'Dashboard',reportes:'Reportes',analisis:'Análisis',presets:'Productos / Presets',trabajadores:'Trabajadores',planilleros:'Planilleros',turnos:'Turnos y horarios',equipos:'Equipos',roles:'Permisos y roles',import:'Importar / Exportar',supabase:'Supabase',ajustes:'Ajustes generales'};
+const CONSOLE_MODULES=['dashboard','reportes','analisis','resumen','presets','trabajadores','planilleros','turnos','equipos','roles','import','supabase','ajustes'];
+const CONSOLE_MODULE_LABELS={dashboard:'Dashboard',reportes:'Reportes',analisis:'Análisis',resumen:'Resumen molde / pesaje',presets:'Productos / Presets',trabajadores:'Trabajadores',planilleros:'Planilleros',turnos:'Turnos y horarios',equipos:'Equipos',roles:'Permisos y roles',import:'Importar / Exportar',supabase:'Supabase',ajustes:'Ajustes generales'};
 const TABLET_TAB_KEYS=['moldes','tuneles','pesaje','general','eliminar'];
 const TABLET_TAB_LABELS={moldes:'Moldes (barra)',tuneles:'Túneles (barra)',pesaje:'Pesaje (barra)',general:'General (barra)',eliminar:'Eliminar en tablet'};
 function _rolTabletResumen(r){
@@ -4578,6 +4819,7 @@ function _doRender(dirty){
     if(typeof renderDashGrid==='function')renderDashGrid();
     if(id==='page-reportes'&&dataChanged&&typeof renderReportes==='function')renderReportes();
     if(id==='page-analisis'&&dataChanged&&typeof renderAnalisis==='function')renderAnalisis();
+    if(id==='page-resumen'&&dataChanged&&typeof renderResumen==='function')renderResumen();
     if(id==='page-presets'&&(!dirty||dirty.has('presets'))&&typeof renderPresets==='function')renderPresets();
     if(id==='page-trabajadores'&&(!dirty||dirty.has('trabajadores'))&&typeof renderTrabs==='function')renderTrabs();
     if(id==='page-planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
