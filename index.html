@@ -10564,6 +10564,10 @@ const TBSync={
           DB.data.presets=mergePresetsWithLocalSnapshot(rows);
           continue;
         }
+        if(t==='equipos'||t==='turnos'){
+          DB.data[t]=Array.isArray(rows)?rows:[];
+          continue;
+        }
         if(rows.length){
           if(t==='roles'){
             const mapped=rows.map(_tbMapRoleFromSb).filter(Boolean);
@@ -10808,7 +10812,15 @@ const TBSync={
         .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
         .on('postgres_changes',{event:'*',schema:'public',table:'roles'},bumpRemoteCatalog)
         .subscribe();
-    }else if(!this._catalogVisHook){
+    }else{
+      /* Presets/equipos/turnos: pull al cambiar en Admin (sin activar RT de todo el catálogo). */
+      _tbSb.channel('tb-catalog-lite')
+        .on('postgres_changes',{event:'*',schema:'public',table:'presets'},bumpRemoteCatalog)
+        .on('postgres_changes',{event:'*',schema:'public',table:'equipos'},bumpRemoteCatalog)
+        .on('postgres_changes',{event:'*',schema:'public',table:'turnos'},bumpRemoteCatalog)
+        .subscribe();
+    }
+    if(!tbRtCatalogRealtime()&&!this._catalogVisHook){
       this._catalogVisHook=true;
       document.addEventListener('visibilitychange',()=>{
         if(document.visibilityState!=='visible'||tbRtCatalogRealtime())return;

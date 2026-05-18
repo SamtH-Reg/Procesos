@@ -3375,15 +3375,36 @@ function openTurnoModal(cod){
       <div class="form-field"><label class="form-label">Inicio</label><input class="input" id="f_inicio" type="time" value="${esc(t.inicio||'')}"></div>
       <div class="form-field"><label class="form-label">Fin <span class="hint" id="f_finHint"></span></label><input class="input" id="f_fin" type="time" value="${esc(t.fin||'')}"></div>
     </div>
-    <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${t.activo?'selected':''}>Activo</option><option value="0" ${!t.activo?'selected':''}>Inactivo</option></select></div>`,()=>{
+    <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${t.activo?'selected':''}>Activo</option><option value="0" ${!t.activo?'selected':''}>Inactivo</option></select></div>`,async ()=>{
     const n={codigo:document.getElementById('f_codigo').value.trim().toLowerCase(),nombre:document.getElementById('f_nombre').value.trim(),inicio:document.getElementById('f_inicio').value,fin:document.getElementById('f_fin').value,activo:document.getElementById('f_activo').value==='1'};
     if(!n.codigo||!n.nombre){toast('Campos obligatorios','err');return false;}
+    if(!_sb){
+      toast('Sin Supabase: guardando solo en este equipo.','warn');
+    }else{
+      const{error}=await adminUpsertCatalogCloud('turnos',[n],'codigo');
+      if(error){
+        toast('Supabase no guardó el turno: '+error.message,'err');
+        return false;
+      }
+      sbLog('Turno '+n.codigo+' guardado en Supabase',true);
+    }
     const i=DB.data.turnos.findIndex(x=>x.codigo===n.codigo);
     if(i>=0)DB.data.turnos[i]=n;else DB.data.turnos.push(n);
-    DB.save();renderTurnos();toast('Turno guardado','success');return true;
+    DB.save();renderTurnos();
+    toast(_sb?'Turno guardado en Supabase (la tablet lo verá al sincronizar)':'Turno guardado (solo local)','success');
+    return true;
   });
 }
-function delTurno(cod){if(!confirm('¿Eliminar turno?'))return;DB.data.turnos=DB.data.turnos.filter(t=>t.codigo!==cod);DB.save();renderTurnos();}
+async function delTurno(cod){
+  if(!confirm('¿Eliminar turno?'))return;
+  if(_sb){
+    const{error}=await adminDeleteCatalogCloud('turnos','codigo',cod);
+    if(error){toast('Supabase no permitió borrar: '+error.message,'err');return;}
+  }else if(!confirm('Sin Supabase: el borrado será solo local. ¿Continuar?'))return;
+  DB.data.turnos=DB.data.turnos.filter(t=>t.codigo!==cod);
+  DB.save();renderTurnos();
+  toast(_sb?'Turno eliminado (Supabase y local)':'Turno eliminado (solo local)','success');
+}
 function _applyTurnoPreset(v){
   if(v==='dia'){document.getElementById('f_codigo').value='dia';document.getElementById('f_nombre').value='Día';document.getElementById('f_inicio').value='08:00';document.getElementById('f_fin').value='20:00';}
   else if(v==='noche'){document.getElementById('f_codigo').value='noche';document.getElementById('f_nombre').value='Noche';document.getElementById('f_inicio').value='20:00';document.getElementById('f_fin').value='06:00';}
@@ -3425,15 +3446,38 @@ function openEqModal(cod){
       <div class="form-field"><label class="form-label">Tipo</label><select class="select" id="f_tipo"><option value="tunel" ${e.tipo==='tunel'?'selected':''}>Túnel</option><option value="placa" ${e.tipo==='placa'?'selected':''}>Placa</option></select></div>
       <div class="form-field"><label class="form-label">Capacidad</label><input class="input" id="f_capacidad" type="number" value="${e.capacidad||0}"></div>
       <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${e.activo?'selected':''}>Activo</option><option value="0" ${!e.activo?'selected':''}>Inactivo</option></select></div>
-    </div>`,()=>{
+    </div>`,async ()=>{
     const n={codigo:document.getElementById('f_codigo').value.trim().toUpperCase(),nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,capacidad:parseInt(document.getElementById('f_capacidad').value)||0,activo:document.getElementById('f_activo').value==='1'};
     if(!n.codigo||!n.nombre){toast('Campos obligatorios','err');return false;}
+    if(!_sb){
+      toast('Sin Supabase: guardando solo en este equipo.','warn');
+      sbLog('Equipo sin nube (_sb null)',false);
+    }else{
+      const{error}=await adminUpsertCatalogCloud('equipos',[n],'codigo');
+      if(error){
+        toast('Supabase no guardó el equipo: '+error.message,'err');
+        sbLog('Upsert equipos: '+error.message,false);
+        return false;
+      }
+      sbLog('Equipo '+n.codigo+' guardado en Supabase',true);
+    }
     const i=DB.data.equipos.findIndex(x=>x.codigo===n.codigo);
     if(i>=0)DB.data.equipos[i]=n;else DB.data.equipos.push(n);
-    DB.save();renderEquipos();toast('Equipo guardado','success');return true;
+    DB.save();renderEquipos();
+    toast(_sb?'Equipo guardado en Supabase (la tablet lo verá al sincronizar)':'Equipo guardado (solo local)','success');
+    return true;
   });
 }
-function delEq(cod){if(!confirm('¿Eliminar equipo?'))return;DB.data.equipos=DB.data.equipos.filter(e=>e.codigo!==cod);DB.save();renderEquipos();}
+async function delEq(cod){
+  if(!confirm('¿Eliminar equipo?'))return;
+  if(_sb){
+    const{error}=await adminDeleteCatalogCloud('equipos','codigo',cod);
+    if(error){toast('Supabase no permitió borrar: '+error.message,'err');return;}
+  }else if(!confirm('Sin Supabase: el borrado será solo local. ¿Continuar?'))return;
+  DB.data.equipos=DB.data.equipos.filter(e=>e.codigo!==cod);
+  DB.save();renderEquipos();
+  toast(_sb?'Equipo eliminado (Supabase y local)':'Equipo eliminado (solo local)','success');
+}
 
 /* ════════════ ROLES ════════════ */
 const CONSOLE_MODULES=['dashboard','reportes','analisis','presets','trabajadores','planilleros','turnos','equipos','roles','import','supabase','ajustes'];
@@ -4616,6 +4660,24 @@ async function sbUpsertPresets(rows){
 async function sbDeletePresetRemote(id){
   if(!_sb||id==null)return{error:null};
   const{error}=await _sb.from('presets').delete().eq('id',id);
+  return{error};
+}
+
+/** Upsert de una fila de catálogo (presets / equipos / turnos) — paridad tablet `pullCatalogs`. */
+async function adminUpsertCatalogCloud(table,rows,pk){
+  if(!_sb)return{error:new Error('Sin Supabase')};
+  if(!_currentUser||!isSbAdmin())return{error:new Error('Solo sesión admin')};
+  const mapped=(_sbRows(table,rows||[])).map(r=>{
+    const o=_sbSanitizeRow(r);
+    if(table==='presets'&&Object.prototype.hasOwnProperty.call(o,'id')&&o.id!=null)o.id=_presetNumericId(o.id);
+    return o;
+  });
+  const{error}=await _sb.from(table).upsert(mapped,{onConflict:pk});
+  return{error};
+}
+async function adminDeleteCatalogCloud(table,pkCol,pkVal){
+  if(!_sb||pkVal==null||pkVal==='')return{error:null};
+  const{error}=await _sb.from(table).delete().eq(pkCol,pkVal);
   return{error};
 }
 
