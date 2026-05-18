@@ -621,7 +621,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <!-- ═══ RESUMEN MOLDE / PESAJE (tabla dinámica) ═══ -->
 <div class="page" id="page-resumen">
   <div class="page-hdr">
-    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, especie, guía, nombre, calibre, destino, totales. Filtros extra: línea y producto/tipo.</div></div>
+    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, especie, guía, calibre, destino, totales. Filtros extra: línea y producto/tipo (sin nombres de operarios).</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="btn ghost sm" onclick="renderResumen()">↻ Actualizar</button>
       <button type="button" class="btn ghost sm" onclick="exportResumenExcel()">Exportar Excel</button>
@@ -3064,7 +3064,6 @@ const _RESUMEN_TBL_COLS=[
   {key:'turno',label:'Turno',th:'TURNO'},
   {key:'especie',label:'Especie',th:'ESPECIE'},
   {key:'guia',label:'Guía',th:'Guía'},
-  {key:'nombre',label:'Nombre',th:'nombre'},
   {key:'calibre',label:'Calibre',th:'Calibre'},
   {key:'destino',label:'Destino',th:'Destino'}
 ];
@@ -3191,7 +3190,6 @@ function _adminResumenRowFromMolde(r){
     turno:_adminResumenTurnoLabel(r,'molde'),
     especie:_adminEspecieForRec(r)||'—',
     guia:String(r.guia||'').trim()||'—',
-    nombre:String(r.nombre||'').trim()||'—',
     calibre:String(r.calibre||'').trim()||(pr&&pr.calibre)||'—',
     destino:String(r.destino||'').trim()||(pr&&pr.destino)||'—',
     linea:String(r.linea||'').trim().toUpperCase()||'—',
@@ -3206,7 +3204,6 @@ function _adminResumenRowFromPesaje(r){
     turno:_adminResumenTurnoLabel(r,'pesaje'),
     especie:_adminEspecieForRec(r)||'—',
     guia:String(r.guia||'').trim()||'—',
-    nombre:String(r.nombre||'').trim()||'—',
     calibre:String(r.tipo||'').trim()||(pr&&pr.calibre)||'—',
     destino:(pr&&pr.destino)||'—',
     linea:String(r.linea||'').trim().toUpperCase()||'—',
