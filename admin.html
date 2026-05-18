@@ -316,6 +316,11 @@ tbody tr:hover{background:var(--surface-alt);}
 .resumen-pivot-tbl tfoot td{background:#1e3a5f;color:#fff;font-weight:700;padding:10px 12px;}
 .resumen-pivot-tbl .num{text-align:right;font-variant-numeric:tabular-nums;}
 .resumen-pivot-meta{font-size:12px;color:var(--text-3);margin-bottom:10px;}
+.resumen-scope-bar{margin-bottom:12px;}
+.resumen-pivot-filters .rp-checklist{max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--surface);}
+.resumen-pivot-filters .rp-checklist label{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 2px;cursor:pointer;}
+.resumen-pivot-filters .rp-checklist label:hover{background:var(--surface-alt);}
+.resumen-pivot-filters .rp-search{width:100%;margin-bottom:6px;font-size:12px;padding:6px 8px;}
 
 pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius);overflow-x:auto;font:500 12px var(--mono);line-height:1.5;max-height:480px;}
 .kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
@@ -623,7 +628,16 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <button type="button" class="btn ghost sm" onclick="clearResumenPivotFilters()">Limpiar filtros pivot</button>
     </div>
   </div>
-  <div class="resumen-pivot-meta" id="resumenDashHint">Usa los filtros del <strong>Dashboard</strong> (fecha, turno, especie, línea) y los filtros por columna abajo. Datos desde Supabase.</div>
+  <div class="slicer-bar resumen-scope-bar" id="resumenScopeBar">
+    <div class="slicer"><label class="form-label">Fecha desde</label><input type="date" class="input" id="resumenFechaDesde" onchange="onResumenScopeChange()"></div>
+    <div class="slicer"><label class="form-label">Fecha hasta</label><input type="date" class="input" id="resumenFechaHasta" onchange="onResumenScopeChange()"></div>
+    <div class="slicer"><label class="form-label">Turno</label><select class="select" id="resumenTurno" onchange="onResumenScopeChange()"><option value="">Todos</option></select></div>
+    <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn sm" onclick="resumenApplyScope()">Aplicar</button></div>
+    <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSetFechaHoy()">Hoy</button></div>
+    <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSyncScopeFromDashboard()">↻ Desde dashboard</button></div>
+    <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="typeof sbManualPullTabletRegs==='function'&&sbManualPullTabletRegs()">☁ Traer datos</button></div>
+  </div>
+  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros por columna (tabla dinámica): sin marcar = todos. Kilos según fechas y turno de arriba.</div>
   <div class="tabs-inline" id="resumenTabs">
     <button type="button" class="active" data-resumen-mod="mol" onclick="setResumenMod(this,'mol')">Recolección moldes</button>
     <button type="button" data-resumen-mod="pes" onclick="setResumenMod(this,'pes')">Pesaje</button>
@@ -1215,7 +1229,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='tuneles')renderTunReport();
     if(id==='import')populateIEFilters();
     if(id==='analisis')renderAnalisis();
-    if(id==='resumen')renderResumen();
+    if(id==='resumen'){_resumenInitOnPageOpen();renderResumen();}
     if(id==='presets')renderPresets();
     if(id==='trabajadores')renderTrabs();
     if(id==='planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
@@ -3064,7 +3078,88 @@ const _RESUMEN_FILTER_DIMS_PES=_RESUMEN_TBL_COLS.concat([
 ]);
 function _resumenFilterDims(mod){return mod==='pes'?_RESUMEN_FILTER_DIMS_PES:_RESUMEN_FILTER_DIMS_MOL;}
 let _resumenMod='mol';
+const _resumenScope={fechaDesde:'',fechaHasta:'',turno:''};
 const _resumenPivotFilt={mol:{},pes:{}};
+function _resumenRecFechaYmd(r){
+  const m=String(r&&r.fecha||'').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m?m[1]:'';
+}
+function _resumenReadScopeFromDom(){
+  const fd=document.getElementById('resumenFechaDesde');
+  const fh=document.getElementById('resumenFechaHasta');
+  const tur=document.getElementById('resumenTurno');
+  _resumenScope.fechaDesde=fd&&fd.value?String(fd.value).trim():'';
+  _resumenScope.fechaHasta=fh&&fh.value?String(fh.value).trim():_resumenScope.fechaDesde;
+  _resumenScope.turno=tur&&tur.value?String(tur.value).trim():'';
+}
+function _resumenPopulateTurnoSelect(){
+  const sel=document.getElementById('resumenTurno');
+  if(!sel)return;
+  const prev=sel.value;
+  const activos=(DB.data.turnos||[]).filter(t=>t.activo!==false);
+  sel.innerHTML='<option value="">Todos</option>'+activos.map(t=>`<option value="${esc(t.codigo)}">${esc(t.nombre||t.codigo)}</option>`).join('');
+  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+function _resumenInitOnPageOpen(){
+  _resumenPopulateTurnoSelect();
+  const fd=document.getElementById('resumenFechaDesde');
+  const fh=document.getElementById('resumenFechaHasta');
+  if(fd&&!fd.value){
+    const slFd=document.getElementById('slFechaDesde');
+    const slFh=document.getElementById('slFechaHasta');
+    if(slFd&&slFd.value){
+      fd.value=slFd.value;
+      fh.value=(slFh&&slFh.value)||slFd.value;
+    }else{
+      fd.value='2026-05-18';
+      fh.value='2026-05-18';
+    }
+  }
+  _resumenReadScopeFromDom();
+}
+function onResumenScopeChange(){_resumenReadScopeFromDom();}
+function resumenApplyScope(){_resumenReadScopeFromDom();renderResumen();}
+function resumenSetFechaHoy(){
+  const y=_adminTodayLocalYmd();
+  const fd=document.getElementById('resumenFechaDesde');
+  const fh=document.getElementById('resumenFechaHasta');
+  if(fd)fd.value=y;
+  if(fh)fh.value=y;
+  _resumenReadScopeFromDom();
+  renderResumen();
+}
+function resumenSyncScopeFromDashboard(){
+  const slFd=document.getElementById('slFechaDesde');
+  const slFh=document.getElementById('slFechaHasta');
+  const slT=document.getElementById('slTurno');
+  const fd=document.getElementById('resumenFechaDesde');
+  const fh=document.getElementById('resumenFechaHasta');
+  const rt=document.getElementById('resumenTurno');
+  if(fd&&slFd&&slFd.value)fd.value=slFd.value;
+  if(fh&&slFh&&slFh.value)fh.value=slFh.value;
+  else if(fh&&slFd&&slFd.value)fh.value=slFd.value;
+  if(rt&&slT)rt.value=slT.value||'';
+  _resumenReadScopeFromDom();
+  renderResumen();
+  toast('Filtros copiados del dashboard','info');
+}
+function _resumenRecMatchesScope(r,mod){
+  const ymd=_resumenRecFechaYmd(r);
+  if(!ymd)return false;
+  const fd=_resumenScope.fechaDesde||'';
+  const fh=_resumenScope.fechaHasta||fd;
+  if(fd&&ymd<fd)return false;
+  if(fh&&ymd>fh)return false;
+  const tur=_resumenScope.turno;
+  if(!tur)return true;
+  if(mod==='pes')return _adminPesajeMatchesTurnoFilter(r,tur);
+  return _adminMoldeMatchesTurnoFilter(r,tur);
+}
+function _resumenRawRecs(mod){
+  if(!RT.data)return[];
+  if(mod==='pes')return(Array.isArray(RT.data.pesajes)?RT.data.pesajes:[]).slice();
+  return(Array.isArray(RT.data.moldes)?RT.data.moldes:[]).filter(r=>!r.esGeneral);
+}
 function _resumenPivotStore(mod){return _resumenPivotFilt[mod==='pes'?'pes':'mol'];}
 function _resumenPivotEnsure(mod){
   const st=_resumenPivotStore(mod);
@@ -3120,14 +3215,8 @@ function _adminResumenRowFromPesaje(r){
     kg:+r.kg||0
   };
 }
-function _resumenBaseRecs(mod){
-  if(!RT.data)return[];
-  if(mod==='pes')return _filterRecs(RT.data.pesajes||[],'pesaje');
-  return _filterRecs((RT.data.moldes||[]).filter(r=>!r.esGeneral),'molde');
-}
 function _resumenNormRows(mod){
-  const base=_resumenBaseRecs(mod);
-  return base.map(r=>mod==='pes'?_adminResumenRowFromPesaje(r):_adminResumenRowFromMolde(r));
+  return _resumenRawRecs(mod).filter(r=>_resumenRecMatchesScope(r,mod)).map(r=>mod==='pes'?_adminResumenRowFromPesaje(r):_adminResumenRowFromMolde(r));
 }
 function _resumenRowPassesPivot(row,st,dims){
   for(const d of dims){
@@ -3144,7 +3233,21 @@ function _resumenTogglePivot(mod,dim,val,el){
   if(!set)return;
   if(set.has(val))set.delete(val);else set.add(val);
   if(el&&el.classList)el.classList.toggle('on',set.has(val));
-  renderResumen();
+  renderResumenTableOnly();
+}
+function _resumenPivotCheckbox(mod,dim,val,checked){
+  const st=_resumenPivotEnsure(mod);
+  const set=st[dim];
+  if(!set)return;
+  const allVals=[...new Set(_resumenNormRows(mod).map(r=>String(r[dim]||'—')))];
+  if(checked){
+    set.add(val);
+    if(allVals.length&&allVals.every(v=>set.has(v)))set.clear();
+  }else{
+    if(!set.size)allVals.forEach(v=>{if(v!==val)set.add(v);});
+    else set.delete(val);
+  }
+  renderResumenTableOnly();
 }
 function _resumenSelectAllPivot(mod,dim,on){
   const st=_resumenPivotEnsure(mod);
@@ -3152,6 +3255,15 @@ function _resumenSelectAllPivot(mod,dim,on){
   const vals=[...new Set(rows.map(r=>String(r[dim]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   st[dim]=on?new Set(vals):new Set();
   renderResumen();
+}
+function _resumenPivotFilterList(el,q){
+  const box=el&&el.parentElement&&el.parentElement.querySelector('.rp-checklist');
+  if(!box)return;
+  const n=String(q||'').trim().toLowerCase();
+  box.querySelectorAll('label').forEach(lab=>{
+    const t=(lab.textContent||'').toLowerCase();
+    lab.style.display=!n||t.includes(n)?'':'none';
+  });
 }
 function clearResumenPivotFilters(){
   _resumenPivotFilt.mol={};
@@ -3174,26 +3286,29 @@ function _renderResumenPivotFilters(mod){
   const st=_resumenPivotEnsure(mod);
   const dims=_resumenFilterDims(mod);
   const rows=_resumenNormRows(mod);
-  host.innerHTML=dims.map(d=>{
+  const rawN=_resumenRawRecs(mod).length;
+  const warn=rawN?'':'<div style="grid-column:1/-1;padding:8px 12px;font-size:12px;color:var(--warn);background:rgba(245,158,11,.12);border-radius:8px;margin-bottom:8px;">Sin registros en memoria. Pulsa <strong>☁ Traer datos</strong> y revisa las fechas arriba.</div>';
+  host.innerHTML=warn+dims.map(d=>{
     const vals=[...new Set(rows.map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
-    const chips=vals.map(v=>{
-      const on=st[d.key]&&st[d.key].has(v);
-      return `<div class="slicer-chip ${on?'on':''}" onclick="_resumenTogglePivot(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this)">${esc(v)}</div>`;
-    }).join('');
+    const set=st[d.key];
+    const list=vals.length?vals.map(v=>{
+      const checked=!set||!set.size||set.has(v);
+      return `<label><input type="checkbox" ${checked?'checked':''} onchange="_resumenPivotCheckbox(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this.checked)"> ${esc(v)}</label>`;
+    }).join(''):'<span style="font-size:11px;color:var(--text-3);">Sin valores en este rango de fechas</span>';
     return `<div class="rp-filt"><label class="form-label">${esc(d.label)}</label>
-      <div style="display:flex;gap:4px;margin-bottom:4px;">
+      <input type="text" class="input rp-search" placeholder="Buscar…" oninput="_resumenPivotFilterList(this,this.value)">
+      <div style="display:flex;gap:4px;margin-bottom:6px;">
         <button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:10px;" onclick="_resumenSelectAllPivot('${mod}','${d.key}',true)">Todos</button>
         <button type="button" class="btn ghost sm" style="padding:2px 8px;font-size:10px;" onclick="_resumenSelectAllPivot('${mod}','${d.key}',false)">Ninguno</button>
       </div>
-      <div class="slicer-multi">${chips||'<span style="font-size:11px;color:var(--text-3);">Sin valores</span>'}</div></div>`;
+      <div class="rp-checklist">${list}</div></div>`;
   }).join('');
 }
-function renderResumen(){
+function renderResumenTableOnly(){
   const mod=_resumenMod;
   const filterDims=_resumenFilterDims(mod);
   const tblCols=_RESUMEN_TBL_COLS;
   const st=_resumenPivotEnsure(mod);
-  _renderResumenPivotFilters(mod);
   const rows=_resumenNormRows(mod).filter(r=>_resumenRowPassesPivot(r,st,filterDims));
   const map={};
   rows.forEach(r=>{
@@ -3216,13 +3331,13 @@ function renderResumen(){
   let totN=0,totKg=0;
   agg.forEach(x=>{totN+=x.tot;totKg+=x.kg;});
   const tbl=document.getElementById('resumenPivotTbl');
-  const title=document.getElementById('resumenTblTitle');
   const sub=document.getElementById('resumenTblSub');
-  if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
-  const fd=document.getElementById('slFechaDesde'),fh=document.getElementById('slFechaHasta'),tur=document.getElementById('slTurno');
-  const rango=fd&&fd.value?(fd.value+(fh&&fh.value&&fh.value!==fd.value?' → '+fh.value:'')):'sin filtro fecha';
-  const turnoDash=tur&&tur.value?tur.options[tur.selectedIndex].text:'Todos los turnos';
-  if(sub)sub.textContent=agg.length+' filas · '+rows.length+' registros · '+rango+' · '+turnoDash;
+  const fd=_resumenScope.fechaDesde||'';
+  const fh=_resumenScope.fechaHasta||fd;
+  const rango=fd?(fd+(fh&&fh!==fd?' → '+fh:'')):'todas las fechas';
+  const turEl=document.getElementById('resumenTurno');
+  const turnoDash=turEl&&turEl.value&&turEl.selectedIndex>=0?turEl.options[turEl.selectedIndex].text:'Todos los turnos';
+  if(sub)sub.textContent=agg.length+' filas · '+rows.length+' registros · '+rango+' · '+turnoDash+' · '+totKg.toLocaleString('es-CL',{maximumFractionDigits:1})+' kg';
   if(!tbl)return;
   const hdrCols=tblCols.map(d=>`<th>${esc(d.th||d.label)}</th>`).join('')+
     '<th class="num">total</th><th class="num">total kilos</th>';
@@ -3236,6 +3351,14 @@ function renderResumen(){
   tbl.querySelector('tbody').innerHTML=body;
   tbl.querySelector('tfoot').innerHTML=foot;
 }
+function renderResumen(){
+  _resumenReadScopeFromDom();
+  const mod=_resumenMod;
+  const title=document.getElementById('resumenTblTitle');
+  if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
+  _renderResumenPivotFilters(mod);
+  renderResumenTableOnly();
+}
 function exportResumenExcel(){
   const tbl=document.getElementById('resumenPivotTbl');
   if(!tbl||typeof XLSX==='undefined'){toast('Tabla o librería Excel no disponible','warn');return;}
@@ -3246,11 +3369,19 @@ function exportResumenExcel(){
   toast('Excel generado','success');
 }
 window.renderResumen=renderResumen;
+window.renderResumenTableOnly=renderResumenTableOnly;
 window.setResumenMod=setResumenMod;
 window.clearResumenPivotFilters=clearResumenPivotFilters;
 window.exportResumenExcel=exportResumenExcel;
 window._resumenTogglePivot=_resumenTogglePivot;
 window._resumenSelectAllPivot=_resumenSelectAllPivot;
+window._resumenPivotCheckbox=_resumenPivotCheckbox;
+window._resumenPivotFilterList=_resumenPivotFilterList;
+window.onResumenScopeChange=onResumenScopeChange;
+window.resumenApplyScope=resumenApplyScope;
+window.resumenSetFechaHoy=resumenSetFechaHoy;
+window.resumenSyncScopeFromDashboard=resumenSyncScopeFromDashboard;
+window._resumenInitOnPageOpen=_resumenInitOnPageOpen;
 
 /* ════════════ ANÁLISIS (pivots) ════════════ */
 function setAnalTab(btn,id){
