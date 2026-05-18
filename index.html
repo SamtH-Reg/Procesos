@@ -2038,7 +2038,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
       <div id="mVerInfo" style="font-size:12px;color:var(--text-3);padding:0 2px 10px;display:none;"></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Hora</th><th>L.</th><th>Trabajador</th><th>Producto</th><th class="num">Cant.</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Hora</th><th>L.</th><th>Trabajador</th><th>Producto</th><th>Especie</th><th class="num">Cant.</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
           <tbody id="tbMoldes"></tbody>
         </table>
       </div>
@@ -3217,6 +3217,42 @@ function _tbPushOperativoTrasCorreccion(){
   try{
     if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate().catch(e=>console.warn('[tb push corrección]',e));
   }catch(e){console.warn('[tb push corrección]',e);}
+}
+/** Borrado puntual en Supabase (corrección Ver registros). No actualiza firmas si falla o no hay red. */
+async function _tbCloudDeleteOperativoRow(table,id,isDemoIdFn){
+  if(isDemoIdFn&&isDemoIdFn(id))return{ok:true,skipped:true,reason:'demo'};
+  if(!_tbSb||!_tbUser)return{skipped:true,reason:'no_session'};
+  if(!tbNavigatorOnline())return{skipped:true,reason:'offline'};
+  const err=await _tbSbDeleteIdsByPk(_tbSb,table,[id]);
+  if(err)return{ok:false,err:err.message||String(err)};
+  try{if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(e){}
+  return{ok:true};
+}
+/** Upsert de una fila operativa (moldes/pesajes) tras editar en Ver registros. */
+async function _tbCloudUpsertOperativoRow(table,id){
+  if(!_tbSb||!_tbUser)return{skipped:true,reason:'no_session'};
+  if(!tbNavigatorOnline())return{skipped:true,reason:'offline'};
+  if(!TBSync||typeof TBSync._rowsForCloudPush!=='function')return{ok:false,err:'sync no disponible'};
+  const pack=TBSync._rowsForCloudPush();
+  const list=table==='moldes'?pack.moldesRows:pack.pesajesRows;
+  const row=(list||[]).find(x=>String(x.id)===String(id));
+  if(!row)return{ok:false,err:'fila no encontrada para subir'};
+  if(table==='moldes'&&_rtIsDemoMolde({id}))return{ok:true,skipped:true,reason:'demo'};
+  if(table==='pesajes'&&typeof _rtIsDemoPesaje==='function'&&_rtIsDemoPesaje({id}))return{ok:true,skipped:true,reason:'demo'};
+  const err=(await _tbSb.from(table).upsert([row],{onConflict:'id'})).error;
+  if(err)return{ok:false,err:err.message||String(err)};
+  try{if(TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(e){}
+  return{ok:true};
+}
+function _tbToastTrasCorreccionCloud(cloud,okMsg){
+  if(cloud&&cloud.skipped){
+    if(cloud.reason==='demo'){showToast(okMsg,'success');return;}
+    if(cloud.reason==='no_session'){showToast(okMsg+' (solo en este equipo: inicia sesión para aplicar en Supabase)','warning');return;}
+    if(cloud.reason==='offline'){showToast(okMsg+' (sin red: se subirá al reconectar)','warning');return;}
+    showToast(okMsg,'success');return;
+  }
+  if(cloud&&cloud.ok===false){showToast('Guardado aquí; no se aplicó en Supabase: '+String(cloud.err||'error'),'error');return;}
+  showToast(okMsg,'success');
 }
 function _idxFirstAllowedPanel(){
   if(_idxPerm('moldes'))return'panelMoldes';
@@ -5443,7 +5479,7 @@ function renderMoldesTable(){
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
   let rows=_mVerRowsInActiveArmado(RT.moldes.slice(),state.fechaTurno);
   rows=_filterMoldesPorListaFiltros(rows,state);
-  if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
+  if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar)||norm(_especieDe(r)).includes(fBuscar));
   // Info badge
   const info=document.getElementById('mVerInfo');
   if(info){
@@ -5457,7 +5493,7 @@ function renderMoldesTable(){
     }
   }
   if(!rows.length){
-    tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-3);">'+(RT.moldes.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde la pestaña "Registrar".')+'</td></tr>';
+    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">'+(RT.moldes.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde la pestaña "Registrar".')+'</td></tr>';
     return;
   }
   const canCor=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
@@ -5475,6 +5511,7 @@ function renderMoldesTable(){
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
     <td>${esc(r.producto)} ${pendBadge}</td>
+    <td>${esc(_especieDe(r))}</td>
     <td class="num">${r.cant||0}</td>
     <td class="num">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
@@ -5492,6 +5529,7 @@ function editMolde(id){
       <div class="form-grid cols-2">
         <div class="form-field"><label class="form-label">Preset</label><select class="select" id="emPreset">${presetsOpt}</select></div>
         <div class="form-field"><label class="form-label">Cantidad</label><input class="input" id="emCant" type="number" min="1" value="${r.cant}"></div>
+        <div class="form-field"><label class="form-label">Especie</label><input class="input" id="emEspecie" value="${esc((_especieDe(r)==='—'?'':_especieDe(r)))}"></div>
         <div class="form-field"><label class="form-label">N° Guía</label><input class="input" id="emGuia" value="${esc(r.guia||'')}"></div>
         <div class="form-field"><label class="form-label">Línea</label><input class="input" id="emLinea" value="${esc(r.linea||'')}"></div>
         <div class="form-field span-2"><label class="form-label">Trabajador (nombre)</label><input class="input" id="emNombre" value="${esc(r.nombre||'')}"></div>
@@ -5506,7 +5544,7 @@ function editMolde(id){
   document.body.appendChild(modal);
 }
 function closeEditMolde(){const m=document.getElementById('editMoldeModal');if(m)m.remove();}
-function saveEditMolde(id){
+async function saveEditMolde(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
   const r=RT.moldes.find(x=>x.id===id);if(!r){closeEditMolde();return;}
   const presetId=parseInt(document.getElementById('emPreset').value);
@@ -5519,21 +5557,35 @@ function saveEditMolde(id){
   const consumido=(r.cant||0)-(r.pendiente!=null?r.pendiente:r.cant);
   r.presetId=p.id;r.producto=p.nombre;
   r.destino=p.destino;r.calibre=p.calibre;r.especie=p.especie;
+  const espEl=document.getElementById('emEspecie');
+  if(espEl){const e=espEl.value.trim();if(e)r.especie=e;}
   r.cant=cant;
   r.pendiente=Math.max(0,cant-consumido);
   r.kg=Math.round(cant*p.kgRef*10)/10;
   r.guia=guia;
   r.linea=document.getElementById('emLinea').value.trim()||r.linea;
   r.nombre=document.getElementById('emNombre').value.trim()||r.nombre;
-  rtSave();_tbPushOperativoTrasCorreccion();renderMoldesTable();renderPorCargar();renderAnalisis();
+  rtSave();
+  let cloud=await _tbCloudUpsertOperativoRow('moldes',id);
+  if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+    try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(e){console.warn('[saveEditMolde] push',e);}
+  }
+  renderMoldesTable();renderPorCargar();renderAnalisis();
   closeEditMolde();
-  showToast('Registro actualizado','success');
+  _tbToastTrasCorreccionCloud(cloud,'Registro actualizado');
 }
 window.editMolde=editMolde;window.closeEditMolde=closeEditMolde;window.saveEditMolde=saveEditMolde;
-function delMolde(id){
+async function delMolde(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
   if(!confirm('¿Eliminar este registro? Se borrará también en la nube si hay sesión.'))return;
-  RT.moldes=RT.moldes.filter(r=>r.id!==id);rtSave();_tbPushOperativoTrasCorreccion();renderMoldesTable();renderPorCargar();renderAnalisis();showToast('Registro eliminado','success');
+  RT.moldes=RT.moldes.filter(r=>r.id!==id);
+  rtSave();
+  let cloud=await _tbCloudDeleteOperativoRow('moldes',id,_rtIsDemoMoldeId);
+  if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+    try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(e){console.warn('[delMolde] push',e);}
+  }
+  renderMoldesTable();renderPorCargar();renderAnalisis();
+  _tbToastTrasCorreccionCloud(cloud,'Registro eliminado');
 }
 window.delMolde=delMolde;window.renderMoldesTable=renderMoldesTable;
 function exportarMoldesExcel(){
@@ -5541,9 +5593,9 @@ function exportarMoldesExcel(){
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
   let rows=_mVerRowsInActiveArmado(RT.moldes.slice(),state.fechaTurno);
   rows=_filterMoldesPorListaFiltros(rows,state);
-  if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar));
+  if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar)||norm(_especieDe(r)).includes(fBuscar));
   const hdr=['Fecha','Hora','Turno','Línea','Trabajador','Ficha','Producto','Especie','Cantidad','Kg','Guía'];
-  const body=rows.map(r=>[r.fecha||'',r.hora||'',r.turno||'',r.linea||'',r.nombre||'',r.ficha||'',r.producto||'',r.especie||'',r.cant||0,(r.kg||0).toFixed(1),r.guia||'']);
+  const body=rows.map(r=>{const esp=_especieDe(r);return[r.fecha||'',r.hora||'',r.turno||'',r.linea||'',r.nombre||'',r.ficha||'',r.producto||'',esp==='—'?'':esp,r.cant||0,(r.kg||0).toFixed(1),r.guia||''];});
   const csv=[hdr,...body].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
@@ -7164,15 +7216,20 @@ function renderPesajeTable(){
   </tr>`;
   }).join('');
 }
-function delPesaje(id){
+async function delPesaje(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
   if(!confirm('¿Eliminar pesaje de '+r.nombre+' ('+r.kg+' kg)? Se borrará también en la nube si hay sesión.'))return;
-  RT.pesajes.splice(i,1);rtSave();_tbPushOperativoTrasCorreccion();
+  RT.pesajes.splice(i,1);
+  rtSave();
+  let cloud=await _tbCloudDeleteOperativoRow('pesajes',id,typeof _rtIsDemoPesajeId==='function'?_rtIsDemoPesajeId:null);
+  if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+    try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(e){console.warn('[delPesaje] push',e);}
+  }
   renderPesajeTable();renderAnalisis();
   if(window.renderPResumen)renderPResumen();if(window.renderPConsol)renderPConsol();
-  showToast('Pesaje eliminado','success');
+  _tbToastTrasCorreccionCloud(cloud,'Pesaje eliminado');
 }
 function editPesaje(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
@@ -7201,7 +7258,7 @@ function editPesaje(id){
   document.body.appendChild(modal);
 }
 function closePEdit(){const m=document.getElementById('pEditModal');if(m)m.remove();}
-function savePEdit(id){
+async function savePEdit(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
@@ -7213,10 +7270,15 @@ function savePEdit(id){
   r.tipo=document.getElementById('pEdTipo').value.trim();
   r.kg=parseFloat(document.getElementById('pEdKg').value)||0;
   r.guia=document.getElementById('pEdGuia').value.trim();
-  rtSave();_tbPushOperativoTrasCorreccion();closePEdit();
+  rtSave();
+  let cloud=await _tbCloudUpsertOperativoRow('pesajes',id);
+  if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+    try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();}catch(e){console.warn('[savePEdit] push',e);}
+  }
+  closePEdit();
   renderPesajeTable();renderAnalisis();
   if(window.renderPResumen)renderPResumen();if(window.renderPConsol)renderPConsol();
-  showToast('Pesaje actualizado','success');
+  _tbToastTrasCorreccionCloud(cloud,'Pesaje actualizado');
 }
 window.delPesaje=delPesaje;window.editPesaje=editPesaje;window.closePEdit=closePEdit;window.savePEdit=savePEdit;
 function renderPesajesRecientes(){
