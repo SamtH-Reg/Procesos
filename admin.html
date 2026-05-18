@@ -616,7 +616,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <!-- ═══ RESUMEN MOLDE / PESAJE (tabla dinámica) ═══ -->
 <div class="page" id="page-resumen">
   <div class="page-hdr">
-    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Consolidado por turno, especie, guía, operario, calibre y destino — filtros tipo tabla dinámica</div></div>
+    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, especie, guía, nombre, calibre, destino, totales. Filtros extra: línea y producto/tipo.</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="btn ghost sm" onclick="renderResumen()">↻ Actualizar</button>
       <button type="button" class="btn ghost sm" onclick="exportResumenExcel()">Exportar Excel</button>
@@ -3045,33 +3045,30 @@ function exportReport(fmt){
 }
 
 /* ════════════ RESUMEN MOLDE / PESAJE (tabla dinámica) ════════════ */
-const _RESUMEN_PIVOT_DIMS_MOL=[
-  {key:'turno',label:'Turno'},
-  {key:'especie',label:'Especie'},
-  {key:'guia',label:'Guía'},
-  {key:'nombre',label:'Nombre'},
-  {key:'calibre',label:'Calibre'},
-  {key:'destino',label:'Destino'},
-  {key:'linea',label:'Línea'},
-  {key:'producto',label:'Producto'}
+/** Columnas visibles en la tabla (como planilla Excel + turno). */
+const _RESUMEN_TBL_COLS=[
+  {key:'turno',label:'Turno',th:'TURNO'},
+  {key:'especie',label:'Especie',th:'ESPECIE'},
+  {key:'guia',label:'Guía',th:'Guía'},
+  {key:'nombre',label:'Nombre',th:'nombre'},
+  {key:'calibre',label:'Calibre',th:'Calibre'},
+  {key:'destino',label:'Destino',th:'Destino'}
 ];
-const _RESUMEN_PIVOT_DIMS_PES=[
-  {key:'turno',label:'Turno'},
-  {key:'especie',label:'Especie'},
-  {key:'guia',label:'Guía'},
-  {key:'nombre',label:'Nombre'},
-  {key:'calibre',label:'Calibre'},
-  {key:'destino',label:'Destino'},
-  {key:'linea',label:'Línea'},
-  {key:'tipo',label:'Tipo pesaje'}
-];
+const _RESUMEN_FILTER_DIMS_MOL=_RESUMEN_TBL_COLS.concat([
+  {key:'linea',label:'Línea',th:'Línea'},
+  {key:'producto',label:'Producto',th:'Producto'}
+]);
+const _RESUMEN_FILTER_DIMS_PES=_RESUMEN_TBL_COLS.concat([
+  {key:'linea',label:'Línea',th:'Línea'},
+  {key:'tipo',label:'Tipo pesaje',th:'Tipo'}
+]);
+function _resumenFilterDims(mod){return mod==='pes'?_RESUMEN_FILTER_DIMS_PES:_RESUMEN_FILTER_DIMS_MOL;}
 let _resumenMod='mol';
 const _resumenPivotFilt={mol:{},pes:{}};
 function _resumenPivotStore(mod){return _resumenPivotFilt[mod==='pes'?'pes':'mol'];}
 function _resumenPivotEnsure(mod){
   const st=_resumenPivotStore(mod);
-  const dims=mod==='pes'?_RESUMEN_PIVOT_DIMS_PES:_RESUMEN_PIVOT_DIMS_MOL;
-  dims.forEach(d=>{if(!st[d.key])st[d.key]=new Set();});
+  _resumenFilterDims(mod).forEach(d=>{if(!st[d.key])st[d.key]=new Set();});
   return st;
 }
 function _adminPresetForRec(r){
@@ -3175,7 +3172,7 @@ function _renderResumenPivotFilters(mod){
   const host=document.getElementById('resumenPivotFilters');
   if(!host)return;
   const st=_resumenPivotEnsure(mod);
-  const dims=mod==='pes'?_RESUMEN_PIVOT_DIMS_PES:_RESUMEN_PIVOT_DIMS_MOL;
+  const dims=_resumenFilterDims(mod);
   const rows=_resumenNormRows(mod);
   host.innerHTML=dims.map(d=>{
     const vals=[...new Set(rows.map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
@@ -3193,19 +3190,24 @@ function _renderResumenPivotFilters(mod){
 }
 function renderResumen(){
   const mod=_resumenMod;
-  const dims=mod==='pes'?_RESUMEN_PIVOT_DIMS_PES:_RESUMEN_PIVOT_DIMS_MOL;
+  const filterDims=_resumenFilterDims(mod);
+  const tblCols=_RESUMEN_TBL_COLS;
   const st=_resumenPivotEnsure(mod);
   _renderResumenPivotFilters(mod);
-  const rows=_resumenNormRows(mod).filter(r=>_resumenRowPassesPivot(r,st,dims));
+  const rows=_resumenNormRows(mod).filter(r=>_resumenRowPassesPivot(r,st,filterDims));
   const map={};
   rows.forEach(r=>{
-    const key=dims.map(d=>String(r[d.key]||'—')).join('\u0001');
-    if(!map[key])map[key]={...r,tot:0,kg:0};
+    const key=tblCols.map(d=>String(r[d.key]||'—')).join('\u0001');
+    if(!map[key]){
+      const seed={tot:0,kg:0};
+      tblCols.forEach(d=>{seed[d.key]=r[d.key];});
+      map[key]=seed;
+    }
     map[key].tot+=+r.cant||0;
     map[key].kg+=+r.kg||0;
   });
   const agg=Object.values(map).sort((a,b)=>{
-    for(const d of dims){
+    for(const d of tblCols){
       const c=String(a[d.key]||'').localeCompare(String(b[d.key]||''),'es',{sensitivity:'base'});
       if(c)return c;
     }
@@ -3222,14 +3224,14 @@ function renderResumen(){
   const turnoDash=tur&&tur.value?tur.options[tur.selectedIndex].text:'Todos los turnos';
   if(sub)sub.textContent=agg.length+' filas · '+rows.length+' registros · '+rango+' · '+turnoDash;
   if(!tbl)return;
-  const hdrCols=dims.map(d=>`<th>${esc(d.label.toUpperCase())}</th>`).join('')+
-    '<th class="num">TOTAL</th><th class="num">TOTAL KILOS</th>';
+  const hdrCols=tblCols.map(d=>`<th>${esc(d.th||d.label)}</th>`).join('')+
+    '<th class="num">total</th><th class="num">total kilos</th>';
   const body=agg.length?agg.map(r=>'<tr>'+
-    dims.map(d=>`<td>${esc(r[d.key])}</td>`).join('')+
+    tblCols.map(d=>`<td>${esc(r[d.key])}</td>`).join('')+
     `<td class="num">${(r.tot).toLocaleString('es-CL',{maximumFractionDigits:0})}</td>`+
     `<td class="num">${(r.kg).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>`+
-    '</tr>').join(''):`<tr><td colspan="${dims.length+2}" style="text-align:center;padding:28px;color:var(--text-3);">Sin datos con los filtros actuales</td></tr>`;
-  const foot=`<tr><td colspan="${dims.length}">Total general</td><td class="num">${totN.toLocaleString('es-CL',{maximumFractionDigits:0})}</td><td class="num">${totKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td></tr>`;
+    '</tr>').join(''):`<tr><td colspan="${tblCols.length+2}" style="text-align:center;padding:28px;color:var(--text-3);">Sin datos con los filtros actuales</td></tr>`;
+  const foot=`<tr><td colspan="${tblCols.length}">Total general</td><td class="num">${totN.toLocaleString('es-CL',{maximumFractionDigits:0})}</td><td class="num">${totKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td></tr>`;
   tbl.querySelector('thead').innerHTML='<tr>'+hdrCols+'</tr>';
   tbl.querySelector('tbody').innerHTML=body;
   tbl.querySelector('tfoot').innerHTML=foot;
