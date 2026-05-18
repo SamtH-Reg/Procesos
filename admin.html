@@ -655,7 +655,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSyncScopeFromDashboard()">↻ Desde dashboard</button></div>
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="typeof sbManualPullTabletRegs==='function'&&sbManualPullTabletRegs()">☁ Traer datos</button></div>
   </div>
-  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros en cada columna de la tabla (▾). Kilos según fechas y turno de arriba.</div>
+  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros: clic en columna (▼) para abrir menú. Kilos según fechas y turno de arriba.</div>
   <div class="tabs-inline" id="resumenTabs">
     <button type="button" class="active" data-resumen-mod="mol" onclick="setResumenMod(this,'mol')">Recolección moldes</button>
     <button type="button" data-resumen-mod="pes" onclick="setResumenMod(this,'pes')">Pesaje</button>
@@ -3086,6 +3086,8 @@ const _RESUMEN_TBL_COLS=[
   {key:'destino',label:'Destino',th:'Destino'}
 ];
 function _resumenFilterDims(){return _RESUMEN_TBL_COLS;}
+/** Argumento JS entre comillas simples para onclick/onchange en HTML (evita romper atributos con JSON.stringify). */
+function _resumenJsArg(s){return "'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";}
 let _resumenMod='mol';
 const _resumenScope={fechaDesde:'',fechaHasta:'',turno:''};
 const _resumenPivotFilt={mol:{},pes:{}};
@@ -3314,9 +3316,9 @@ function _resumenColFilterMenuHtml(mod,d){
   const sel=_resumenPivotSel(st,d.key);
   const list=vals.length?vals.map(v=>{
     const checked=sel===null||sel.has(v);
-    return `<label><input type="checkbox" ${checked?'checked':''} onchange="_resumenPivotCheckbox(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this.checked)"> ${esc(v)}</label>`;
+    return `<label><input type="checkbox" data-rf-val="${esc(v)}" ${checked?'checked':''}> ${esc(v)}</label>`;
   }).join(''):'<span style="font-size:11px;color:var(--text-3);">Sin valores</span>';
-  return `<div class="resumen-col-menu" id="${_resumenColFilterMenuId(mod,d.key)}" onclick="event.stopPropagation()">
+  return `<div class="resumen-col-menu" id="${_resumenColFilterMenuId(mod,d.key)}" data-rf-mod="${esc(mod)}" data-rf-dim="${esc(d.key)}" onclick="event.stopPropagation()">
     <input type="text" class="input rp-search" placeholder="Buscar…" oninput="_resumenPivotFilterList(this,this.value)">
     <div class="rp-menu-actions">
       <button type="button" class="btn ghost sm" onclick="_resumenSelectAllPivot('${mod}','${d.key}',true)">Todos</button>
@@ -3329,7 +3331,7 @@ function _resumenRenderTableHead(mod){
   const tblCols=_RESUMEN_TBL_COLS;
   const hdr=tblCols.map(d=>{
     const filtered=_resumenColFilterActive(mod,d.key);
-    return `<th class="resumen-th-filt"><button type="button" class="resumen-th-btn${filtered?' is-filtered':''}" data-dim="${d.key}" onclick="resumenColFilterToggle(event,${JSON.stringify(mod)},${JSON.stringify(d.key)})"><span>${esc(d.th||d.label)}</span><span class="resumen-th-ic">▾</span></button>${_resumenColFilterMenuHtml(mod,d)}</th>`;
+    return `<th class="resumen-th-filt" data-rf-mod="${esc(mod)}"><button type="button" class="resumen-th-btn${filtered?' is-filtered':''}" data-dim="${esc(d.key)}"><span>${esc(d.th||d.label)}</span><span class="resumen-th-ic" aria-hidden="true">&#9660;</span></button>${_resumenColFilterMenuHtml(mod,d)}</th>`;
   }).join('')+'<th class="num">TOTAL</th><th class="num">TOTAL KILOS</th>';
   return '<tr>'+hdr+'</tr>';
 }
@@ -3339,6 +3341,28 @@ function _resumenInitColFilterDocClose(){
   document.addEventListener('click',(e)=>{
     if(e.target.closest('.resumen-th-filt')||e.target.closest('.resumen-col-menu'))return;
     document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open'));
+  });
+  const tbl=document.getElementById('resumenPivotTbl');
+  if(!tbl)return;
+  tbl.addEventListener('click',(e)=>{
+    if(e.target.closest('.resumen-col-menu'))return;
+    const btn=e.target.closest('.resumen-th-btn');
+    if(!btn||!tbl.contains(btn))return;
+    const th=btn.closest('th.resumen-th-filt');
+    if(!th)return;
+    const mod=th.getAttribute('data-rf-mod')||_resumenMod;
+    const key=btn.getAttribute('data-dim');
+    if(key)resumenColFilterToggle(e,mod,key);
+  });
+  tbl.addEventListener('change',(e)=>{
+    const inp=e.target;
+    if(!inp||inp.type!=='checkbox'||!tbl.contains(inp))return;
+    const menu=inp.closest('.resumen-col-menu');
+    if(!menu)return;
+    const mod=menu.getAttribute('data-rf-mod');
+    const key=menu.getAttribute('data-rf-dim');
+    const val=inp.getAttribute('data-rf-val');
+    if(mod&&key&&val!=null)_resumenPivotCheckbox(mod,key,val,inp.checked);
   });
 }
 function clearResumenPivotFilters(){
@@ -3369,7 +3393,7 @@ function _renderResumenPivotFilters(mod){
     const sel=_resumenPivotSel(st,d.key);
     const list=vals.length?vals.map(v=>{
       const checked=sel===null||sel.has(v);
-      return `<label><input type="checkbox" ${checked?'checked':''} onchange="_resumenPivotCheckbox(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this.checked)"> ${esc(v)}</label>`;
+      return `<label><input type="checkbox" data-rf-val="${esc(v)}" ${checked?'checked':''}> ${esc(v)}</label>`;
     }).join(''):'<span style="font-size:11px;color:var(--text-3);">Sin valores en este rango de fechas</span>';
     return `<div class="rp-filt"><label class="form-label">${esc(d.label)}</label>
       <input type="text" class="input rp-search" placeholder="Buscar…" oninput="_resumenPivotFilterList(this,this.value)">
@@ -3433,7 +3457,7 @@ function renderResumen(){
   if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
   const rawN=_resumenRawRecs(mod).length;
   const hint=document.getElementById('resumenDashHint');
-  if(hint)hint.textContent=rawN?'Filtros en cada columna de la tabla (▾). Kilos según fechas y turno de arriba.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
+  if(hint)hint.textContent=rawN?'Filtros: clic en columna (▼) para abrir menú. Kilos según fechas y turno de arriba.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
   renderResumenTableOnly();
 }
 function exportResumenExcel(){
