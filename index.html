@@ -4905,23 +4905,20 @@ function _tbNormalizeArmadoLineaSupabaseRow(row){
 
 /**
  * Aplica filas de Supabase `armado_lineas` sobre RT.armadoMolde / RT.armadoPesaje.
- * Fusiona con lo local: el remoto gana en claves que trae; no se borran claves locales
- * que el servidor no devolvió (evita pérdida por pull incompleto, RLS o retraso de push).
- * Si el servidor devuelve 0 filas y ya había armado local, no se toca nada (evita borrado total).
+ * Reemplazo completo desde la nube: si una línea se borró en otro equipo, desaparece aquí también.
+ * Con 0 filas y armado previo: respaldo de emergencia y vaciado (borrado total legítimo en nube).
  */
 function _applyRemoteArmadoLineasRows(armData){
   const rows=Array.isArray(armData)?armData:[];
-  const prevMolde=RT.armadoMolde&&typeof RT.armadoMolde==='object'?{...RT.armadoMolde}:{};
-  const prevPesaje=RT.armadoPesaje&&typeof RT.armadoPesaje==='object'?{...RT.armadoPesaje}:{};
-  const prevKeyCount=Object.keys(prevMolde).length+Object.keys(prevPesaje).length;
+  const prevKeyCount=Object.keys(RT.armadoMolde||{}).length+Object.keys(RT.armadoPesaje||{}).length;
   if(rows.length===0&&prevKeyCount>0){
-    console.warn('[armado_lineas] pull devolvió 0 filas; se conserva armado local para evitar pérdida de datos.');
+    _tbTryStoreArmadoEmergencyBackup();
     if(_tbUser&&typeof showToast==='function'){
-      showToast('Sync: la nube no devolvió armado de línea; se mantiene lo local. Revisá sesión Supabase o RLS. Si perdiste líneas antes, en consola: restoreArmadoEmergencyBackup()','warn');
+      showToast('Armado de línea vacío en la nube (se quitó lo local). Si fue un error: restoreArmadoEmergencyBackup()','info');
     }
-    return 0;
+  }else if(rows.length>0&&prevKeyCount>0){
+    _tbTryStoreArmadoEmergencyBackup();
   }
-  _tbTryStoreArmadoEmergencyBackup();
   const newMolde={};
   const newPesaje={};
   rows.forEach(raw=>{
@@ -4951,8 +4948,8 @@ function _applyRemoteArmadoLineasRows(armData){
   });
   if(!RT.armadoMolde)RT.armadoMolde={};
   if(!RT.armadoPesaje)RT.armadoPesaje={};
-  RT.armadoMolde={...prevMolde,...newMolde};
-  RT.armadoPesaje={...prevPesaje,...newPesaje};
+  RT.armadoMolde=newMolde;
+  RT.armadoPesaje=newPesaje;
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   _pruneInvalidArmadoKeys();

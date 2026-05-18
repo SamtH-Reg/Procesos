@@ -1060,14 +1060,41 @@ function _adminEspecieForRec(r){
   return'';
 }
 
-/* RT también compartido (solo lectura para análisis) */
+/* RT también compartido (solo lectura para análisis). Moldes/pesajes/armado en admin = solo Supabase en memoria (no rehidratar operativos desde localStorage). */
+function _adminOpsCloudSourceOnly(){return true;}
 const RT={data:null,
   load(){
     const empty={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};
     try{this.data=JSON.parse(localStorage.getItem(RT_KEY))||empty;}catch(e){this.data={...empty};}
+    if(_adminOpsCloudSourceOnly()){
+      this.data.moldes=[];
+      this.data.pesajes=[];
+      this.data.generales=[];
+      this.data.armadoMolde={};
+      this.data.armadoPesaje={};
+    }
     this._ensureShape();
   },
-  save(){localStorage.setItem(RT_KEY,JSON.stringify(this.data));},
+  save(){
+    if(!this.data)return;
+    if(_adminOpsCloudSourceOnly()){
+      let prev={};
+      try{prev=JSON.parse(localStorage.getItem(RT_KEY))||{};}catch(_){}
+      localStorage.setItem(RT_KEY,JSON.stringify({
+        ...prev,
+        moldes:Array.isArray(prev.moldes)?prev.moldes:[],
+        pesajes:Array.isArray(prev.pesajes)?prev.pesajes:[],
+        generales:Array.isArray(prev.generales)?prev.generales:[],
+        armadoMolde:prev.armadoMolde&&typeof prev.armadoMolde==='object'?prev.armadoMolde:{},
+        armadoPesaje:prev.armadoPesaje&&typeof prev.armadoPesaje==='object'?prev.armadoPesaje:{},
+        eqState:this.data.eqState||{},
+        eqHist:this.data.eqHist||{},
+        empacados:Array.isArray(this.data.empacados)?this.data.empacados:(prev.empacados||[])
+      }));
+      return;
+    }
+    localStorage.setItem(RT_KEY,JSON.stringify(this.data));
+  },
   _ensureShape(){
     const d=this.data;
     if(!d||typeof d!=='object'||Array.isArray(d)){this.data={moldes:[],pesajes:[],generales:[],eqState:{},eqHist:{},empacados:[],armadoMolde:{},armadoPesaje:{}};return;}
@@ -1629,12 +1656,18 @@ function _adminArmApplyCloudRow(row){
 function _adminArmDeleteCloudRow(row){
   if(!row||!RT.data)return;
   const linea=String(row.linea||'').trim().toUpperCase();
-  const turno=row.turno||'dia';
-  const fecha=String(row.fecha||'').trim();
+  const turno=_adminCycleTurnoNorm(row.turno||'dia');
+  const fecha=_adminNormYmd(row.fecha);
   const area=String(row.area||'moldes').toLowerCase().trim()==='pesaje'?'pesaje':'moldes';
   const store=area==='pesaje'?(RT.data.armadoPesaje||{}):(RT.data.armadoMolde||{});
   const k=_adminArmScopedKey(linea,turno,fecha);
   if(k in store)delete store[k];
+  if(linea in store)delete store[linea];
+  Object.keys(store).forEach(key=>{
+    if(key===linea){delete store[key];return;}
+    const p=key.split(_ADMIN_ARM_SCOPE_SEP);
+    if(p.length===3&&String(p[0]).toUpperCase()===linea&&_adminCycleTurnoNorm(p[1])===turno&&_adminNormYmd(p[2])===fecha)delete store[key];
+  });
 }
 function _adminTryStoreArmadoEmergencyBackup(){
   try{
@@ -1695,14 +1728,8 @@ async function _adminPullArmadoLineasFromCloud(){
     if(armErr){sbLog('pull armado_lineas: '+armErr.message,false);return false;}
     if(!RT.data)RT.data={};
     const rows=Array.isArray(armData)?armData:[];
-    const prevMolde=RT.data.armadoMolde&&typeof RT.data.armadoMolde==='object'?{...RT.data.armadoMolde}:{};
-    const prevPesaje=RT.data.armadoPesaje&&typeof RT.data.armadoPesaje==='object'?{...RT.data.armadoPesaje}:{};
-    const prevKeyCount=Object.keys(prevMolde).length+Object.keys(prevPesaje).length;
-    if(rows.length===0&&prevKeyCount>0){
-      sbLog('pull armado_lineas: 0 filas; se conserva armado local (evita borrado total).',false);
-      return false;
-    }
-    _adminTryStoreArmadoEmergencyBackup();
+    const prevKeyCount=Object.keys(RT.data.armadoMolde||{}).length+Object.keys(RT.data.armadoPesaje||{}).length;
+    if(rows.length===0&&prevKeyCount>0)_adminTryStoreArmadoEmergencyBackup();
     const newMolde={};
     const newPesaje={};
     rows.forEach(raw=>{
@@ -1726,9 +1753,10 @@ async function _adminPullArmadoLineasFromCloud(){
       if(area==='pesaje')newPesaje[k]={...payload};
       else newMolde[k]={...payload};
     });
-    RT.data.armadoMolde={...prevMolde,...newMolde};
-    RT.data.armadoPesaje={...prevPesaje,...newPesaje};
+    RT.data.armadoMolde=newMolde;
+    RT.data.armadoPesaje=newPesaje;
     RT._ensureShape&&RT._ensureShape();
+    if(rows.length===0&&prevKeyCount>0)sbLog('pull armado_lineas: 0 filas (armado vacío desde nube)',true);
     return true;
   }catch(e){sbLog('pull armado_lineas: '+(e&&e.message?e.message:String(e)),false);return false;}
 }
@@ -4540,8 +4568,7 @@ function rtPulse(tbl){
   },2000);
 }
 function _doRender(dirty){
-  // Siempre recarga desde localStorage para garantizar datos frescos
-  try{RT.load();}catch(e){}
+  // No RT.load(): operativos en admin vienen de Supabase (sbPullRuntimeFromCloud / Realtime / poll).
   try{
     const active=document.querySelector('.page.active');
     const id=active?active.id:'page-dashboard';
@@ -4567,8 +4594,12 @@ window.addEventListener('storage',ev=>{
   if(_peerRtStorageTimer)clearTimeout(_peerRtStorageTimer);
   _peerRtStorageTimer=setTimeout(()=>{
     _peerRtStorageTimer=null;
-    try{RT.load();}catch(x){}
-    _doRender(null);
+    if(_sb&&_currentUser&&isSbAdmin()){
+      void adminSyncFromCloudQuiet();
+    }else{
+      try{RT.load();}catch(x){}
+      _doRender(null);
+    }
     rtPulse('local');
   },120);
 });
