@@ -9499,12 +9499,13 @@ function editMArmadoLinea(ln){
 
       <!-- TRABAJADORES -->
       <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">Trabajadores asignados <span id="mArmCount" style="color:var(--text-3);font-weight:500;">(0)</span></label>
-      <div id="mArmTrabList" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></motion>
+      <div id="mArmTrabList" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);"></div>
+      <p style="font-size:11px;color:var(--text-3);margin:6px 0 0;">↓ Recuadro de abajo: buscar y elegir trabajador (código en rojo).</p>
 
       <!-- AGREGAR -->
-      <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
-        <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
-        <button class="ios-picker-trigger" type="button" id="mArmPickerBtn" onclick="openIosPicker(event,'trab',function(id,nombre,codigo){_mArmAddById(id,nombre,codigo);})">
+      <div id="mArmAddSection" style="margin-top:12px;padding:14px;background:color-mix(in srgb,var(--brand-accent) 12%,var(--surface-alt));border-radius:var(--radius-sm);border:2px dashed var(--brand);">
+        <label style="font:700 12px var(--font);color:var(--brand);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
+        <button class="fs-combo-trigger ios-picker-trigger" type="button" id="mArmPickerBtn" onclick="openIosPicker(event,'trab',function(id,nombre,codigo){_mArmAddById(id,nombre,codigo);})">
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <span class="trigger-name">Buscar por nombre o código…</span>
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
