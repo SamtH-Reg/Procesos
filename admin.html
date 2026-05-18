@@ -337,6 +337,8 @@ tbody tr:hover{background:var(--surface-alt);}
 .resumen-col-menu .rp-menu-actions button{flex:1;font-size:11px;padding:4px 8px;}
 #resumenPivotFilters{display:none;}
 #page-resumen .tbl-wrap{overflow:visible;}
+#page-resumen .card{overflow:visible;}
+.resumen-pivot-head{position:relative;z-index:2;}
 
 pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius);overflow-x:auto;font:500 12px var(--mono);line-height:1.5;max-height:480px;}
 .kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
@@ -3168,11 +3170,9 @@ function _resumenRawRecs(mod){
   return(Array.isArray(RT.data.moldes)?RT.data.moldes:[]).filter(r=>!r.esGeneral);
 }
 function _resumenPivotStore(mod){return _resumenPivotFilt[mod==='pes'?'pes':'mol'];}
-function _resumenPivotEnsure(mod){
-  const st=_resumenPivotStore(mod);
-  _resumenFilterDims().forEach(d=>{if(!st[d.key])st[d.key]=new Set();});
-  return st;
-}
+function _resumenPivotEnsure(mod){return _resumenPivotStore(mod);}
+/** null/undefined en st[dim] = sin filtro (todos). Set vacío = ninguno. Set con valores = solo esos. */
+function _resumenPivotSel(st,key){return st[key]!=null?st[key]:null;}
 function _adminPresetForRec(r){
   const pres=(DB.data&&DB.data.presets)||[];
   if(r&&r.presetId!=null){const p=pres.find(x=>x.id===r.presetId);if(p)return p;}
@@ -3225,42 +3225,43 @@ function _resumenNormRows(mod){
 }
 function _resumenRowPassesPivot(row,st,dims){
   for(const d of dims){
-    const set=st[d.key];
-    if(!set||!set.size)continue;
+    const sel=_resumenPivotSel(st,d.key);
+    if(sel===null)continue;
+    if(!sel.size)return false;
     const v=String(row[d.key]||'—');
-    if(!set.has(v))return false;
+    if(!sel.has(v))return false;
   }
   return true;
 }
 function _resumenTogglePivot(mod,dim,val,el){
   const st=_resumenPivotEnsure(mod);
-  const set=st[dim];
-  if(!set)return;
-  if(set.has(val))set.delete(val);else set.add(val);
-  if(el&&el.classList)el.classList.toggle('on',set.has(val));
-  _resumenRefreshPivotTable(mod,true);
-  _resumenSyncColFilterUi(mod);
+  const sel=_resumenPivotSel(st,dim);
+  const on=sel===null||sel.has(val);
+  _resumenPivotCheckbox(mod,dim,val,!on);
 }
 function _resumenPivotCheckbox(mod,dim,val,checked){
   const st=_resumenPivotEnsure(mod);
-  const set=st[dim];
-  if(!set)return;
+  let sel=_resumenPivotSel(st,dim);
   const allVals=[...new Set(_resumenNormRows(mod).map(r=>String(r[dim]||'—')))];
   if(checked){
-    set.add(val);
-    if(allVals.length&&allVals.every(v=>set.has(v)))set.clear();
+    if(sel===null)st[dim]=new Set([val]);
+    else{
+      sel.add(val);
+      if(allVals.length&&allVals.every(v=>sel.has(v)))st[dim]=null;
+    }
   }else{
-    if(!set.size)allVals.forEach(v=>{if(v!==val)set.add(v);});
-    else set.delete(val);
+    if(sel===null)st[dim]=new Set(allVals.filter(v=>v!==val));
+    else{
+      sel.delete(val);
+      if(!sel.size)st[dim]=new Set();
+    }
   }
   _resumenRefreshPivotTable(mod,true);
   _resumenSyncColFilterUi(mod);
 }
 function _resumenSelectAllPivot(mod,dim,on){
   const st=_resumenPivotEnsure(mod);
-  const rows=_resumenNormRows(mod);
-  const vals=[...new Set(rows.map(r=>String(r[dim]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
-  st[dim]=on?new Set(vals):new Set();
+  st[dim]=on?null:new Set();
   const menu=document.getElementById(_resumenColFilterMenuId(mod,dim));
   const wasOpen=!!(menu&&menu.classList.contains('open'));
   _resumenRefreshPivotTable(mod,true);
@@ -3291,8 +3292,7 @@ function _resumenPivotFilterList(el,q){
 }
 function _resumenColFilterMenuId(mod,key){return 'resumenColMenu_'+mod+'_'+key;}
 function _resumenColFilterActive(mod,key){
-  const set=_resumenPivotStore(mod)[key];
-  return !!(set&&set.size);
+  return _resumenPivotSel(_resumenPivotStore(mod),key)!==null;
 }
 function _resumenSyncColFilterUi(mod){
   document.querySelectorAll('#resumenPivotTbl .resumen-th-btn[data-dim]').forEach(btn=>{
@@ -3301,19 +3301,19 @@ function _resumenSyncColFilterUi(mod){
   });
 }
 function resumenColFilterToggle(ev,mod,key){
-  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  if(ev){ev.preventDefault();ev.stopPropagation();}
   const menu=document.getElementById(_resumenColFilterMenuId(mod,key));
   if(!menu)return;
   const willOpen=!menu.classList.contains('open');
   document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open'));
-  if(willOpen)menu.classList.add('open');
+  if(willOpen)setTimeout(()=>menu.classList.add('open'),0);
 }
 function _resumenColFilterMenuHtml(mod,d){
   const vals=[...new Set(_resumenNormRows(mod).map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   const st=_resumenPivotEnsure(mod);
-  const set=st[d.key];
+  const sel=_resumenPivotSel(st,d.key);
   const list=vals.length?vals.map(v=>{
-    const checked=!set||!set.size||set.has(v);
+    const checked=sel===null||sel.has(v);
     return `<label><input type="checkbox" ${checked?'checked':''} onchange="_resumenPivotCheckbox(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this.checked)"> ${esc(v)}</label>`;
   }).join(''):'<span style="font-size:11px;color:var(--text-3);">Sin valores</span>';
   return `<div class="resumen-col-menu" id="${_resumenColFilterMenuId(mod,d.key)}" onclick="event.stopPropagation()">
@@ -3336,7 +3336,10 @@ function _resumenRenderTableHead(mod){
 function _resumenInitColFilterDocClose(){
   if(window._resumenColFilterDocInit)return;
   window._resumenColFilterDocInit=1;
-  document.addEventListener('click',()=>document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open')));
+  document.addEventListener('click',(e)=>{
+    if(e.target.closest('.resumen-th-filt')||e.target.closest('.resumen-col-menu'))return;
+    document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open'));
+  });
 }
 function clearResumenPivotFilters(){
   _resumenPivotFilt.mol={};
@@ -3363,9 +3366,9 @@ function _renderResumenPivotFilters(mod){
   const warn=rawN?'':'<div style="grid-column:1/-1;padding:8px 12px;font-size:12px;color:var(--warn);background:rgba(245,158,11,.12);border-radius:8px;margin-bottom:8px;">Sin registros en memoria. Pulsa <strong>☁ Traer datos</strong> y revisa las fechas arriba.</div>';
   host.innerHTML=warn+dims.map(d=>{
     const vals=[...new Set(rows.map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
-    const set=st[d.key];
+    const sel=_resumenPivotSel(st,d.key);
     const list=vals.length?vals.map(v=>{
-      const checked=!set||!set.size||set.has(v);
+      const checked=sel===null||sel.has(v);
       return `<label><input type="checkbox" ${checked?'checked':''} onchange="_resumenPivotCheckbox(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this.checked)"> ${esc(v)}</label>`;
     }).join(''):'<span style="font-size:11px;color:var(--text-3);">Sin valores en este rango de fechas</span>';
     return `<div class="rp-filt"><label class="form-label">${esc(d.label)}</label>
