@@ -321,6 +321,22 @@ tbody tr:hover{background:var(--surface-alt);}
 .resumen-pivot-filters .rp-checklist label{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 2px;cursor:pointer;}
 .resumen-pivot-filters .rp-checklist label:hover{background:var(--surface-alt);}
 .resumen-pivot-filters .rp-search{width:100%;margin-bottom:6px;font-size:12px;padding:6px 8px;}
+.resumen-pivot-head .resumen-th-filt{position:relative;vertical-align:bottom;}
+.resumen-pivot-head .resumen-th-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:72px;background:transparent;border:none;color:#fff;font:inherit;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;cursor:pointer;padding:0;text-align:left;}
+.resumen-pivot-head .resumen-th-btn.is-filtered .resumen-th-ic{color:#fde68a;}
+.resumen-pivot-head .resumen-th-ic{font-size:10px;opacity:.85;flex-shrink:0;}
+.resumen-pivot-head th.num .resumen-th-btn{justify-content:flex-end;}
+.resumen-col-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:120;min-width:220px;max-width:300px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:10px;display:none;text-transform:none;letter-spacing:normal;font-weight:400;}
+.resumen-col-menu.open{display:block;}
+.resumen-pivot-head th.num .resumen-col-menu{left:auto;right:0;}
+.resumen-col-menu .rp-search{width:100%;margin-bottom:8px;font-size:12px;padding:6px 8px;}
+.resumen-col-menu .rp-checklist{max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 8px;background:var(--surface-alt);}
+.resumen-col-menu .rp-checklist label{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 2px;cursor:pointer;}
+.resumen-col-menu .rp-checklist label:hover{background:var(--surface);}
+.resumen-col-menu .rp-menu-actions{display:flex;gap:6px;margin-bottom:8px;}
+.resumen-col-menu .rp-menu-actions button{flex:1;font-size:11px;padding:4px 8px;}
+#resumenPivotFilters{display:none;}
+#page-resumen .tbl-wrap{overflow:visible;}
 
 pre.sql{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:var(--radius);overflow-x:auto;font:500 12px var(--mono);line-height:1.5;max-height:480px;}
 .kbd{background:var(--surface-alt);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:2px 6px;font:600 11px var(--mono);}
@@ -621,7 +637,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <!-- ═══ RESUMEN MOLDE / PESAJE (tabla dinámica) ═══ -->
 <div class="page" id="page-resumen">
   <div class="page-hdr">
-    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, especie, guía, calibre, destino, totales. Filtros extra: línea y producto/tipo (sin nombres de operarios).</div></div>
+    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, especie, guía, calibre, destino, totales. Filtro ▾ en cada columna (sin nombres de operarios).</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="btn ghost sm" onclick="renderResumen()">↻ Actualizar</button>
       <button type="button" class="btn ghost sm" onclick="exportResumenExcel()">Exportar Excel</button>
@@ -637,7 +653,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSyncScopeFromDashboard()">↻ Desde dashboard</button></div>
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="typeof sbManualPullTabletRegs==='function'&&sbManualPullTabletRegs()">☁ Traer datos</button></div>
   </div>
-  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros por columna (tabla dinámica): sin marcar = todos. Kilos según fechas y turno de arriba.</div>
+  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros en cada columna de la tabla (▾). Kilos según fechas y turno de arriba.</div>
   <div class="tabs-inline" id="resumenTabs">
     <button type="button" class="active" data-resumen-mod="mol" onclick="setResumenMod(this,'mol')">Recolección moldes</button>
     <button type="button" data-resumen-mod="pes" onclick="setResumenMod(this,'pes')">Pesaje</button>
@@ -3067,15 +3083,7 @@ const _RESUMEN_TBL_COLS=[
   {key:'calibre',label:'Calibre',th:'Calibre'},
   {key:'destino',label:'Destino',th:'Destino'}
 ];
-const _RESUMEN_FILTER_DIMS_MOL=_RESUMEN_TBL_COLS.concat([
-  {key:'linea',label:'Línea',th:'Línea'},
-  {key:'producto',label:'Producto',th:'Producto'}
-]);
-const _RESUMEN_FILTER_DIMS_PES=_RESUMEN_TBL_COLS.concat([
-  {key:'linea',label:'Línea',th:'Línea'},
-  {key:'tipo',label:'Tipo pesaje',th:'Tipo'}
-]);
-function _resumenFilterDims(mod){return mod==='pes'?_RESUMEN_FILTER_DIMS_PES:_RESUMEN_FILTER_DIMS_MOL;}
+function _resumenFilterDims(){return _RESUMEN_TBL_COLS;}
 let _resumenMod='mol';
 const _resumenScope={fechaDesde:'',fechaHasta:'',turno:''};
 const _resumenPivotFilt={mol:{},pes:{}};
@@ -3162,7 +3170,7 @@ function _resumenRawRecs(mod){
 function _resumenPivotStore(mod){return _resumenPivotFilt[mod==='pes'?'pes':'mol'];}
 function _resumenPivotEnsure(mod){
   const st=_resumenPivotStore(mod);
-  _resumenFilterDims(mod).forEach(d=>{if(!st[d.key])st[d.key]=new Set();});
+  _resumenFilterDims().forEach(d=>{if(!st[d.key])st[d.key]=new Set();});
   return st;
 }
 function _adminPresetForRec(r){
@@ -3230,7 +3238,8 @@ function _resumenTogglePivot(mod,dim,val,el){
   if(!set)return;
   if(set.has(val))set.delete(val);else set.add(val);
   if(el&&el.classList)el.classList.toggle('on',set.has(val));
-  renderResumenTableOnly();
+  _resumenRefreshPivotTable(mod,true);
+  _resumenSyncColFilterUi(mod);
 }
 function _resumenPivotCheckbox(mod,dim,val,checked){
   const st=_resumenPivotEnsure(mod);
@@ -3244,23 +3253,90 @@ function _resumenPivotCheckbox(mod,dim,val,checked){
     if(!set.size)allVals.forEach(v=>{if(v!==val)set.add(v);});
     else set.delete(val);
   }
-  renderResumenTableOnly();
+  _resumenRefreshPivotTable(mod,true);
+  _resumenSyncColFilterUi(mod);
 }
 function _resumenSelectAllPivot(mod,dim,on){
   const st=_resumenPivotEnsure(mod);
   const rows=_resumenNormRows(mod);
   const vals=[...new Set(rows.map(r=>String(r[dim]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   st[dim]=on?new Set(vals):new Set();
-  renderResumen();
+  const menu=document.getElementById(_resumenColFilterMenuId(mod,dim));
+  const wasOpen=!!(menu&&menu.classList.contains('open'));
+  _resumenRefreshPivotTable(mod,true);
+  _resumenSyncColFilterUi(mod);
+  if(wasOpen){
+    const d=_RESUMEN_TBL_COLS.find(x=>x.key===dim);
+    const th=document.querySelector('#resumenPivotTbl th .resumen-th-btn[data-dim="'+dim+'"]');
+    if(d&&th){
+      const old=th.parentElement.querySelector('.resumen-col-menu');
+      if(old){
+        const tmp=document.createElement('div');
+        tmp.innerHTML=_resumenColFilterMenuHtml(mod,d);
+        const fresh=tmp.firstElementChild;
+        if(fresh){old.replaceWith(fresh);fresh.classList.add('open');}
+      }
+    }
+  }
 }
 function _resumenPivotFilterList(el,q){
-  const box=el&&el.parentElement&&el.parentElement.querySelector('.rp-checklist');
+  const menu=el&&el.closest('.resumen-col-menu');
+  const box=menu?menu.querySelector('.rp-checklist'):(el&&el.parentElement&&el.parentElement.querySelector('.rp-checklist'));
   if(!box)return;
   const n=String(q||'').trim().toLowerCase();
   box.querySelectorAll('label').forEach(lab=>{
     const t=(lab.textContent||'').toLowerCase();
     lab.style.display=!n||t.includes(n)?'':'none';
   });
+}
+function _resumenColFilterMenuId(mod,key){return 'resumenColMenu_'+mod+'_'+key;}
+function _resumenColFilterActive(mod,key){
+  const set=_resumenPivotStore(mod)[key];
+  return !!(set&&set.size);
+}
+function _resumenSyncColFilterUi(mod){
+  document.querySelectorAll('#resumenPivotTbl .resumen-th-btn[data-dim]').forEach(btn=>{
+    const k=btn.getAttribute('data-dim');
+    btn.classList.toggle('is-filtered',_resumenColFilterActive(mod,k));
+  });
+}
+function resumenColFilterToggle(ev,mod,key){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const menu=document.getElementById(_resumenColFilterMenuId(mod,key));
+  if(!menu)return;
+  const willOpen=!menu.classList.contains('open');
+  document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open'));
+  if(willOpen)menu.classList.add('open');
+}
+function _resumenColFilterMenuHtml(mod,d){
+  const vals=[...new Set(_resumenNormRows(mod).map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
+  const st=_resumenPivotEnsure(mod);
+  const set=st[d.key];
+  const list=vals.length?vals.map(v=>{
+    const checked=!set||!set.size||set.has(v);
+    return `<label><input type="checkbox" ${checked?'checked':''} onchange="_resumenPivotCheckbox(${JSON.stringify(mod)},${JSON.stringify(d.key)},${JSON.stringify(v)},this.checked)"> ${esc(v)}</label>`;
+  }).join(''):'<span style="font-size:11px;color:var(--text-3);">Sin valores</span>';
+  return `<div class="resumen-col-menu" id="${_resumenColFilterMenuId(mod,d.key)}" onclick="event.stopPropagation()">
+    <input type="text" class="input rp-search" placeholder="Buscar…" oninput="_resumenPivotFilterList(this,this.value)">
+    <div class="rp-menu-actions">
+      <button type="button" class="btn ghost sm" onclick="_resumenSelectAllPivot('${mod}','${d.key}',true)">Todos</button>
+      <button type="button" class="btn ghost sm" onclick="_resumenSelectAllPivot('${mod}','${d.key}',false)">Ninguno</button>
+    </div>
+    <div class="rp-checklist">${list}</div>
+  </div>`;
+}
+function _resumenRenderTableHead(mod){
+  const tblCols=_RESUMEN_TBL_COLS;
+  const hdr=tblCols.map(d=>{
+    const filtered=_resumenColFilterActive(mod,d.key);
+    return `<th class="resumen-th-filt"><button type="button" class="resumen-th-btn${filtered?' is-filtered':''}" data-dim="${d.key}" onclick="resumenColFilterToggle(event,${JSON.stringify(mod)},${JSON.stringify(d.key)})"><span>${esc(d.th||d.label)}</span><span class="resumen-th-ic">▾</span></button>${_resumenColFilterMenuHtml(mod,d)}</th>`;
+  }).join('')+'<th class="num">TOTAL</th><th class="num">TOTAL KILOS</th>';
+  return '<tr>'+hdr+'</tr>';
+}
+function _resumenInitColFilterDocClose(){
+  if(window._resumenColFilterDocInit)return;
+  window._resumenColFilterDocInit=1;
+  document.addEventListener('click',()=>document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open')));
 }
 function clearResumenPivotFilters(){
   _resumenPivotFilt.mol={};
@@ -3281,7 +3357,7 @@ function _renderResumenPivotFilters(mod){
   const host=document.getElementById('resumenPivotFilters');
   if(!host)return;
   const st=_resumenPivotEnsure(mod);
-  const dims=_resumenFilterDims(mod);
+  const dims=_resumenFilterDims();
   const rows=_resumenNormRows(mod);
   const rawN=_resumenRawRecs(mod).length;
   const warn=rawN?'':'<div style="grid-column:1/-1;padding:8px 12px;font-size:12px;color:var(--warn);background:rgba(245,158,11,.12);border-radius:8px;margin-bottom:8px;">Sin registros en memoria. Pulsa <strong>☁ Traer datos</strong> y revisa las fechas arriba.</div>';
@@ -3301,9 +3377,9 @@ function _renderResumenPivotFilters(mod){
       <div class="rp-checklist">${list}</div></div>`;
   }).join('');
 }
-function renderResumenTableOnly(){
-  const mod=_resumenMod;
-  const filterDims=_resumenFilterDims(mod);
+function _resumenRefreshPivotTable(mod,bodyOnly){
+  _resumenInitColFilterDocClose();
+  const filterDims=_resumenFilterDims();
   const tblCols=_RESUMEN_TBL_COLS;
   const st=_resumenPivotEnsure(mod);
   const rows=_resumenNormRows(mod).filter(r=>_resumenRowPassesPivot(r,st,filterDims));
@@ -3336,24 +3412,25 @@ function renderResumenTableOnly(){
   const turnoDash=turEl&&turEl.value&&turEl.selectedIndex>=0?turEl.options[turEl.selectedIndex].text:'Todos los turnos';
   if(sub)sub.textContent=agg.length+' filas · '+rows.length+' registros · '+rango+' · '+turnoDash+' · '+totKg.toLocaleString('es-CL',{maximumFractionDigits:1})+' kg';
   if(!tbl)return;
-  const hdrCols=tblCols.map(d=>`<th>${esc(d.th||d.label)}</th>`).join('')+
-    '<th class="num">total</th><th class="num">total kilos</th>';
   const body=agg.length?agg.map(r=>'<tr>'+
     tblCols.map(d=>`<td>${esc(r[d.key])}</td>`).join('')+
     `<td class="num">${(r.tot).toLocaleString('es-CL',{maximumFractionDigits:0})}</td>`+
     `<td class="num">${(r.kg).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>`+
     '</tr>').join(''):`<tr><td colspan="${tblCols.length+2}" style="text-align:center;padding:28px;color:var(--text-3);">Sin datos con los filtros actuales</td></tr>`;
   const foot=`<tr><td colspan="${tblCols.length}">Total general</td><td class="num">${totN.toLocaleString('es-CL',{maximumFractionDigits:0})}</td><td class="num">${totKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td></tr>`;
-  tbl.querySelector('thead').innerHTML='<tr>'+hdrCols+'</tr>';
+  if(!bodyOnly)tbl.querySelector('thead').innerHTML=_resumenRenderTableHead(mod);
   tbl.querySelector('tbody').innerHTML=body;
   tbl.querySelector('tfoot').innerHTML=foot;
 }
+function renderResumenTableOnly(){_resumenRefreshPivotTable(_resumenMod,false);}
 function renderResumen(){
   _resumenReadScopeFromDom();
   const mod=_resumenMod;
   const title=document.getElementById('resumenTblTitle');
   if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
-  _renderResumenPivotFilters(mod);
+  const rawN=_resumenRawRecs(mod).length;
+  const hint=document.getElementById('resumenDashHint');
+  if(hint)hint.textContent=rawN?'Filtros en cada columna de la tabla (▾). Kilos según fechas y turno de arriba.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
   renderResumenTableOnly();
 }
 function exportResumenExcel(){
@@ -3374,6 +3451,7 @@ window._resumenTogglePivot=_resumenTogglePivot;
 window._resumenSelectAllPivot=_resumenSelectAllPivot;
 window._resumenPivotCheckbox=_resumenPivotCheckbox;
 window._resumenPivotFilterList=_resumenPivotFilterList;
+window.resumenColFilterToggle=resumenColFilterToggle;
 window.onResumenScopeChange=onResumenScopeChange;
 window.resumenApplyScope=resumenApplyScope;
 window.resumenSetFechaHoy=resumenSetFechaHoy;
