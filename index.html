@@ -4134,6 +4134,17 @@ function _tbLoadLastPushSigsFromStorage(){
   }catch(e){console.warn('[tb load push sig]',e);}
 }
 const RT={moldes:[],pesajes:[],empacados:[],empaques:[],generales:[],eqState:{},cargas:[],selPresetM:null,selPresetP:null,selPresetE:null,selPresetG:null};
+/** Ids reservados de semilla demo (index): nunca deben subirse ni mezclarse con producción. */
+function _rtIsDemoMoldeId(id){const n=+id;return n>=901&&n<=910;}
+function _rtIsDemoPesajeId(id){const n=+id;return n>=801&&n<=808;}
+function _rtIsDemoMolde(r){return !!(r&&_rtIsDemoMoldeId(r.id));}
+function _rtIsDemoPesaje(r){return !!(r&&_rtIsDemoPesajeId(r.id));}
+function _rtPurgeDemoFromRt(){
+  let touched=false;
+  if(Array.isArray(RT.moldes)&&RT.moldes.some(_rtIsDemoMolde)){RT.moldes=RT.moldes.filter(r=>!_rtIsDemoMolde(r));touched=true;}
+  if(Array.isArray(RT.pesajes)&&RT.pesajes.some(_rtIsDemoPesaje)){RT.pesajes=RT.pesajes.filter(r=>!_rtIsDemoPesaje(r));touched=true;}
+  if(touched)try{rtSave();}catch(_){}
+}
 
 function rtLoad(){
   let hadPersistedRt=false;
@@ -4207,6 +4218,7 @@ function rtLoad(){
     const pd=RT.eqState['P-04'];if(pd){pd.estado='listo';pd.items=[{producto:'Filete Merluza Austral Bloque',presetId:4,cant:80,guia:'G-2026-044',horasTotal:4.5}];pd.horasTotal=4.5;pd.horaInicio='09:30';pd.progreso=100;}
     const pc=RT.eqState['P-03'];if(pc){pc.estado='cargando';pc.items=[{producto:'Filete Merluza 170-UP Bloque',presetId:1,cant:40,guia:'G-2026-044',horasTotal:4.5}];}
   }
+  _rtPurgeDemoFromRt();
   rtSave();
 }
 function rtSave(){try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}}
@@ -4226,6 +4238,7 @@ const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
 /** Supabase → filas RT.moldes (camelCase). */
 function _tbParseSbMolde(rec){
   if(!rec||rec.id==null)return null;
+  if(_rtIsDemoMoldeId(rec.id))return null;
   const pid=rec.presetId!=null?rec.presetId:rec.preset_id;
   return{
     id:rec.id,hora:rec.hora||null,turno:rec.turno||null,linea:rec.linea||null,
@@ -4238,6 +4251,7 @@ function _tbParseSbMolde(rec){
 }
 function _tbParseSbPesaje(rec){
   if(!rec||rec.id==null)return null;
+  if(_rtIsDemoPesajeId(rec.id))return null;
   const tid=rec.trabId!=null?rec.trabId:rec.trab_id;
   return{
     id:rec.id,hora:rec.hora||null,turno:rec.turno||null,linea:rec.linea||null,
@@ -4262,7 +4276,7 @@ function _tbMergeRtById(localArr,remoteRows,mapFn){
   const remote=(remoteRows||[]).map(mapFn).filter(Boolean);
   const local=Array.isArray(localArr)?localArr:[];
   const remoteIds=new Set(remote.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
-  const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id)));
+  const extra=local.filter(x=>x&&x.id!=null&&!remoteIds.has(String(x.id))&&!_rtIsDemoMolde(x)&&!_rtIsDemoPesaje(x));
   return remote.concat(extra);
 }
 /** Ids que en el último push exitoso se reflejaron en la nube (firma TBSync._lastSig.*). */
@@ -4301,6 +4315,7 @@ function _tbMergeRtByIdForPull(localArr,remoteRows,mapFn,opts){
     if(!x||x.id==null)continue;
     const id=String(x.id);
     if(remoteIds.has(id))continue;
+    if(_rtIsDemoMolde(x)||_rtIsDemoPesaje(x))continue;
     if(!pushedIds.has(id))extras.push(x);
   }
   return remote.concat(extras);
@@ -4367,6 +4382,7 @@ async function tbManualPullMoldesPesajes(opts){
       const lastSig=(typeof TBSync!=='undefined'&&TBSync._lastSig)?TBSync._lastSig[t]:'';
       RT[t]=_tbMergeRtByIdForPull(localBefore,data||[],mapFor(t),{pullLimit:4000,totalInDb,lastPushedSig:lastSig});
     }
+    _rtPurgeDemoFromRt();
     rtSave();
     if(typeof initRuntime==='function')initRuntime();
     try{if(typeof _tbPullEqRuntimeFromCloud==='function')await _tbPullEqRuntimeFromCloud({silent});}catch(e){console.warn('[tb pull eq_runtime]',e);}
@@ -10677,7 +10693,7 @@ const TBSync={
     const today=todayLocalYmd();
     const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
     const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
-    const moldesRows=(RT.moldes||[]).map(r=>{
+    const moldesRows=(RT.moldes||[]).filter(r=>!_rtIsDemoMolde(r)).map(r=>{
       const pid=r.presetId!=null?r.presetId:r.preset_id;
       return{
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
@@ -10688,7 +10704,7 @@ const TBSync={
         fecha:r.fecha||today
       };
     });
-    const pesajesRows=(RT.pesajes||[]).map(r=>{
+    const pesajesRows=(RT.pesajes||[]).filter(r=>!_rtIsDemoPesaje(r)).map(r=>{
       const tid=r.trabId!=null?r.trabId:r.trab_id;
       return{
         id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
@@ -10881,6 +10897,7 @@ const TBSync={
       _tbSb.channel('tb-ops')
         .on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
         const rec=p.new||p.old;if(!rec)return;
+        if(_rtIsDemoMoldeId(rec.id))return;
         const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,producto:rec.producto,presetId:rec.preset_id,destino:rec.destino,calibre:rec.calibre,especie:rec.especie,cant:rec.cant,pendiente:rec.pendiente,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
         const i=RT.moldes.findIndex(r=>String(r.id)===String(rec.id));
         if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);}
@@ -10892,6 +10909,7 @@ const TBSync={
       })
         .on('postgres_changes',{event:'*',schema:'public',table:'pesajes'},(p)=>{
         const rec=p.new||p.old;if(!rec)return;
+        if(_rtIsDemoPesajeId(rec.id))return;
         const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,trabId:rec.trab_id,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,especie:rec.especie,tipo:rec.tipo,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
         const i=RT.pesajes.findIndex(r=>String(r.id)===String(rec.id));
         if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);}
