@@ -1763,6 +1763,65 @@ body[data-theme="dark"] #pRegistrar .input[type="date"]{
 }
 .input.ficha-fixed{border-color:#16a34a !important;background:#ecfdf3;color:#166534;font-weight:700;}
 body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;background:rgba(34,197,94,.16);color:#bbf7d0;}
+/* Desplegable con búsqueda (formulario FRIOSUR) — moldes / pesaje */
+.fs-combo{position:relative;width:100%;}
+.fs-combo-trigger{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:10px 14px;
+  background:#fff;border:2px solid var(--navy-600);border-radius:var(--radius-sm);
+  cursor:pointer;font-family:var(--font);font-size:14px;color:var(--text);
+  box-shadow:0 1px 2px rgba(10,22,40,.06);transition:border-color .15s,box-shadow .15s;
+}
+.fs-combo-trigger:hover,.fs-combo-trigger.open{
+  border-color:var(--brand);
+  box-shadow:0 0 0 3px var(--focus-ring);
+}
+.fs-combo-ph{color:var(--text-3);font-weight:600;flex:1;text-align:left;}
+.fs-combo-val{flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;}
+.fs-combo-val[hidden],.fs-combo-ph[hidden]{display:none !important;}
+.fs-combo-code{
+  flex-shrink:0;padding:4px 10px;border-radius:8px;background:linear-gradient(135deg,#007aff,#5856d6);
+  color:#fff;font-size:12px;font-weight:800;letter-spacing:.02em;
+}
+.fs-combo-val-name{font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fs-combo-chevron{width:16px;height:16px;flex-shrink:0;opacity:.55;color:var(--navy-700);}
+.fs-combo-panel{
+  position:fixed;z-index:100050;display:flex;flex-direction:column;
+  background:#fff;border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 16px 48px rgba(15,23,42,.18),0 2px 8px rgba(15,23,42,.08);
+  max-height:min(360px,52vh);overflow:hidden;
+}
+.fs-combo-panel[hidden]{display:none !important;}
+.fs-combo-search-wrap{
+  display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);
+  background:var(--surface-alt);flex-shrink:0;
+}
+.fs-combo-search-wrap svg{width:16px;height:16px;flex-shrink:0;color:var(--text-3);}
+.fs-combo-search-inp{
+  flex:1;border:none;background:transparent;font:inherit;font-size:14px;color:var(--text);outline:none;
+}
+.fs-combo-search-inp::placeholder{color:var(--text-3);}
+.fs-combo-list{overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch;}
+.fs-combo-item{
+  display:flex;align-items:flex-start;gap:12px;width:100%;padding:12px 14px;border:none;border-bottom:1px solid var(--border);
+  background:#fff;cursor:pointer;text-align:left;font-family:var(--font);transition:background .1s;
+}
+.fs-combo-item:last-child{border-bottom:none;}
+.fs-combo-item:hover,.fs-combo-item:focus{background:color-mix(in srgb,var(--brand-accent) 10%,#fff);outline:none;}
+.fs-combo-item-code{
+  flex-shrink:0;min-width:52px;padding:5px 10px;border-radius:8px;text-align:center;
+  background:linear-gradient(135deg,#007aff,#5856d6);color:#fff;font-size:12px;font-weight:800;
+}
+.fs-combo-item-body{flex:1;min-width:0;}
+.fs-combo-item-name{font-size:14px;font-weight:700;color:var(--text);line-height:1.25;word-break:break-word;}
+.fs-combo-item-name em{font-style:normal;background:rgba(255,214,10,.65);border-radius:2px;padding:0 1px;}
+.fs-combo-item-sub{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.3;}
+.fs-combo-item-manual .fs-combo-item-code{background:linear-gradient(135deg,#30b0c7,#007aff);}
+.fs-combo-empty{padding:28px 16px;text-align:center;color:var(--text-3);font-size:13px;}
+#mRegistrar .fs-combo-trigger,#pRegistrar .fs-combo-trigger{border-width:2px;border-color:var(--navy-600);}
+body[data-theme="dark"] .fs-combo-trigger{background:var(--surface-alt);border-color:var(--border-strong);color:var(--text);}
+body[data-theme="dark"] .fs-combo-panel{background:var(--surface);border-color:var(--border-strong);}
+body[data-theme="dark"] .fs-combo-item{background:var(--surface);}
+body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.4/dist/umd/supabase.min.js"></script>
 </head>
@@ -1902,7 +1961,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
           <label class="form-label">Trabajador <span id="mRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
           <button class="ios-picker-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange',true,_getMRegPickerWorkers)">
             <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span class="trigger-name">— Selecciona —</span>
+            <span class="trigger-name">SELECCIONE AL TRABAJADOR</span>
             <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="mRegTrab" onchange="onMRegTrabChange()"></select>
@@ -2227,7 +2286,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                   <label class="form-label">Planillero</label>
                   <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false,_getPRegPickerPlanilleros)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <span class="trigger-name">— Selecciona —</span>
+                    <span class="trigger-name">SELECCIONE AL PLANILLERO</span>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
                   <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegPlanillero"></select>
@@ -2265,7 +2324,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
                   <label class="form-label">Trabajador <span class="required">*</span> <span id="pRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
                   <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <span class="trigger-name">— Selecciona —</span>
+                    <span class="trigger-name">SELECCIONE AL TRABAJADOR</span>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
                   <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegTrab" onchange="onPRegTrabChange()"></select>
@@ -5222,7 +5281,7 @@ function onMRegTrabChange(){
     if(btn){
       btn.innerHTML=`
       <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span class="trigger-name">— Selecciona —</span>
+      <span class="trigger-name">SELECCIONE AL TRABAJADOR</span>
       <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
     }
     if(window.renderMRegPresets)renderMRegPresets();
@@ -6801,12 +6860,12 @@ function renderPRegPlanilleros(){
   }else if(!workers.length){
     const pb=document.getElementById('pRegPlanilleroPicker');
     if(pb){
-      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">— Selecciona —</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">SELECCIONE AL TRABAJADOR</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
     }
   }else if(workers.length&&!String(sel.value||'').trim()){
     const pb=document.getElementById('pRegPlanilleroPicker');
     if(pb){
-      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">— Selecciona —</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">SELECCIONE AL TRABAJADOR</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
     }
   }
   if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
@@ -8294,7 +8353,7 @@ function editPArmadoLinea(ln){
       <!-- AGREGAR NUEVO -->
       <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
         <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
-        <button class="ios-picker-trigger" type="button" id="pArmPickerBtn" onclick="openIosPicker('trab',function(id,nombre,codigo){_pArmAddById(id,nombre);})">
+        <button class="ios-picker-trigger" type="button" id="pArmPickerBtn" onclick="openIosPicker(event,'trab',function(id,nombre,codigo){_pArmAddById(id,nombre);})">
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <span class="trigger-name">Buscar por nombre o código…</span>
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -8356,7 +8415,7 @@ function renderPArmModal(){
         <button class="btn ghost sm" type="button" onclick="_editPArmado.planillero=null;renderPArmModal();">Cambiar</button>
       </div>`;
     } else {
-      pBox.innerHTML=`<button class="ios-picker-trigger" type="button" onclick="openIosPicker('planillero',function(id,nombre,codigo){_pArmSetPlanillero(id,nombre);})">
+      pBox.innerHTML=`<button class="ios-picker-trigger" type="button" onclick="openIosPicker(event,'planillero',function(id,nombre,codigo){_pArmSetPlanillero(id,nombre);})">
         <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <span class="trigger-name" style="color:var(--text-3);">Buscar planillero…</span>
         <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -9163,57 +9222,196 @@ function _planilleroPickerMergedList(){
   });
   return out.sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
 }
-function openIosPicker(mode,cb,trabsList){
-  // trabsList: lista ya filtrada (modo registro) → mostrar todos
-  // null      : modo armado → mostrar 5 aleatorios, buscar en todos
-  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
-  const isArmadoPlanillero=(mode==='planillero'&&!Array.isArray(trabsList));
-  const defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
-  const allTrabs=Array.isArray(trabsList)?trabsList:defaultPool;
-  const isRegistro=Array.isArray(trabsList); // registro = array (incluso vacío); armado = null
-  const hideManual=!!(isRegistro&&trabsList&&trabsList._enArmadoLinea&&allTrabs.length>0);
-  // Lista inicial: registro→todos ; armado→5 aleatorios
-  const initialTrabs=isRegistro?allTrabs:_pickRandom5(allTrabs);
-  _iosPicker={mode,cb,trabsList:allTrabs,isRegistro,hideManual};
-  const badgeTxt=(isRegistro&&trabsList&&trabsList._enArmadoLinea)?(allTrabs.length+' en armado'):(allTrabs.length+' personas');
-  const badge=isRegistro
-    ?`<span style="font-size:11px;font-weight:600;color:#0369a1;margin-left:6px;background:#dbeafe;border-radius:10px;padding:1px 8px;">${esc(badgeTxt)}</span>`
-    :'';
-  const placeholder=isRegistro?'Buscar: nombre, código o nº ficha…':'Buscar: nombre, código o nº ficha…';
-  const overlay=document.createElement('div');overlay.className='ios-picker-overlay';overlay.id='iosPicker';
-  const titlePlan=mode==='planillero'||String(mode||'').toLowerCase().includes('planillero');
-  overlay.innerHTML=`
-    <div class="ios-picker-sheet" onclick="event.stopPropagation()">
-      <div class="ios-picker-handle"></div>
-      <div class="ios-picker-hdr">
-        <span class="ios-picker-title">${titlePlan?'Seleccionar Planillero':mode==='trab'?'Agregar Trabajador':esc(mode)}${badge}</span>
-        <button class="ios-picker-cancel" onclick="closeIosPicker()">Cancelar</button>
-      </div>
-      <div class="ios-picker-search-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input class="ios-picker-search-inp" id="iosPickerSearch" placeholder="${placeholder}" autocomplete="off" oninput="filterIosPicker(this.value)" enterkeyhint="search">
-      </div>
-      <div class="ios-picker-list" id="iosPickerList">
-        ${_renderIosItems(initialTrabs,'')}
-      </div>
-    </div>`;
-  overlay.addEventListener('click',closeIosPicker);
-  document.body.appendChild(overlay);
-  // ── Fix teclado virtual: el sheet sube con el viewport ──────────
-  if(window.visualViewport){
-    const _vpAdj=()=>{
-      const vp=window.visualViewport;
-      overlay.style.height=vp.height+'px';
-      overlay.style.top=vp.offsetTop+'px';
-      overlay.style.bottom='auto';
-    };
-    window.visualViewport.addEventListener('resize',_vpAdj);
-    window.visualViewport.addEventListener('scroll',_vpAdj);
-    _iosPicker._vpAdj=_vpAdj;
-    _vpAdj();
+let _fsCombo=null;
+function _fsComboAreaSub(t){
+  const ficha=t&&t.ficha!=null&&String(t.ficha).trim()?String(t.ficha).trim():'';
+  const areaMap={moldes:'PRODUCCIÓN MOLDES',pesaje:'PRODUCCIÓN PESAJE',empaque:'EMPAQUE',general:'GENERAL'};
+  const area=areaMap[String(t&&t.area||'').toLowerCase()]||String(t&&t.area||'').toUpperCase();
+  if(ficha&&area)return ficha+' - '+area;
+  if(ficha)return 'Ficha '+ficha;
+  if(area)return area;
+  return t&&t.codigo?('Código '+t.codigo):'';
+}
+function _fsComboCodeBadge(t){
+  const c=String(t&&t.codigo||'').trim();
+  if(c)return c;
+  const f=String(t&&t.ficha||'').trim();
+  if(f)return f;
+  return '—';
+}
+function _fsComboEnsureWrap(anchorEl){
+  if(!anchorEl)return null;
+  let wrap=anchorEl.closest('.fs-combo');
+  if(wrap)return wrap;
+  wrap=document.createElement('div');
+  wrap.className='fs-combo';
+  anchorEl.parentNode.insertBefore(wrap,anchorEl);
+  wrap.appendChild(anchorEl);
+  anchorEl.classList.remove('ios-picker-trigger');
+  anchorEl.classList.add('fs-combo-trigger');
+  anchorEl.type='button';
+  anchorEl.setAttribute('aria-haspopup','listbox');
+  const ph=anchorEl.querySelector('.trigger-name,.fs-combo-ph');
+  const label=(ph&&ph.textContent&&ph.textContent.trim())||'SELECCIONE AL TRABAJADOR';
+  anchorEl.innerHTML=`
+    <span class="fs-combo-ph">${esc(label)}</span>
+    <span class="fs-combo-val" hidden></span>
+    <svg class="fs-combo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  return wrap;
+}
+function _fsComboPositionPanel(){
+  if(!_fsCombo||!_fsCombo.anchor||!_fsCombo.panel)return;
+  const r=_fsCombo.anchor.getBoundingClientRect();
+  const panel=_fsCombo.panel;
+  const maxH=Math.min(360,Math.max(160,window.innerHeight-r.bottom-12));
+  panel.style.top=(r.bottom+4)+'px';
+  panel.style.left=r.left+'px';
+  panel.style.width=Math.max(r.width,280)+'px';
+  panel.style.maxHeight=maxH+'px';
+}
+function closeFsCombo(){
+  if(_fsCombo&&_fsCombo.panel){
+    _fsCombo.panel.hidden=true;
+    if(_fsCombo.anchor)_fsCombo.anchor.classList.remove('open');
+    if(_fsCombo.panel.parentNode===document.body)document.body.removeChild(_fsCombo.panel);
   }
-  // NO auto-focus: evita que el teclado virtual aparezca durante la animación
-  // El usuario toca el buscador si quiere escribir
+  if(_fsCombo&&_fsCombo._docClick)document.removeEventListener('mousedown',_fsCombo._docClick,true);
+  if(_fsCombo&&_fsCombo._reposition)window.removeEventListener('resize',_fsCombo._reposition);
+  _fsCombo=null;
+}
+function _fsComboDocClick(e){
+  if(!_fsCombo)return;
+  const t=e.target;
+  if(_fsCombo.panel&&_fsCombo.panel.contains(t))return;
+  if(_fsCombo.anchor&&(_fsCombo.anchor===t||_fsCombo.anchor.contains(t)))return;
+  closeFsCombo();
+}
+function _fsComboHi(str,qLow){
+  if(!qLow)return esc(str);
+  const s=String(str||'');
+  const i=s.toLowerCase().indexOf(qLow);
+  if(i<0)return esc(s);
+  return esc(s.slice(0,i))+'<em>'+esc(s.slice(i,i+qLow.length))+'</em>'+esc(s.slice(i+qLow.length));
+}
+function _fsComboRenderList(trabs,q,opts){
+  const qLow=(q||'').toLowerCase().trim();
+  let filtered=trabs;
+  if(qLow){
+    filtered=trabs.filter(t=>{
+      const n=(t.nombre||'').toLowerCase();
+      const c=(t.codigo||'').toLowerCase();
+      const f=(t.ficha||'').toString().toLowerCase();
+      return n.includes(qLow)||c.includes(qLow)||f.includes(qLow);
+    });
+  }
+  let html='';
+  if(opts&&opts.allowManual){
+    html+=`<button type="button" class="fs-combo-item fs-combo-item-manual" data-id="__manual__">
+      <span class="fs-combo-item-code">✎</span>
+      <span class="fs-combo-item-body">
+        <span class="fs-combo-item-name">Ingresar nombre manualmente</span>
+        <span class="fs-combo-item-sub">Nombre libre</span>
+      </span>
+    </button>`;
+  }
+  if(!filtered.length){
+    html+=`<div class="fs-combo-empty">${qLow?'Sin resultados para «'+esc(q)+'»':(opts&&opts.emptyMsg?esc(opts.emptyMsg):'Sin personas en la lista')}</div>`;
+    return html;
+  }
+  filtered.forEach(t=>{
+    const code=_fsComboCodeBadge(t);
+    html+=`<button type="button" class="fs-combo-item" data-id="${esc(String(t.id))}" data-nombre="${esc(t.nombre||'')}" data-codigo="${esc(t.codigo||'')}">
+      <span class="fs-combo-item-code">${_fsComboHi(code,qLow)}</span>
+      <span class="fs-combo-item-body">
+        <span class="fs-combo-item-name">${_fsComboHi(t.nombre||'',qLow)}</span>
+        <span class="fs-combo-item-sub">${esc(_fsComboAreaSub(t))}</span>
+      </span>
+    </button>`;
+  });
+  return html;
+}
+function _fsComboOnListClick(e){
+  const btn=e.target.closest('.fs-combo-item');
+  if(!btn||!_fsCombo)return;
+  const id=btn.getAttribute('data-id');
+  const nombre=btn.getAttribute('data-nombre')||'';
+  const codigo=btn.getAttribute('data-codigo')||'';
+  const cb=_fsCombo.onSelect;
+  closeFsCombo();
+  if(cb)cb(id,nombre,codigo);
+}
+function openFsCombo(cfg){
+  if(!cfg||!cfg.anchorEl)return;
+  const anchor=cfg.anchorEl;
+  _fsComboEnsureWrap(anchor);
+  if(_fsCombo&&_fsCombo.anchor===anchor&&_fsCombo.panel&&!_fsCombo.panel.hidden){closeFsCombo();return;}
+  closeFsCombo();
+  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  const isArmadoPlanillero=cfg.mode==='planillero'&&!Array.isArray(cfg.workers);
+  const defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  const allTrabs=Array.isArray(cfg.workers)?cfg.workers:defaultPool;
+  const allowManual=cfg.allowManual!==false&&!cfg.hideManual;
+  const panel=document.createElement('div');
+  panel.className='fs-combo-panel';
+  panel.setAttribute('role','listbox');
+  panel.innerHTML=`
+    <div class="fs-combo-search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input class="fs-combo-search-inp" type="search" placeholder="Escribe nombre o código para filtrar…" autocomplete="off" enterkeyhint="search">
+    </div>
+    <div class="fs-combo-list"></div>`;
+  document.body.appendChild(panel);
+  const list=panel.querySelector('.fs-combo-list');
+  const searchInp=panel.querySelector('.fs-combo-search-inp');
+  const renderOpts={allowManual,emptyMsg:cfg.emptyMsg};
+  list.innerHTML=_fsComboRenderList(allTrabs,'',renderOpts);
+  list.addEventListener('click',_fsComboOnListClick);
+  searchInp.addEventListener('input',()=>{list.innerHTML=_fsComboRenderList(allTrabs,searchInp.value,renderOpts);});
+  _fsCombo={anchor,panel,allTrabs,onSelect:cfg.onSelect,renderOpts};
+  panel.hidden=false;
+  anchor.classList.add('open');
+  _fsComboPositionPanel();
+  _fsCombo._reposition=()=>_fsComboPositionPanel();
+  window.addEventListener('resize',_fsCombo._reposition);
+  _fsCombo._docClick=_fsComboDocClick;
+  document.addEventListener('mousedown',_fsCombo._docClick,true);
+  setTimeout(()=>{try{searchInp.focus();}catch(e){}},40);
+}
+function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
+  let anchorEl=null,mode,cb,list;
+  if(evOrMode&&evOrMode.currentTarget){
+    anchorEl=evOrMode.currentTarget;
+    mode=modeOrCb;cb=cbOrList;list=arguments[3];
+  }else{
+    mode=evOrMode;cb=modeOrCb;list=cbOrList;
+    anchorEl=document.getElementById('mArmPickerBtn')||document.getElementById('pArmPickerBtn')||document.activeElement;
+  }
+  const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
+  const isArmadoPlanillero=(mode==='planillero'&&!Array.isArray(list));
+  const defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  const allTrabs=Array.isArray(list)?list:defaultPool;
+  const isRegistro=Array.isArray(list);
+  const hideManual=!!(isRegistro&&list&&list._enArmadoLinea&&allTrabs.length>0);
+  openFsCombo({
+    anchorEl,
+    mode,
+    workers:allTrabs,
+    allowManual:!hideManual,
+    hideManual,
+    emptyMsg:isRegistro?'Sin trabajadores asignados en esta línea':'Sin resultados',
+    onSelect:function(id,nombre,codigo){
+      if(id==='__manual__'){
+        const manBox=document.getElementById('mArmManualBox')||document.getElementById('pArmManualBox');
+        if(manBox)manBox.style.display='block';
+        setTimeout(()=>{
+          const inp=document.getElementById('mArmManualNombre')||document.getElementById('pArmManualNombre');
+          if(inp)inp.focus();
+        },80);
+        return;
+      }
+      if(cb)cb(id,nombre,codigo);
+    }
+  });
 }
 function _renderIosItems(trabs,q){
   const qLow=q.toLowerCase().trim();
@@ -9300,7 +9498,7 @@ function selectIosWorker(id,nombre,codigo){
   if(cb)cb(id,nombre,codigo);
 }
 function closeIosPicker(){
-  // Limpiar listener de teclado virtual
+  closeFsCombo();
   if(window.visualViewport&&_iosPicker&&_iosPicker._vpAdj){
     window.visualViewport.removeEventListener('resize',_iosPicker._vpAdj);
     window.visualViewport.removeEventListener('scroll',_iosPicker._vpAdj);
@@ -9318,8 +9516,17 @@ function closeIosPicker(){
 function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
   if(allowManual===undefined)allowManual=true;
   // workersFn: función que devuelve lista filtrada de trabajadores (o null = mostrar todos)
+  const anchorEl=document.getElementById(selectId+'Picker');
   const trabsList=(typeof workersFn==='function')?workersFn():null;
-  openIosPicker(title, function(id, nombre, codigo){
+  const hideManual=!!(trabsList&&trabsList._enArmadoLinea&&trabsList.length>0);
+  openFsCombo({
+    anchorEl,
+    mode:title,
+    workers:trabsList,
+    allowManual:allowManual&&!hideManual,
+    hideManual,
+    emptyMsg:'Sin trabajadores asignados en esta línea',
+    onSelect:function(id, nombre, codigo){
     if(id==='__manual__'){
       // Show manual overlay (fallback prompt)
       const nom=(prompt('Nombre del trabajador:')||'').trim();
@@ -9376,28 +9583,38 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
     }
     _updateRegPickerDisplay(selectId,nombre,displayMeta);
     if(changeFnName&&window[changeFnName])window[changeFnName]();
-  }, trabsList);  // pasa lista filtrada al picker
+  }
+  });
 }
 function _updateRegPickerDisplay(selectId,nombre,codigo){
   const btn=document.getElementById(selectId+'Picker');
   if(!btn)return;
-  const ini=(nombre||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
-  btn.innerHTML=`
-    <div class="trigger-av">${esc(ini)}</div>
-    <div style="flex:1;text-align:left;min-width:0;">
-      <div class="trigger-name">${esc(nombre)}</div>
-      ${codigo?`<div class="trigger-code">${esc(codigo)}</div>`:''}
-    </div>
-    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  _fsComboEnsureWrap(btn);
+  const ph=btn.querySelector('.fs-combo-ph');
+  const val=btn.querySelector('.fs-combo-val');
+  if(!nombre){
+    if(ph){ph.hidden=false;ph.textContent=selectId==='pRegPlanillero'?'SELECCIONE AL PLANILLERO':'SELECCIONE AL TRABAJADOR';}
+    if(val)val.hidden=true;
+    return;
+  }
+  if(ph)ph.hidden=true;
+  if(val){
+    val.hidden=false;
+    const sel=document.getElementById(selectId);
+    const tDb=DB.data.trabajadores.find(x=>String(x.id)===String(sel&&sel.value));
+    const code=_fsComboCodeBadge(tDb||{codigo:codigo});
+    val.innerHTML='<span class="fs-combo-code">'+esc(code)+'</span><span class="fs-combo-val-name">'+esc(nombre)+'</span>';
+  }
 }
 function clearRegPicker(selectId,changeFnName){
   const sel=document.getElementById(selectId);if(sel)sel.value='';
   const btn=document.getElementById(selectId+'Picker');
   if(btn){
-    btn.innerHTML=`
-      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span class="trigger-name">— Selecciona —</span>
-      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+    _fsComboEnsureWrap(btn);
+    const ph=btn.querySelector('.fs-combo-ph');
+    const val=btn.querySelector('.fs-combo-val');
+    if(ph){ph.hidden=false;ph.textContent=selectId==='pRegPlanillero'?'SELECCIONE AL PLANILLERO':'SELECCIONE AL TRABAJADOR';}
+    if(val)val.hidden=true;
   }
   if(changeFnName&&window[changeFnName])window[changeFnName]();
 }
@@ -9467,7 +9684,7 @@ function editMArmadoLinea(ln){
       <!-- AGREGAR -->
       <div style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">
         <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">+ Agregar trabajador</label>
-        <button class="ios-picker-trigger" type="button" id="mArmPickerBtn" onclick="openIosPicker('trab',function(id,nombre,codigo){_mArmAddById(id,nombre,codigo);})">
+        <button class="ios-picker-trigger" type="button" id="mArmPickerBtn" onclick="openIosPicker(event,'trab',function(id,nombre,codigo){_mArmAddById(id,nombre,codigo);})">
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <span class="trigger-name">Buscar por nombre o código…</span>
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -9635,7 +9852,7 @@ function renderMArmModal(){
         <button class="btn ghost sm" type="button" onclick="_editMArmado.planillero=null;renderMArmModal();">Cambiar</button>
       </div>`;
     } else {
-      pBox.innerHTML=`<button class="ios-picker-trigger" type="button" onclick="openIosPicker('planillero',function(id,nombre,codigo){_mArmSetPlanillero(id,nombre,codigo);})">
+      pBox.innerHTML=`<button class="ios-picker-trigger" type="button" onclick="openIosPicker(event,'planillero',function(id,nombre,codigo){_mArmSetPlanillero(id,nombre,codigo);})">
         <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <span class="trigger-name" style="color:var(--text-3);">Buscar planillero…</span>
         <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -9775,7 +9992,7 @@ window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;wind
 window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;window.guardarMArmadoSnapshot=guardarMArmadoSnapshot;
 window.openMoverTrabArmadoMoldeFromChip=openMoverTrabArmadoMoldeFromChip;window.openMoverTrabArmadoMolde=openMoverTrabArmadoMolde;window.closeMoverTrabArmadoMolde=closeMoverTrabArmadoMolde;window.confirmMoverTrabArmadoMolde=confirmMoverTrabArmadoMolde;
 window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
-window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
+window.openFsCombo=openFsCombo;window.closeFsCombo=closeFsCombo;window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;window.filterIosPicker=filterIosPicker;window.selectIosWorker=selectIosWorker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
 window.syncPArmadoLineaDesdeMoldes=syncPArmadoLineaDesdeMoldes;window.syncPArmadoScopeDesdeMoldes=syncPArmadoScopeDesdeMoldes;
 window.syncPArmadoScopeDesdePRegistrar=syncPArmadoScopeDesdePRegistrar;
