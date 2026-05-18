@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -10223,6 +10223,51 @@ function _tbResolveSupabaseCreds(){
   }
 }
 let _tbSb=null;
+const FRIOSUR_TABLET_PRESENCE_CHANNEL='friosur-tablets-online';
+let _tbPresenceCh=null;
+function _tbPresenceTabKey(){
+  try{
+    let k=sessionStorage.getItem('friosur_tb_presence_tab');
+    if(!k){k='tb-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9);sessionStorage.setItem('friosur_tb_presence_tab',k);}
+    return k;
+  }catch(e){return'tb-'+(_tbUser&&_tbUser.id?_tbUser.id:'anon');}
+}
+function _tbPresenceTrackPayload(){
+  return{
+    client:'tablet',
+    userId:_tbUser&&_tbUser.id,
+    nombre:(_tbUser&&_tbUser.nombre)||'',
+    email:(_tbUser&&_tbUser.email)||'',
+    rol:(_tbUser&&_tbUser.rol)||'',
+    onlineAt:new Date().toISOString(),
+  };
+}
+async function tbStopTabletPresence(){
+  if(_tbPresenceCh){
+    try{await _tbPresenceCh.untrack();}catch(_){}
+    try{if(_tbSb)await _tbSb.removeChannel(_tbPresenceCh);}catch(_){}
+    _tbPresenceCh=null;
+  }
+}
+async function tbStartTabletPresence(){
+  if(!_tbSb||!_tbUser)return;
+  await tbStopTabletPresence();
+  const ch=_tbSb.channel(FRIOSUR_TABLET_PRESENCE_CHANNEL,{config:{presence:{key:_tbPresenceTabKey()}}});
+  _tbPresenceCh=ch;
+  ch.subscribe(async(status)=>{
+    if(status==='SUBSCRIBED'){
+      try{await ch.track(_tbPresenceTrackPayload());}catch(e){console.warn('[tb presence track]',e);}
+    }
+  });
+}
+if(!window._tbPresenceVisHook){
+  window._tbPresenceVisHook=true;
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible'||!_tbPresenceCh||!_tbUser)return;
+    try{void _tbPresenceCh.track(_tbPresenceTrackPayload());}catch(_){}
+  });
+}
+
 /** Opciones Auth: persistencia en localStorage; `storageKey` distinto al de admin para no compartir JWT entre páginas (evita signOut cruzado y parpadeo). */
 function _tbSbAuthOptions(){
   try{
@@ -11003,6 +11048,7 @@ async function tbInitAuth(){
         return;
       }
       if(event==='SIGNED_OUT'){
+        try{await tbStopTabletPresence();}catch(_){}
         _tbUser=null;
         if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();
         tbShowAuth();
@@ -11030,6 +11076,7 @@ async function tbApplySession(session){
     _tbUser={id:session.user.id,email:session.user.email,rol:(data&&data.rol)||'operario',nombre:(data&&data.nombre)||session.user.email.split('@')[0]};
   }catch(e){_tbUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
   tbUpdateUserBadge();
+  try{void tbStartTabletPresence();}catch(e){console.warn('[tb presence]',e);}
   try{_tbLoadLastPushSigsFromStorage();}catch(_){}
 }
 async function tbDoLogin(){
@@ -11047,7 +11094,7 @@ async function tbDoLogin(){
     document.getElementById('tbAuthPass').value='';
   }catch(e){msg.style.color='#dc2626';msg.textContent=e.message||'Credenciales incorrectas';}
 }
-async function tbDoLogout(){if(_tbSb){await _tbSb.auth.signOut();_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();}}
+async function tbDoLogout(){try{await tbStopTabletPresence();}catch(_){}if(_tbSb){await _tbSb.auth.signOut();_tbUser=null;if(typeof tbUpdateUserBadge==='function')tbUpdateUserBadge();}}
 function idxUserChipClick(){
   try{
     if(typeof _tbUser!=='undefined'&&_tbUser){if(confirm('¿Cerrar sesión?'))tbDoLogout();}

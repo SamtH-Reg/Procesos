@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es" data-theme="marine">
 <head>
 <meta charset="utf-8">
@@ -364,6 +364,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   </div>
   <div class="topbar-ctx">
     <div class="chip"><span class="status-dot offline" id="sbDot"></span><span id="sbStatus">Supabase: no conectado</span></div>
+    <div class="chip" id="adminTabletPresenceChip" title="Tablets con index.html abiertas y sesión Supabase"><span class="status-dot offline"></span><span>Tablets: <strong>0</strong></span></div>
     <div class="chip" id="dbSizeChip">DB local: —</div>
     <div class="chip" id="dateChip">—</div>
   </div>
@@ -848,6 +849,11 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
         Credenciales en <span class="kbd">localStorage</span> (<span class="kbd">friosur_sb</span>); en producción usa RLS.
       </div>
     </div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="card-hdr"><div class="card-title">📱 Tablets conectadas (index)</div><span class="badge info" id="adminTabletPresenceBadge">0</span></div>
+    <p style="margin:0 0 12px;font-size:12px;color:var(--text-3);">Sesiones activas en <strong>index.html</strong> con usuario Supabase (Realtime Presence).</p>
+    <div id="adminTabletPresenceList" style="font-size:13px;line-height:1.5;">Sin tablets conectadas</div>
   </div>
   <div class="card" style="margin-top:16px;">
     <div class="card-hdr"><div class="card-title">🧪 Log de sincronización</div><button class="btn sm ghost" onclick="document.getElementById('sbLog').innerHTML='';">Limpiar</button></div>
@@ -4191,6 +4197,7 @@ async function applySession(session){
   hideAuthOverlay();
   applyRolePermissions();
   updateUserBadge();
+  try{adminStartTabletPresenceWatch();}catch(_){}
   sbLog('Sesión admin: '+_currentUser.email+' ('+_currentUser.rol+')');
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   /* Catálogo desde la nube antes que moldes/pesajes (paridad index: pullCatalogs antes del merge RT). */
@@ -4326,8 +4333,10 @@ async function connectSupabase(silent){
     return;
   }
   try{
+    adminStopTabletPresenceWatch();
     _sb=window.supabase.createClient(url,key,_sbAdminAuthOptions());
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(sbMsgEconomyEnabled())sbStopPoll();else if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
+    adminStartTabletPresenceWatch();
     await bindSupabaseAuth();
   }
   catch(e){
@@ -4337,6 +4346,74 @@ async function connectSupabase(silent){
     if(m){m.style.color='#dc2626';m.textContent='No se pudo crear el cliente Supabase: '+(e&&e.message?e.message:String(e));}
   }
 }
+
+/** Canal Realtime Presence: tablets en index.html (admin muestra conteo + lista). */
+const FRIOSUR_TABLET_PRESENCE_CHANNEL='friosur-tablets-online';
+let _adminPresenceCh=null;
+function _adminTabletSessionsFromPresence(state){
+  const out=[];
+  Object.keys(state||{}).forEach(key=>{
+    const arr=Array.isArray(state[key])?state[key]:[state[key]];
+    arr.forEach(p=>{
+      if(!p||String(p.client||'')!=='tablet')return;
+      out.push({key,...p});
+    });
+  });
+  out.sort((a,b)=>String(a.nombre||a.email||'').localeCompare(String(b.nombre||b.email||''),'es',{sensitivity:'base'}));
+  return out;
+}
+function adminRenderTabletPresence(state){
+  const list=_adminTabletSessionsFromPresence(state);
+  const n=list.length;
+  const chip=document.getElementById('adminTabletPresenceChip');
+  if(chip){
+    const dot=chip.querySelector('.status-dot');
+    if(dot)dot.className='status-dot '+(n?'online':'offline');
+    const strong=chip.querySelector('strong');
+    if(strong)strong.textContent=String(n);
+    chip.title=n?list.map(t=>(t.nombre||t.email||'?')+(t.rol?(' · '+t.rol):'')).join('\n'):'Ninguna tablet con index.html abierta y sesión activa';
+  }
+  const badge=document.getElementById('adminTabletPresenceBadge');
+  if(badge)badge.textContent=String(n);
+  const wrap=document.getElementById('adminTabletPresenceList');
+  if(wrap){
+    if(!n){
+      wrap.innerHTML='<div style="color:var(--text-3);padding:8px 0;">Sin tablets conectadas. Abrí <strong>index.html</strong> e iniciá sesión.</div>';
+    }else{
+      wrap.innerHTML='<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">Usuario</th><th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">Rol</th><th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">Correo</th></tr></thead><tbody>'+
+        list.map(t=>'<tr style="border-top:1px solid var(--border);"><td style="padding:10px;"><strong>'+esc(t.nombre||'—')+'</strong></td><td style="padding:10px;">'+esc(t.rol||'—')+'</td><td style="padding:10px;font-size:12px;color:var(--text-3);">'+esc(t.email||'—')+'</td></tr>').join('')+
+        '</tbody></table>';
+    }
+  }
+}
+function adminStopTabletPresenceWatch(){
+  if(_adminPresenceCh){
+    try{_adminPresenceCh.untrack();}catch(_){}
+    try{if(_sb)_sb.removeChannel(_adminPresenceCh);}catch(_){}
+    _adminPresenceCh=null;
+  }
+  adminRenderTabletPresence({});
+}
+function adminStartTabletPresenceWatch(){
+  if(!_sb)return;
+  adminStopTabletPresenceWatch();
+  const adminKey='admin-'+(_currentUser&&_currentUser.id?_currentUser.id:'watch');
+  const ch=_sb.channel(FRIOSUR_TABLET_PRESENCE_CHANNEL,{config:{presence:{key:adminKey}}});
+  const bump=()=>{try{adminRenderTabletPresence(ch.presenceState());}catch(e){console.warn('[admin presence]',e);}};
+  ch.on('presence',{event:'sync'},bump);
+  ch.on('presence',{event:'join'},bump);
+  ch.on('presence',{event:'leave'},bump);
+  _adminPresenceCh=ch;
+  ch.subscribe(async(status)=>{
+    if(status==='SUBSCRIBED'){
+      bump();
+      if(_currentUser){
+        try{await ch.track({client:'admin',userId:_currentUser.id,nombre:_currentUser.nombre,email:_currentUser.email,rol:_currentUser.rol});}catch(_){}
+      }
+    }
+  });
+}
+
 let _sbChannels=[];
 function sbSubscribeRealtime(){
   if(!_sb)return;
