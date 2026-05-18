@@ -335,6 +335,8 @@ tbody tr:hover{background:var(--surface-alt);}
 .resumen-col-menu .rp-checklist label:hover{background:var(--surface);}
 .resumen-col-menu .rp-menu-actions{display:flex;gap:6px;margin-bottom:8px;}
 .resumen-col-menu .rp-menu-actions button{flex:1;font-size:11px;padding:4px 8px;}
+.resumen-col-menu .rp-menu-apply{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.resumen-col-menu .rp-menu-apply .btn{width:100%;}
 #resumenPivotFilters{display:none;}
 #page-resumen .tbl-wrap{overflow:visible;}
 #page-resumen .card{overflow:visible;}
@@ -639,7 +641,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 <!-- ═══ RESUMEN MOLDE / PESAJE (tabla dinámica) ═══ -->
 <div class="page" id="page-resumen">
   <div class="page-hdr">
-    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, especie, guía, calibre, destino, totales. Filtro ▾ en cada columna (sin nombres de operarios).</div></div>
+    <div><h1 class="page-title">Resumen molde y pesaje</h1><div class="page-sub">Tabla: turno, línea, especie, guía, calibre, destino, totales. Filtro ▼ → Establecer filtro (sin nombres de operarios).</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="btn ghost sm" onclick="renderResumen()">↻ Actualizar</button>
       <button type="button" class="btn ghost sm" onclick="exportResumenExcel()">Exportar Excel</button>
@@ -655,7 +657,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSyncScopeFromDashboard()">↻ Desde dashboard</button></div>
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="typeof sbManualPullTabletRegs==='function'&&sbManualPullTabletRegs()">☁ Traer datos</button></div>
   </div>
-  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros: clic en columna (▼) para abrir menú. Kilos según fechas y turno de arriba.</div>
+  <div class="resumen-pivot-meta" id="resumenDashHint">Filtros: clic en columna (▼), marcar valores y pulsar Establecer filtro. Kilos según fechas y turno de arriba.</div>
   <div class="tabs-inline" id="resumenTabs">
     <button type="button" class="active" data-resumen-mod="mol" onclick="setResumenMod(this,'mol')">Recolección moldes</button>
     <button type="button" data-resumen-mod="pes" onclick="setResumenMod(this,'pes')">Pesaje</button>
@@ -3080,10 +3082,11 @@ function exportReport(fmt){
 /** Columnas visibles en la tabla (como planilla Excel + turno). */
 const _RESUMEN_TBL_COLS=[
   {key:'turno',label:'Turno',th:'TURNO'},
+  {key:'linea',label:'Línea',th:'LÍNEA'},
   {key:'especie',label:'Especie',th:'ESPECIE'},
-  {key:'guia',label:'Guía',th:'Guía'},
-  {key:'calibre',label:'Calibre',th:'Calibre'},
-  {key:'destino',label:'Destino',th:'Destino'}
+  {key:'guia',label:'Guía',th:'GUÍA'},
+  {key:'calibre',label:'Calibre',th:'CALIBRE'},
+  {key:'destino',label:'Destino',th:'DESTINO'}
 ];
 function _resumenFilterDims(){return _RESUMEN_TBL_COLS;}
 /** Argumento JS entre comillas simples para onclick/onchange en HTML (evita romper atributos con JSON.stringify). */
@@ -3091,6 +3094,14 @@ function _resumenJsArg(s){return "'"+String(s).replace(/\\/g,'\\\\').replace(/'/
 let _resumenMod='mol';
 const _resumenScope={fechaDesde:'',fechaHasta:'',turno:''};
 const _resumenPivotFilt={mol:{},pes:{}};
+const _resumenPivotPending={mol:{},pes:{}};
+function _resumenPivotPendingStore(mod){return _resumenPivotPending[mod==='pes'?'pes':'mol'];}
+function _resumenClonePivotSel(sel){return sel==null?null:new Set(sel);}
+function _resumenInitPendingCol(mod,key){
+  const pst=_resumenPivotPendingStore(mod);
+  const st=_resumenPivotEnsure(mod);
+  pst[key]=_resumenClonePivotSel(_resumenPivotSel(st,key));
+}
 function _resumenRecFechaYmd(r){
   const m=String(r&&r.fecha||'').match(/^(\d{4}-\d{2}-\d{2})/);
   return m?m[1]:'';
@@ -3241,46 +3252,50 @@ function _resumenTogglePivot(mod,dim,val,el){
   const on=sel===null||sel.has(val);
   _resumenPivotCheckbox(mod,dim,val,!on);
 }
-function _resumenPivotCheckbox(mod,dim,val,checked){
-  const st=_resumenPivotEnsure(mod);
-  let sel=_resumenPivotSel(st,dim);
+function _resumenReplaceColFilterMenu(mod,dim){
+  const menu=document.getElementById(_resumenColFilterMenuId(mod,dim));
+  if(!menu)return;
+  const d=_RESUMEN_TBL_COLS.find(x=>x.key===dim);
+  if(!d)return;
+  const wasOpen=menu.classList.contains('open');
+  const tmp=document.createElement('div');
+  tmp.innerHTML=_resumenColFilterMenuHtml(mod,d);
+  const fresh=tmp.firstElementChild;
+  if(fresh){menu.replaceWith(fresh);if(wasOpen)fresh.classList.add('open');}
+}
+function _resumenPivotPendingCheckbox(mod,dim,val,checked){
+  const pst=_resumenPivotPendingStore(mod);
+  let sel=_resumenPivotSel(pst,dim);
   const allVals=[...new Set(_resumenNormRows(mod).map(r=>String(r[dim]||'—')))];
   if(checked){
-    if(sel===null)st[dim]=new Set([val]);
+    if(sel===null)pst[dim]=new Set([val]);
     else{
       sel.add(val);
-      if(allVals.length&&allVals.every(v=>sel.has(v)))st[dim]=null;
+      if(allVals.length&&allVals.every(v=>sel.has(v)))pst[dim]=null;
     }
   }else{
-    if(sel===null)st[dim]=new Set(allVals.filter(v=>v!==val));
+    if(sel===null)pst[dim]=new Set(allVals.filter(v=>v!==val));
     else{
       sel.delete(val);
-      if(!sel.size)st[dim]=new Set();
+      if(!sel.size)pst[dim]=new Set();
     }
   }
+  _resumenReplaceColFilterMenu(mod,dim);
+}
+function _resumenPivotCheckbox(mod,dim,val,checked){_resumenPivotPendingCheckbox(mod,dim,val,checked);}
+function resumenColFilterApply(mod,dim){
+  const st=_resumenPivotEnsure(mod);
+  const pst=_resumenPivotPendingStore(mod);
+  if(Object.prototype.hasOwnProperty.call(pst,dim))st[dim]=_resumenClonePivotSel(pst[dim]);
+  document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open'));
   _resumenRefreshPivotTable(mod,true);
   _resumenSyncColFilterUi(mod);
+  toast('Filtro aplicado','success');
 }
 function _resumenSelectAllPivot(mod,dim,on){
-  const st=_resumenPivotEnsure(mod);
-  st[dim]=on?null:new Set();
-  const menu=document.getElementById(_resumenColFilterMenuId(mod,dim));
-  const wasOpen=!!(menu&&menu.classList.contains('open'));
-  _resumenRefreshPivotTable(mod,true);
-  _resumenSyncColFilterUi(mod);
-  if(wasOpen){
-    const d=_RESUMEN_TBL_COLS.find(x=>x.key===dim);
-    const th=document.querySelector('#resumenPivotTbl th .resumen-th-btn[data-dim="'+dim+'"]');
-    if(d&&th){
-      const old=th.parentElement.querySelector('.resumen-col-menu');
-      if(old){
-        const tmp=document.createElement('div');
-        tmp.innerHTML=_resumenColFilterMenuHtml(mod,d);
-        const fresh=tmp.firstElementChild;
-        if(fresh){old.replaceWith(fresh);fresh.classList.add('open');}
-      }
-    }
-  }
+  const pst=_resumenPivotPendingStore(mod);
+  pst[dim]=on?null:new Set();
+  _resumenReplaceColFilterMenu(mod,dim);
 }
 function _resumenPivotFilterList(el,q){
   const menu=el&&el.closest('.resumen-col-menu');
@@ -3308,12 +3323,16 @@ function resumenColFilterToggle(ev,mod,key){
   if(!menu)return;
   const willOpen=!menu.classList.contains('open');
   document.querySelectorAll('.resumen-col-menu.open').forEach(m=>m.classList.remove('open'));
-  if(willOpen)setTimeout(()=>menu.classList.add('open'),0);
+  if(willOpen){
+    _resumenInitPendingCol(mod,key);
+    setTimeout(()=>menu.classList.add('open'),0);
+  }
 }
 function _resumenColFilterMenuHtml(mod,d){
   const vals=[...new Set(_resumenNormRows(mod).map(r=>String(r[d.key]||'—')))].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
-  const st=_resumenPivotEnsure(mod);
-  const sel=_resumenPivotSel(st,d.key);
+  const pst=_resumenPivotPendingStore(mod);
+  if(!Object.prototype.hasOwnProperty.call(pst,d.key))_resumenInitPendingCol(mod,d.key);
+  const sel=_resumenPivotSel(pst,d.key);
   const list=vals.length?vals.map(v=>{
     const checked=sel===null||sel.has(v);
     return `<label><input type="checkbox" data-rf-val="${esc(v)}" ${checked?'checked':''}> ${esc(v)}</label>`;
@@ -3325,6 +3344,7 @@ function _resumenColFilterMenuHtml(mod,d){
       <button type="button" class="btn ghost sm" onclick="_resumenSelectAllPivot('${mod}','${d.key}',false)">Ninguno</button>
     </div>
     <div class="rp-checklist">${list}</div>
+    <div class="rp-menu-apply"><button type="button" class="btn sm" onclick="resumenColFilterApply('${mod}','${d.key}')">Establecer filtro</button></div>
   </div>`;
 }
 function _resumenRenderTableHead(mod){
@@ -3368,8 +3388,8 @@ function _resumenInitColFilterDocClose(){
 function clearResumenPivotFilters(){
   _resumenPivotFilt.mol={};
   _resumenPivotFilt.pes={};
-  _resumenPivotEnsure('mol');
-  _resumenPivotEnsure('pes');
+  _resumenPivotPending.mol={};
+  _resumenPivotPending.pes={};
   renderResumen();
   toast('Filtros de tabla dinámica limpiados','info');
 }
@@ -3457,7 +3477,7 @@ function renderResumen(){
   if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
   const rawN=_resumenRawRecs(mod).length;
   const hint=document.getElementById('resumenDashHint');
-  if(hint)hint.textContent=rawN?'Filtros: clic en columna (▼) para abrir menú. Kilos según fechas y turno de arriba.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
+  if(hint)hint.textContent=rawN?'Filtros: clic en columna (▼), marcar valores y pulsar Establecer filtro. Kilos según fechas y turno de arriba.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
   renderResumenTableOnly();
 }
 function exportResumenExcel(){
@@ -3479,6 +3499,7 @@ window._resumenSelectAllPivot=_resumenSelectAllPivot;
 window._resumenPivotCheckbox=_resumenPivotCheckbox;
 window._resumenPivotFilterList=_resumenPivotFilterList;
 window.resumenColFilterToggle=resumenColFilterToggle;
+window.resumenColFilterApply=resumenColFilterApply;
 window.onResumenScopeChange=onResumenScopeChange;
 window.resumenApplyScope=resumenApplyScope;
 window.resumenSetFechaHoy=resumenSetFechaHoy;
