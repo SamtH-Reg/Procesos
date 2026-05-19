@@ -253,8 +253,20 @@ body.tb-auth-lock .topbar{
   50%{box-shadow:0 0 0 3px rgba(14,165,233,.55),0 0 26px rgba(56,189,248,.45);}
 }
 @keyframes eq-freeze-shimmer{
-  0%{background-position:0% 40%;}
-  100%{background-position:200% 40%;}
+  0%,100%{background-position:0% 50%;}
+  50%{background-position:100% 50%;}
+}
+@keyframes eq-tile-listo-pulse{
+  0%,100%{box-shadow:0 2px 12px rgba(22,163,74,.12),inset 0 0 0 1px rgba(22,163,74,.1);}
+  50%{box-shadow:0 6px 28px rgba(34,197,94,.35),0 0 20px rgba(74,222,128,.15),inset 0 0 0 2px rgba(34,197,94,.22);}
+}
+@keyframes eq-tile-listo-shimmer{
+  0%,100%{background-position:0% 50%;}
+  50%{background-position:100% 50%;}
+}
+@keyframes eq-tile-listo-dot{
+  0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(22,163,74,.55);}
+  50%{transform:scale(1.12);opacity:1;box-shadow:0 0 0 10px rgba(22,163,74,0);}
 }
 @keyframes eq-freeze-dot{
   0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(2,132,199,.55);}
@@ -882,13 +894,13 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   color:#0c4a6e;
   background:linear-gradient(110deg,#e0f2fe 0%,#bae6fd 16%,#7dd3fc 32%,#38bdf8 48%,#0ea5e9 52%,#38bdf8 68%,#7dd3fc 84%,#e0f2fe 100%);
   background-size:240% 100%;
-  animation:eq-tile-frio-pulse 2.4s ease-in-out infinite,eq-freeze-shimmer 5.5s linear infinite;
+  animation:eq-tile-frio-pulse 2.4s ease-in-out infinite,eq-freeze-shimmer 6s ease-in-out infinite;
 }
 .eq-tile.congelando::before{
   height:4px;
   background:linear-gradient(90deg,#0369a1,#0ea5e9,#38bdf8,#7dd3fc,#38bdf8,#0ea5e9,#0369a1);
   background-size:200% 100%;
-  animation:eq-tile-top-glow 1.8s ease-in-out infinite,eq-freeze-shimmer 4.2s linear infinite;
+  animation:eq-tile-top-glow 1.8s ease-in-out infinite,eq-freeze-shimmer 4.5s ease-in-out infinite;
 }
 .eq-tile.congelando .eq-id,
 .eq-tile.congelando .eq-type,
@@ -910,6 +922,68 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
 .eq-tile.congelando .badge.blue .badge-dot{
   animation:eq-freeze-dot 1.35s ease-in-out infinite;
 }
+.eq-tile.congelando.frio-completo{
+  border-color:#16a34a;
+  color:#14532d;
+  background:linear-gradient(110deg,#dcfce7 0%,#bbf7d0 20%,#86efac 40%,#4ade80 50%,#86efac 60%,#bbf7d0 80%,#dcfce7 100%);
+  background-size:200% 100%;
+  animation:eq-tile-listo-pulse 2s ease-in-out infinite,eq-tile-listo-shimmer 5s ease-in-out infinite;
+}
+.eq-tile.congelando.frio-completo::before{
+  background:linear-gradient(90deg,#15803d,#16a34a,#22c55e,#4ade80,#22c55e,#16a34a,#15803d);
+  animation:eq-tile-top-glow 1.6s ease-in-out infinite,eq-tile-listo-shimmer 4s ease-in-out infinite;
+}
+.eq-tile.congelando.frio-completo .badge.blue{
+  background:rgba(255,255,255,.95);
+  color:#15803d;
+  border-color:rgba(22,163,74,.3);
+}
+.eq-tile.congelando.frio-completo .badge.blue .badge-dot{
+  background:#16a34a;
+  animation:eq-tile-listo-dot 1.2s ease-in-out infinite;
+}
+.eq-tile.congelando.frio-completo .eq-progress-bar{
+  background:linear-gradient(90deg,#15803d,#22c55e);
+}
+.eq-tile.listo{
+  border-color:#16a34a;
+  color:#14532d;
+  background:linear-gradient(110deg,#dcfce7 0%,#bbf7d0 18%,#86efac 36%,#4ade80 50%,#86efac 64%,#bbf7d0 82%,#dcfce7 100%);
+  background-size:200% 100%;
+  animation:eq-tile-listo-pulse 2.2s ease-in-out infinite,eq-tile-listo-shimmer 5.5s ease-in-out infinite;
+}
+.eq-tile.listo::before{
+  height:4px;
+  background:linear-gradient(90deg,#15803d,#16a34a,#22c55e,#4ade80,#22c55e,#16a34a,#15803d);
+  background-size:200% 100%;
+  animation:eq-tile-top-glow 1.7s ease-in-out infinite,eq-tile-listo-shimmer 4.5s ease-in-out infinite;
+}
+.eq-tile.listo .eq-id,
+.eq-tile.listo .eq-type,
+.eq-tile.listo .eq-stats .lbl{color:#15803d;}
+.eq-tile.listo .eq-name,
+.eq-tile.listo .eq-name[style],
+.eq-tile.listo .eq-stats .val{color:#14532d;}
+.eq-tile.listo .eq-progress{background:rgba(255,255,255,.55);}
+.eq-tile.listo .eq-progress-bar{
+  width:100%!important;
+  background:linear-gradient(90deg,#15803d,#22c55e);
+  animation:eq-tile-bar-pulse 2s ease-in-out infinite;
+}
+.eq-tile.listo .badge.green,
+.eq-tile.listo .badge.navy{
+  background:rgba(255,255,255,.94);
+  color:#15803d;
+  border:1px solid rgba(22,163,74,.28);
+}
+.eq-tile.listo .badge .badge-dot{
+  background:#16a34a;
+  animation:eq-tile-listo-dot 1.25s ease-in-out infinite;
+}
+.eq-tile.listo .eq-time.listo-ok{
+  color:#15803d;
+  font-weight:700;
+}
 .eq-tile.deshielando{
   animation:eq-tile-desh-pulse 2.2s ease-in-out infinite;
 }
@@ -925,14 +999,14 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   animation:eq-freeze-dot 1.25s ease-in-out infinite;
 }
 @media (prefers-reduced-motion:reduce){
-  .eq-tile.congelando,.eq-tile.deshielando,
-  .eq-tile.congelando::before,.eq-tile.deshielando::before,
-  .eq-tile.congelando .eq-progress-bar,.eq-tile.deshielando .eq-progress-bar,
-  .eq-tile.congelando .badge.blue .badge-dot,.eq-tile.deshielando .badge.ice .badge-dot{
+  .eq-tile.congelando,.eq-tile.congelando.frio-completo,.eq-tile.listo,.eq-tile.deshielando,
+  .eq-tile.congelando::before,.eq-tile.congelando.frio-completo::before,.eq-tile.listo::before,.eq-tile.deshielando::before,
+  .eq-tile.congelando .eq-progress-bar,.eq-tile.listo .eq-progress-bar,.eq-tile.deshielando .eq-progress-bar,
+  .eq-tile.congelando .badge.blue .badge-dot,.eq-tile.listo .badge .badge-dot,.eq-tile.deshielando .badge.ice .badge-dot{
     animation:none!important;
   }
-  .eq-tile.congelando{background-size:100% 100%;}
-  .eq-tile.congelando::before,.eq-tile.deshielando::before{background:var(--accent);background-size:100% 100%;}
+  .eq-tile.congelando,.eq-tile.congelando.frio-completo,.eq-tile.listo{background-size:100% 100%;}
+  .eq-tile.congelando::before,.eq-tile.listo::before,.eq-tile.deshielando::before{background:var(--accent);background-size:100% 100%;}
 }
 
 /* Tema oscuro: pulso y borde superior más visibles sobre surface oscuro */
@@ -961,13 +1035,28 @@ body[data-theme="dark"] .eq-tile.congelando{
   color:#e0f2fe;
   background:linear-gradient(110deg,rgba(8,47,73,.95) 0%,rgba(3,105,161,.88) 20%,rgba(14,165,233,.82) 42%,rgba(2,132,199,.9) 50%,rgba(14,165,233,.82) 58%,rgba(3,105,161,.88) 80%,rgba(8,47,73,.95) 100%);
   background-size:240% 100%;
-  animation:eq-tile-frio-pulse-dark 2.4s ease-in-out infinite,eq-freeze-shimmer 5.5s linear infinite;
+  animation:eq-tile-frio-pulse-dark 2.4s ease-in-out infinite,eq-freeze-shimmer 6s ease-in-out infinite;
 }
 body[data-theme="dark"] .eq-tile.congelando::before{
   background:linear-gradient(90deg,#075985,#0369a1,#0ea5e9,#38bdf8,#0ea5e9,#0369a1,#075985);
   background-size:200% 100%;
-  animation:eq-tile-top-glow-dark 1.8s ease-in-out infinite,eq-freeze-shimmer 4.2s linear infinite;
+  animation:eq-tile-top-glow-dark 1.8s ease-in-out infinite,eq-freeze-shimmer 4.5s ease-in-out infinite;
 }
+body[data-theme="dark"] .eq-tile.congelando.frio-completo,
+body[data-theme="dark"] .eq-tile.listo{
+  border-color:#4ade80;
+  color:#dcfce7;
+  background:linear-gradient(110deg,rgba(20,83,45,.95) 0%,rgba(22,101,52,.9) 25%,rgba(34,197,94,.75) 50%,rgba(22,101,52,.9) 75%,rgba(20,83,45,.95) 100%);
+  animation:eq-tile-listo-pulse 2.2s ease-in-out infinite,eq-tile-listo-shimmer 5.5s ease-in-out infinite;
+}
+body[data-theme="dark"] .eq-tile.congelando.frio-completo::before,
+body[data-theme="dark"] .eq-tile.listo::before{
+  background:linear-gradient(90deg,#14532d,#166534,#22c55e,#4ade80,#22c55e,#166534,#14532d);
+  animation:eq-tile-top-glow-dark 1.7s ease-in-out infinite,eq-tile-listo-shimmer 4.5s ease-in-out infinite;
+}
+body[data-theme="dark"] .eq-tile.listo .eq-name,
+body[data-theme="dark"] .eq-tile.listo .eq-stats .val{color:#f0fdf4;}
+body[data-theme="dark"] .eq-tile.listo .eq-time.listo-ok{color:#86efac;}
 body[data-theme="dark"] .eq-tile.congelando .eq-id,
 body[data-theme="dark"] .eq-tile.congelando .eq-type,
 body[data-theme="dark"] .eq-tile.congelando .eq-stats .lbl,
@@ -1012,7 +1101,7 @@ body[data-theme="dark"] .eq-tile.deshielando .badge.ice .badge-dot{
 .eq-progress{
   height:6px;background:var(--surface-alt);border-radius:3px;overflow:hidden;margin-top:4px;
 }
-.eq-progress-bar{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;}
+.eq-progress-bar{height:100%;background:var(--accent);border-radius:3px;transition:width .5s ease-out;}
 .eq-stats{display:flex;gap:14px;font-size:12px;}
 .eq-stats div{flex:1;}
 .eq-stats .lbl{color:var(--text-3);font-size:10px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;}
@@ -3106,6 +3195,7 @@ function _ctxClockTick(){
   if(elF)elF.textContent=_fmtFecha(d);
   const elT=document.getElementById('ctxTurno');
   if(elT){const t=_turnoActual(d);elT.textContent=t.nombre+' · '+t.rango;}
+  try{if(typeof _eqTickCongelacion==='function')_eqTickCongelacion();}catch(e){console.warn('[eq tick]',e);}
   setTimeout(_ctxClockTick,1000);
 }
 /* Usuario activo: con sesión Supabase usa `_tbUser`; si no, `DB.data.usuario` (catálogo local). */
@@ -6209,7 +6299,7 @@ window.regGeneral=regGeneral;window.clearGReg=clearGReg;window.selectPresetG=sel
 window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;window.onGRegEspecieChange=onGRegEspecieChange;window.renderGRegPresets=renderGRegPresets;window._clearGRegEspecieFilter=_clearGRegEspecieFilter;
 
 /* ═══ TÚNELES / PLACAS — render + state machine ════════════════ */
-const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'navy',t:'Listo'},deshielando:{c:'ice',t:'Deshielando'}};
+const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'green',t:'Listo'},deshielando:{c:'ice',t:'Deshielando'}};
 
 function getEqRT(cod){return RT.eqState[cod]||(RT.eqState[cod]={estado:'libre',items:[],congelando:false});}
 /** Unidades (moldes) ya en la placa / equipo — suma de cant por línea. */
@@ -6261,6 +6351,37 @@ function _eqHoraFinCongelacion(horaInicio,horasTotal){
   const hhmm=String(eh).padStart(2,'0')+':'+String(em).padStart(2,'0');
   return{hhmm,siguienteDia};
 }
+function _eqCicloCongelacionCompleto(rt){
+  if(!rt||rt.estado!=='congelando'||!rt.horaInicio||!(rt.horasTotal>0))return false;
+  return _eqMinutosRestantesCongelacion(rt)<=0;
+}
+function _eqAutoCompletarCongelacionSiCorresponde(){
+  if(!DB||!DB.data||!Array.isArray(DB.data.equipos))return;
+  const listos=[];
+  DB.data.equipos.filter(e=>e.activo!==false).forEach(eq=>{
+    const rt=getEqRT(eq.codigo);
+    if(_eqCicloCongelacionCompleto(rt))listos.push(eq.codigo);
+  });
+  if(!listos.length)return;
+  listos.forEach(cod=>{_finalizarCongelacionAplicar(cod,null,{silent:true});});
+  try{if(typeof TBSync!=='undefined'&&TBSync.pushEqKvOnly)void TBSync.pushEqKvOnly();}catch(_){}
+  if(typeof showToast==='function'){
+    const msg=listos.length===1
+      ?'Ciclo de fr\u00edo cumplido \u2014 equipo listo para descargar'
+      :listos.length+' equipos listos para descargar';
+    showToast(msg,'success');
+  }
+}
+function _eqTickCongelacion(){
+  let hayCong=false;
+  try{
+    (DB.data.equipos||[]).filter(e=>e.activo!==false).forEach(eq=>{
+      if(getEqRT(eq.codigo).estado==='congelando')hayCong=true;
+    });
+  }catch(_){}
+  if(hayCong)_eqAutoCompletarCongelacionSiCorresponde();
+  if(hayCong&&document.getElementById('panelTuneles')?.classList.contains('active')&&typeof renderEquipos==='function')renderEquipos();
+}
 function calcEqProgreso(eq,rt){
   if(rt.estado==='listo')return 100;
   if(rt.estado==='libre')return 0;
@@ -6269,36 +6390,43 @@ function calcEqProgreso(eq,rt){
     return Math.min(92,18+Math.round((m%120)/120*74));
   }
   if(rt.estado==='congelando'&&rt.horaInicio&&rt.horasTotal){
-    const [h,m]=rt.horaInicio.split(':').map(Number);
-    const start=h*60+m;
-    const d=new Date();const now=d.getHours()*60+d.getMinutes();
-    let diff=now-start;if(diff<0)diff+=1440;
-    const totalMin=rt.horasTotal*60;
-    if(rt.progreso!=null&&diff<=0)return rt.progreso; // demo seed
-    return Math.min(100,Math.round((diff/totalMin)*100));
+    const elapsed=_eqElapsedMinCongelacion(rt);
+    const totalMin=Math.max(1,(rt.horasTotal||0)*60);
+    if(rt.progreso!=null&&elapsed<=0)return rt.progreso; // demo seed
+    return Math.min(100,Math.round((elapsed/totalMin)*100));
   }
   if(rt.estado==='cargando')return 25;
   return rt.progreso||0;
 }
 function renderEqTile(eq){
   const rt=getEqRT(eq.codigo);
-  const b=estadoBadgeTP[rt.estado]||estadoBadgeTP.libre;
+  const frioCompleto=rt.estado==='congelando'&&_eqCicloCongelacionCompleto(rt);
+  const b=frioCompleto?{c:'green',t:'Listo'}:(estadoBadgeTP[rt.estado]||estadoBadgeTP.libre);
   const progreso=calcEqProgreso(eq,rt);
   const prod=rt.items&&rt.items.length?rt.items[0].producto:'—';
   const totCant=rt.items?rt.items.reduce((s,i)=>s+(i.cant||0),0):0;
-  const warn=rt.estado==='listo';
   let tiempo='Disponible';
+  let timeCls='';
   if(rt.estado==='cargando')tiempo='Cargando · '+(rt.items?rt.items.length:0)+' item(s)';
   else if(rt.estado==='congelando'){
-    const totalMin=(rt.horasTotal||0)*60;
-    const done=totalMin*progreso/100;
-    const rest=Math.max(0,totalMin-done);
-    tiempo=`${Math.floor(done/60)}h ${Math.round(done%60)}m · falta ${Math.floor(rest/60)}h ${Math.round(rest%60).toString().padStart(2,'0')}m`;
+    if(frioCompleto){
+      tiempo='\u2713 Ciclo cumplido \u2014 listo para descargar';
+      timeCls='listo-ok';
+    }else{
+      const totalMin=(rt.horasTotal||0)*60;
+      const done=Math.min(totalMin,totalMin*progreso/100);
+      const rest=Math.max(0,totalMin-done);
+      tiempo=`${Math.floor(done/60)}h ${Math.round(done%60)}m · falta ${Math.floor(rest/60)}h ${Math.round(rest%60).toString().padStart(2,'0')}m`;
+    }
   } else if(rt.estado==='deshielando'){
     const m=_eqMinutosDesdeHoraHm(rt.deshieloHoraInicio);
     tiempo='Deshielo · '+Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m · inicio '+(rt.deshieloHoraInicio||'—');
-  } else if(rt.estado==='listo')tiempo='Listo para descargar';
-  return `<button class="eq-tile ${rt.estado}" type="button" onclick="openEqModal('${eq.codigo}')" style="text-align:left;">
+  } else if(rt.estado==='listo'){
+    tiempo='\u2713 Listo para descargar';
+    timeCls='listo-ok';
+  }
+  const tileCls='eq-tile '+rt.estado+(frioCompleto?' frio-completo':'');
+  return `<button class="${tileCls}" type="button" onclick="openEqModal('${eq.codigo}')" style="text-align:left;">
     <div class="eq-hdr">
       <div><div class="eq-id">${esc(eq.nombre)}</div><div class="eq-name" style="font-size:11px;color:var(--text-3);">${esc(eq.codigo)}</div><div class="eq-type">${eq.tipo==='tunel'?'Túnel':'Placa'} · ${eq.capacidad} ${esc(eq.unidad)}</div></div>
       <span class="badge ${b.c}"><span class="badge-dot"></span>${b.t}</span>
@@ -6308,7 +6436,7 @@ function renderEqTile(eq){
       <div><div class="lbl">Producto</div><div class="val" style="font-family:var(--font);font-size:12px;font-weight:600;">${esc(prod)}</div></div>
       <div><div class="lbl">Cantidad</div><div class="val" style="font-family:var(--font);font-size:12px;font-weight:600;">${totCant?totCant+' u':'—'}</div></div>
     </div>
-    <div class="eq-time ${warn?'warn':''}">${warn?'⚠ ':''}${tiempo}</div>
+    <div class="eq-time ${timeCls}">${tiempo}</div>
   </button>`;
 }
 function renderEquipos(){
@@ -6809,7 +6937,9 @@ function finalizarDeshieloEq(){
   try{if(typeof TBSync!=='undefined'&&TBSync.pushEqKvOnly)void TBSync.pushEqKvOnly();}catch(_){}
   showToast('Deshielo finalizado · registrado','success');
 }
-function _finalizarCongelacionAplicar(cod,meta){
+function _finalizarCongelacionAplicar(cod,meta,opts){
+  opts=opts&&typeof opts==='object'?opts:{};
+  const silent=!!opts.silent;
   const rt=getEqRT(cod);
   rt.estado='listo';
   rt.congelando=false;
@@ -6824,10 +6954,12 @@ function _finalizarCongelacionAplicar(cod,meta){
     delete rt.cierreMinRestantes;
   }
   rtSave({skipCloudSchedule:true});
-  closeEqModal();
+  if(!opts.keepModalOpen)closeEqModal();
   renderEquipos();
-  try{if(typeof TBSync!=='undefined'&&TBSync.pushEqKvOnly)void TBSync.pushEqKvOnly();}catch(_){}
-  showToast(meta&&meta.anticipado?'Frío finalizado (cierre anticipado registrado)':'Frío finalizado','success');
+  if(!silent){
+    try{if(typeof TBSync!=='undefined'&&TBSync.pushEqKvOnly)void TBSync.pushEqKvOnly();}catch(_){}
+    showToast(meta&&meta.anticipado?'Frío finalizado (cierre anticipado registrado)':'Frío finalizado','success');
+  }
 }
 function finalizarCongelacion(){
   if(!_idxGuardTunelesInteract('finalizar congelación'))return;
