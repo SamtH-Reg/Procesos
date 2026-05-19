@@ -1700,23 +1700,30 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .fs-combo-search-inp::placeholder{color:var(--text-3);}
 .fs-combo-list{overflow-y:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch;}
 .fs-combo-item{
-  display:flex;align-items:flex-start;gap:12px;width:100%;padding:12px 14px;border:none;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:none;border-bottom:1px solid var(--border);
   background:#fff;cursor:pointer;text-align:left;font-family:var(--font);transition:background .1s;
 }
 .fs-combo-item:last-child{border-bottom:none;}
 .fs-combo-item:hover,.fs-combo-item:focus{background:color-mix(in srgb,var(--brand-accent) 10%,#fff);outline:none;}
 .fs-combo-item-code{
-  flex-shrink:0;min-width:52px;padding:5px 10px;border-radius:8px;text-align:center;
-  background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;font-weight:900;
+  flex-shrink:0;min-width:48px;padding:4px 8px;border-radius:8px;text-align:center;
+  background:var(--surface-alt);border:1px solid var(--border);color:var(--text-3);
+  font-size:11px;font-weight:600;
 }
-.fs-combo-ficha-num{color:#dc2626;font-weight:800;}
+.fs-combo-item-ficha{
+  flex-shrink:0;margin-left:auto;padding-left:8px;font-size:12px;color:var(--text-3);font-weight:500;white-space:nowrap;
+}
+.fs-combo-ficha-num{color:#dc2626;font-weight:800;font-size:15px;letter-spacing:.02em;}
 .fs-combo-item-body{flex:1;min-width:0;}
-.fs-combo-item-name{font-size:14px;font-weight:700;color:var(--text);line-height:1.25;word-break:break-word;}
-.fs-combo-item-name em{font-style:normal;background:rgba(255,214,10,.65);border-radius:2px;padding:0 1px;}
-.fs-combo-item-sub{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.3;}
+.fs-combo-item-name{font-size:13px;font-weight:600;color:var(--text-3);line-height:1.25;word-break:break-word;}
+.fs-combo-item-name em{font-style:normal;background:rgba(255,214,10,.65);border-radius:2px;padding:0 1px;color:var(--text);}
+.fs-combo-item-sub{font-size:11px;color:var(--text-3);margin-top:2px;line-height:1.3;}
 .fs-combo-item-manual .fs-combo-item-code{background:#eff6ff;border-color:#bfdbfe;color:#007aff;}
 .codigo-rojo{color:#dc2626 !important;font-weight:800;}
-body[data-theme="dark"] .fs-combo-code,body[data-theme="dark"] .fs-combo-item-code{background:rgba(127,29,29,.35);border-color:#991b1b;color:#fca5a5;}
+body[data-theme="dark"] .fs-combo-code{background:rgba(127,29,29,.35);border-color:#991b1b;color:#fca5a5;}
+body[data-theme="dark"] .fs-combo-item-code{background:var(--surface-alt);border-color:var(--border-strong);color:var(--text-3);}
+body[data-theme="dark"] .fs-combo-ficha-num{color:#f87171;}
+body[data-theme="dark"] .fs-combo-item-name{color:var(--text-3);}
 .fs-combo-empty{padding:28px 16px;text-align:center;color:var(--text-3);font-size:13px;}
 #mRegistrar .fs-combo-trigger,#pRegistrar .fs-combo-trigger{
   border-width:2px;border-color:var(--navy-600);
@@ -9121,11 +9128,18 @@ function _fsComboItemSubHtml(t,qLow){
   const ficha=t&&t.ficha!=null&&String(t.ficha).trim()?String(t.ficha).trim():'';
   const areaMap={moldes:'PRODUCCIÓN MOLDES',pesaje:'PRODUCCIÓN PESAJE',empaque:'EMPAQUE',general:'GENERAL'};
   const area=areaMap[String(t&&t.area||'').toLowerCase()]||String(t&&t.area||'').toUpperCase();
-  if(ficha&&area)return 'Ficha <span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span> · '+esc(area);
-  if(ficha)return 'Ficha <span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span>';
+  if(ficha&&area)return esc(area);
   if(area)return esc(area);
-  const c=String(t&&t.codigo||'').trim();
-  return c?('Código <span class="fs-combo-ficha-num">'+_fsComboHi(c,qLow)+'</span>'):'';
+  if(!ficha){
+    const c=String(t&&t.codigo||'').trim();
+    return c?esc(c):'';
+  }
+  return '';
+}
+function _fsComboItemFichaHtml(t,qLow){
+  const ficha=t&&t.ficha!=null&&String(t.ficha).trim()?String(t.ficha).trim():'';
+  if(!ficha)return '';
+  return '<span class="fs-combo-item-ficha">Ficha <span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span></span>';
 }
 function _fsComboCodeBadge(t){
   const c=String(t&&t.codigo||'').trim();
@@ -9227,12 +9241,15 @@ function _fsComboRenderList(trabs,q,opts){
   }
   filtered.forEach(t=>{
     const code=_fsComboCodeBadge(t);
+    const sub=_fsComboItemSubHtml(t,qLow);
+    const fichaR=_fsComboItemFichaHtml(t,qLow);
     html+=`<button type="button" class="fs-combo-item" data-id="${esc(String(t.id))}" data-nombre="${esc(t.nombre||'')}" data-codigo="${esc(t.codigo||'')}">
       <span class="fs-combo-item-code">${_fsComboHi(code,qLow)}</span>
       <span class="fs-combo-item-body">
         <span class="fs-combo-item-name">${_fsComboHi(t.nombre||'',qLow)}</span>
-        <span class="fs-combo-item-sub">${_fsComboItemSubHtml(t,qLow)}</span>
+        ${sub?'<span class="fs-combo-item-sub">'+sub+'</span>':''}
       </span>
+      ${fichaR}
     </button>`;
   });
   return html;
