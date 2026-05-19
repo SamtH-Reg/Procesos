@@ -3125,6 +3125,7 @@ function _idxRolRecordForSession(){
 function _idxSesionBloqueadaPorRol(){
   try{
     if(typeof _tbUser==='undefined'||!_tbUser)return false;
+    if(_idxOfflineCanOperate())return false;
     const roles=(window.DB&&DB.data&&Array.isArray(DB.data.roles))?DB.data.roles:[];
     if(!roles.length)return false;
     const code=_idxRolTabletNormalizado();
@@ -3193,8 +3194,14 @@ function _idxPerm(key){
     const hasCatalog=roles.length>0;
     const r=_idxRolRecordForSession();
     if(typeof _tbUser!=='undefined'&&_tbUser){
-      if(!hasCatalog)return false;
-      if(!r||!r.permisos)return false;
+      if(!hasCatalog){
+        if(_idxOfflineCanOperate())return _idxPermOfflineModule(key);
+        return false;
+      }
+      if(!r||!r.permisos){
+        if(_idxOfflineCanOperate())return _idxPermOfflineModule(key);
+        return false;
+      }
       return _idxPermValueForRole(r,key);
     }
     if(!r||!r.permisos)return true;
@@ -4235,6 +4242,71 @@ function _tbLoadLastPushSigsFromStorage(){
     if(typeof o.armado==='string')TBSync._lastSig.armado=o.armado;
   }catch(e){console.warn('[tb load push sig]',e);}
 }
+const TB_PENDING_PUSH_KEY='friosur_tb_pending_push_v1';
+function _tbMarkPendingPush(on){
+  try{
+    if(on)localStorage.setItem(TB_PENDING_PUSH_KEY,'1');
+    else localStorage.removeItem(TB_PENDING_PUSH_KEY);
+  }catch(e){}
+  if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();
+}
+function _tbHasLocalDataPendingPush(){
+  try{
+    if(typeof TBSync==='undefined'||!TBSync._lastSig||typeof TBSync._rowsForCloudPush!=='function')return false;
+    const pack=TBSync._rowsForCloudPush();
+    const sigM=TBSync._sigRows(pack.moldesRows,'id');
+    const sigP=TBSync._sigRows(pack.pesajesRows,'id');
+    const sigG=TBSync._sigRows(pack.generalesRows,'id');
+    const sigA=typeof _tbArmadoSigFromRows==='function'?_tbArmadoSigFromRows(_tbArmadoRowsFromRt()):'';
+    return sigM!==TBSync._lastSig.moldes||sigP!==TBSync._lastSig.pesajes||sigG!==TBSync._lastSig.generales||sigA!==TBSync._lastSig.armado;
+  }catch(e){return true;}
+}
+function _tbIsPendingPush(){
+  try{if(localStorage.getItem(TB_PENDING_PUSH_KEY)==='1')return true;}catch(e){}
+  return _tbHasLocalDataPendingPush();
+}
+/** Tras guardar operativo: avisa si quedó solo en la tablet (sin red o sin sesión). */
+function _tbToastAfterOperativoSave(msg){
+  if(!tbNavigatorOnline()){showToast(msg+' — guardado en la tablet (se sube al reconectar)','success');return;}
+  if(typeof _tbUser!=='undefined'&&!_tbUser){showToast(msg+' — solo en este equipo (inicia sesión para la nube)','warning');return;}
+  showToast(msg,'success');
+}
+function _idxOfflineCanOperate(){
+  try{
+    if(typeof _tbUser==='undefined'||!_tbUser)return true;
+    if(tbNavigatorOnline())return false;
+    return (DB.data.presets||[]).length>0;
+  }catch(e){return false;}
+}
+function _idxPermOfflineModule(key){
+  const code=_idxRolTabletNormalizado();
+  if(code==='admin'||code==='administrador')return true;
+  if(code==='tunelero')return key==='tuneles';
+  if(code==='planillero')return key==='eliminar'||['moldes','tuneles','pesaje','general'].includes(key);
+  if(code==='supervisor')return key==='eliminar'||['moldes','tuneles','pesaje','general'].includes(key);
+  if(key==='eliminar')return false;
+  return ['moldes','tuneles','pesaje','general'].includes(key);
+}
+async function tbFlushPendingCloudSync(opts){
+  opts=opts||{};
+  const silent=!!opts.silent;
+  if(!_tbSb||!_tbUser||!tbNavigatorOnline())return{ok:false,reason:'no_network_or_session'};
+  let pushOk=false;
+  try{
+    if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function'){
+      const pr=await TBSync.pushAll();
+      pushOk=!!(pr&&pr.ok);
+    }
+    if(typeof tbPullCloudMultiDevice==='function')await tbPullCloudMultiDevice({silent:true,skipPostPush:true});
+    if(pushOk)_tbMarkPendingPush(_tbHasLocalDataPendingPush());
+    if(!silent&&pushOk&&typeof showToast==='function')showToast('Datos subidos a la nube','success');
+    return{ok:pushOk};
+  }catch(e){
+    console.warn('[tbFlushPendingCloudSync]',e);
+    return{ok:false,err:e&&e.message?e.message:String(e)};
+  }
+}
+window.tbFlushPendingCloudSync=tbFlushPendingCloudSync;
 const RT={moldes:[],pesajes:[],empacados:[],empaques:[],generales:[],eqState:{},cargas:[],selPresetM:null,selPresetP:null,selPresetE:null,selPresetG:null};
 /** Ids reservados de semilla demo (index): nunca deben subirse ni mezclarse con producción. */
 function _rtIsDemoMoldeId(id){const n=+id;return n>=901&&n<=910;}
@@ -5536,8 +5608,8 @@ function regMolde(){
     clearTimeout(banner._t);
     banner._t=setTimeout(()=>{banner.style.display='none';},4000);
   }
-  showToast('✅ '+nombreTrab+' · '+cant+' moldes · '+kg+' kg','success');
-  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
+  _tbToastAfterOperativoSave('✅ '+nombreTrab+' · '+cant+' moldes · '+kg+' kg');
+  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();
 }
 function clearMReg(){
   document.getElementById('mRegCant').value='';
@@ -5860,7 +5932,7 @@ function regGeneral(){
   document.getElementById('gRegKg').value='';
   gRegCalcKg();
   const enMolde=_presetEsConteoMoldePlaca(p);
-  showToast('Registro general guardado · '+cant+' '+p.tipo+' = '+kg+' kg'+(enMolde?' · visible en moldes/túneles':''),'success');
+  _tbToastAfterOperativoSave('Registro general guardado · '+cant+' '+p.tipo+' = '+kg+' kg'+(enMolde?' · visible en moldes/túneles':''));
 }
 function clearGReg(){
   document.getElementById('gRegCant').value='';
@@ -7256,8 +7328,8 @@ function regPesaje(){
   document.getElementById('pRegKg').value='';
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
-  showToast('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie,'success');
-  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
+  _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie);
+  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;
 window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
@@ -10945,6 +11017,32 @@ const TBSync={
   _pushMinGapMs:6000,
   _pushDebounceMs:3500,
   _lastSig:{moldes:'',pesajes:'',generales:'',armado:'',eqKv:''},
+  _statusMsg:'',
+  _statusColor:'#16a34a',
+  _applySyncBadge(){
+    const b=this.onlineBadge();
+    if(!b)return;
+    const offline=!tbNavigatorOnline();
+    const pending=_tbIsPendingPush();
+    if(offline){
+      b.textContent=pending?'📴 Sin red · por subir':'📴 Sin red';
+      b.style.background='#dc2626';
+      b.title=pending?'Datos en la tablet. Se subirán al reconectar (con sesión).':'Sin conexión a Internet';
+    }else if(pending){
+      b.textContent='⏳ Por subir';
+      b.style.background='#f59e0b';
+      b.title='Hay registros locales pendientes. Pulsa para subir a Supabase.';
+    }else{
+      b.textContent=this._statusMsg||'☁ Sync';
+      b.style.background=this._statusColor||'#16a34a';
+      b.title='Click para sincronizar con la nube';
+    }
+    b.style.cursor='pointer';
+    b.onclick=()=>{
+      if(!tbNavigatorOnline()){showToast&&showToast('Sin red — los datos siguen guardados en la tablet','info');return;}
+      void tbFlushPendingCloudSync({silent:false});
+    };
+  },
   onlineBadge(){
     try{
       const tb=document.querySelector('.topbar,[data-topbar]')||document.body;
@@ -10954,18 +11052,13 @@ const TBSync={
     }catch(e){return null;}
   },
   setStatus(msg,color){
-    const b=this.onlineBadge();
-    if(b){
-      b.textContent=msg;
-      b.style.background=color||'#16a34a';
-      b.title='Click para forzar sincronización';
-      b.style.cursor='pointer';
-      b.onclick=()=>{this.pullCatalogs();this.pushAll();showToast&&showToast('Sincronizando…','info');};
-    }
+    this._statusMsg=msg||'';
+    this._statusColor=color||'#16a34a';
+    this._applySyncBadge();
   },
   async pullCatalogs(){
     if(!_tbSb)return;
-    if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return;}
+    if(!tbNavigatorOnline()){this.setStatus('📴 Offline','#dc2626');_tbMarkPendingPush(_tbIsPendingPush());return;}
     try{
       const tables=['presets','trabajadores','turnos','equipos','roles'];
       for(const t of tables){
@@ -11017,8 +11110,12 @@ const TBSync={
   _pushQueued:false,
   _pushTimer:null,
   schedulePush(){
-    if(!_tbSb||!_tbUser||this._pushQueued)return;
-    if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return;}
+    if(!_tbSb||!_tbUser){
+      if(!tbNavigatorOnline())_tbMarkPendingPush(true);
+      return;
+    }
+    if(this._pushQueued)return;
+    if(!tbNavigatorOnline()){this.setStatus('📴 Offline','#dc2626');_tbMarkPendingPush(true);return;}
     const eco=tbMsgEconomy();
     const deb=eco?9000:1200;
     const gap=eco?14000:2500;
@@ -11030,8 +11127,8 @@ const TBSync={
   },
   /** Sube ya moldes/pesajes/armado (cancela el debounce). Tras registrar en planta. */
   pushImmediate(){
-    if(!_tbSb||!_tbUser)return Promise.resolve({ok:true,skipped:true});
-    if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return Promise.resolve({ok:true,skipped:true,reason:'offline'});}
+    if(!_tbSb||!_tbUser){if(!tbNavigatorOnline())_tbMarkPendingPush(true);return Promise.resolve({ok:true,skipped:true,reason:'no_session'});}
+    if(!tbNavigatorOnline()){this.setStatus('📴 Offline','#dc2626');_tbMarkPendingPush(true);return Promise.resolve({ok:true,skipped:true,reason:'offline'});}
     if(this._pushTimer){clearTimeout(this._pushTimer);this._pushTimer=null;}
     this._pushQueued=false;
     return this.pushAll();
@@ -11097,7 +11194,8 @@ const TBSync={
     if(!_tbSb)return Promise.resolve({ok:true,skipped:true});
     if(!_tbUser)return Promise.resolve({ok:true,skipped:true,reason:'no_session'});
     if(!tbNavigatorOnline()){
-      this.setStatus('⚠ Offline','#dc2626');
+      this.setStatus('📴 Offline','#dc2626');
+      _tbMarkPendingPush(true);
       return Promise.resolve({ok:true,skipped:true,reason:'offline'});
     }
     this.setStatus('☁ …','#f59e0b');
@@ -11358,7 +11456,15 @@ const TBSync={
 
 // Monkey-patch rtSave para auto-push
 const _rtSaveOrig=rtSave;
-rtSave=function(){_rtSaveOrig();if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();_tbMaybeStoreArmadoBackupOnRtSave();TBSync.schedulePush();};
+rtSave=function(){
+  _rtSaveOrig();
+  if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
+  _tbMaybeStoreArmadoBackupOnRtSave();
+  if(!tbNavigatorOnline())_tbMarkPendingPush(true);
+  if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();
+  else if(!tbNavigatorOnline())_tbMarkPendingPush(true);
+  if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();
+};
 
 /* ── AUTH TABLET ── */
 async function tbAuthEmergencyExit(){
@@ -11459,6 +11565,7 @@ async function tbApplySession(session){
   tbUpdateUserBadge();
   try{void tbStartTabletPresence();}catch(e){console.warn('[tb presence]',e);}
   try{_tbLoadLastPushSigsFromStorage();}catch(_){}
+  try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
 }
 async function tbDoLogin(){
   const email=document.getElementById('tbAuthEmail').value.trim();
@@ -11493,14 +11600,14 @@ function tbUpdateUserBadge(){
 // Auth en cuanto existe el cliente (sin delay: evita flash de UI y doble lectura con INITIAL_SESSION)
 requestAnimationFrame(()=>{try{tbInitAuth();}catch(e){console.warn('[tb] tbInitAuth',e);}});
 window.addEventListener('online',async ()=>{
-  TBSync.setStatus('☁ Sync','#16a34a');
+  if(typeof TBSync!=='undefined')TBSync.setStatus('☁ Sync','#16a34a');
   if(!_tbUser)return;
-  try{
-    await tbPullCloudMultiDevice({silent:true});
-    if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function')await TBSync.pushAll();
-  }catch(e){console.warn('[tb online sync]',e);}
+  try{await tbFlushPendingCloudSync({silent:false});}catch(e){console.warn('[tb online sync]',e);}
 });
-window.addEventListener('offline',()=>TBSync.setStatus('⚠ Offline','#dc2626'));
+window.addEventListener('offline',()=>{
+  if(typeof TBSync!=='undefined')TBSync.setStatus('📴 Offline','#dc2626');
+  _tbMarkPendingPush(_tbIsPendingPush());
+});
 /* Tablet: la nube es la fuente entre dispositivos — pull periódico con sesión (además del push cada 3 min). */
 setInterval(()=>{try{if(!navigator.onLine||!_tbSb||!_tbUser)return;void tbPullCloudMultiDevice({silent:true});}catch(e){console.warn('[tb periodic cloud pull]',e);}},120000);
 /* Respaldo periódico a la nube (varios dispositivos / pestañas en segundo plano). */
@@ -11514,7 +11621,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible'||!_tbSb||!_tbUser)return;
   if(!tbNavigatorOnline())return;
   try{clearTimeout(window._tbVisPullT);}catch(_){}
-  window._tbVisPullT=setTimeout(()=>{void tbPullCloudMultiDevice({silent:true});},2200);
+  window._tbVisPullT=setTimeout(()=>{void tbFlushPendingCloudSync({silent:true});},2200);
 });
 </script>
 
