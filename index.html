@@ -274,11 +274,10 @@ body[data-theme="dark"] .eq-item-congelando{
   border-color:#38bdf8 !important;
 }
 .eq-item-congelando__badge{
-  display:inline-flex;align-items:center;gap:7px;flex-shrink:0;
-  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
-  color:#0c4a6e;background:linear-gradient(180deg,#bae6fd,#7dd3fc);padding:5px 10px;border-radius:999px;
+  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:28px;height:28px;
+  background:linear-gradient(180deg,#bae6fd,#7dd3fc);border-radius:999px;
   border:1px solid rgba(3,105,161,.35);
-  white-space:nowrap;
 }
 body[data-theme="dark"] .eq-item-congelando__badge{
   color:#e0f2fe;background:linear-gradient(180deg,rgba(3,105,161,.85),rgba(8,145,178,.55));
@@ -6525,10 +6524,10 @@ function openEqModal(codigo){
   const capRestPlaca=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):null;
   const placaFull=capRestPlaca!=null&&capRestPlaca<=0;
   const canLoadUi=rt.estado!=='deshielando'&&((rt.estado==='libre'||rt.estado==='cargando')||(rt.estado==='congelando'&&eq.tipo==='placa'));
-  let finCongMeta='';
+  let finCongHm='';
   if(rt.estado==='congelando'&&rt.horaInicio&&(Number(rt.horasTotal)||0)>0){
     const fin=_eqHoraFinCongelacion(rt.horaInicio,rt.horasTotal);
-    if(fin&&fin.hhmm&&fin.hhmm!=='—')finCongMeta=fin.siguienteDia?`Término: ${fin.hhmm} (+1 día)`:`Término: ${fin.hhmm}`;
+    if(fin&&fin.hhmm&&fin.hhmm!=='—')finCongHm=fin.siguienteDia?fin.hhmm+' (+1d)':fin.hhmm;
   }
   const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>{
     const enFrio=rt.estado==='congelando';
@@ -6537,31 +6536,31 @@ function openEqModal(codigo){
     const rowBase=enFrio
       ?`display:flex;align-items:center;gap:10px;padding:${rowPad};border-radius:var(--radius-sm);`
       :`display:flex;align-items:center;gap:10px;padding:${rowPad};background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);`;
-    const badge=enFrio?'<span class="eq-item-congelando__badge" title="Congelación en curso"><span class="eq-freeze-dot" aria-hidden="true"></span>En frío</span>':'';
-    const metaFin=enFrio&&finCongMeta?` · <span style="font-weight:700;color:var(--safety-blue,#0369a1);font-family:var(--mono,monospace);">${esc(finCongMeta)}</span>`:'';
+    const badge=enFrio?'<span class="eq-item-congelando__badge" title="En frío" aria-label="En frío"><span class="eq-freeze-dot" aria-hidden="true"></span></span>':'';
+    const metaSub=enFrio
+      ?`${it.cant} · ${esc(it.guia)}${finCongHm?' · '+esc(finCongHm):''}`
+      :`${it.cant} · ${esc(it.guia)} · ${it.horasTotal}h`;
     return`<div class="${rowCls}" style="${rowBase}">
       ${badge}
-      <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.producto)}</div><div style="font-size:11px;color:var(--text-3);">Cant: <strong>${it.cant}</strong> · Guía ${esc(it.guia)} · ${it.horasTotal}h${metaFin}</div></div>
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;">${esc(it.producto)}</div><div style="font-size:12px;color:var(--text-3);font-family:var(--mono,monospace);margin-top:2px;">${metaSub}</div></div>
       ${rt.estado==='libre'||rt.estado==='cargando'?`<button class="btn btn-danger-outline" type="button" onclick="removeEqItem(${i})">Quitar</button>`:''}
     </div>`;
-  }).join('')+'</div>'):'<div style="padding:18px;text-align:center;color:var(--text-3);font-size:12px;background:var(--surface-alt);border-radius:var(--radius-sm);border:1px dashed var(--border);">Sin productos cargados</div>';
+  }).join('')+'</div>'):'<div style="padding:14px;text-align:center;color:var(--text-3);font-size:12px;">—</div>';
 
   const actions=[];
   // Por cargar desde conteo (pending moldes filtered by tipo)
   const pendFilter=eq.tipo==='placa'?'molde':null;
   const pendientes=aggregatePendientes(pendFilter);
-  const cargarMasSub=rt.estado==='congelando'&&eq.tipo==='placa'
-    ?'<div style="font-size:11px;color:var(--text-3);margin:-4px 0 8px;line-height:1.45;">Añade moldes <strong>sin cambiar</strong> la hora de inicio ni el tiempo de congelación ya en curso.</div>'
-    :'';
+  const cargarMasSub='';
   if(canLoadUi&&pendientes.length){
     actions.push(`<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
-      <label style="font:700 12px var(--font);color:var(--safety-amber-dark,#b45309);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">${rt.estado==='congelando'&&eq.tipo==='placa'?'Cargar más desde conteo':'Por cargar desde conteo'}</label>
+      <label style="font:700 12px var(--font);color:var(--safety-amber-dark,#b45309);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">${rt.estado==='congelando'&&eq.tipo==='placa'?'Desde conteo':'Conteo'}</label>
       ${cargarMasSub}
-      ${placaFull?'<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:8px;">Placa a capacidad máxima: no se pueden cargar más moldes.</div>':''}
+      ${placaFull?'<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:8px;">Placa llena</div>':''}
       <div style="display:flex;flex-direction:column;gap:6px;">
         ${pendientes.map(it=>`
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff8e6;border:1.5px solid var(--safety-amber);border-radius:var(--radius-sm);">
-            <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;">${esc(it.preset.nombre)}</div><div style="font-size:11px;color:var(--text-3);">${esc(it.preset.tipo)} · <strong>Esp.</strong> ${esc(_idxEspeciePendiente(it))} · ${esc(it.preset.destino||'—')} · ${esc(it.preset.calibre||'—')} · ${it.preset.kgRef} kg/u</div></div>
+            <div style="flex:1;min-width:0;font-weight:600;font-size:13px;">${esc(it.preset.nombre)}</div>
             <div style="font-size:20px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);">${it.cant}</div>
             <button class="btn" type="button" style="background:var(--brand,#0f172a);color:white;padding:8px 14px;" onclick="cargarDesdeConteo(${it.preset.id})"${placaFull?' disabled':''}>Cargar</button>
           </div>`).join('')}
@@ -6619,18 +6618,23 @@ function openEqModal(codigo){
   </div>`:'';
   document.getElementById('modalTitle').textContent=eq.nombre+' · '+eq.codigo;
   const restCong=rt.estado==='congelando'?_eqMinutosRestantesCongelacion(rt):0;
+  let _eqModalHdrMeta='';
+  if(eq.tipo==='placa')_eqModalHdrMeta='<strong>'+_eqUnitsOnPlate(rt)+'</strong>/'+eq.capacidad;
+  else _eqModalHdrMeta=String(eq.capacidad)+' '+esc(eq.unidad);
+  if(rt.horaInicio&&rt.estado!=='deshielando')_eqModalHdrMeta+=' · '+esc(rt.horaInicio);
+  if(rt.estado==='congelando'){
+    if((Number(rt.horasTotal)||0)>0)_eqModalHdrMeta+=' · '+esc(String(rt.horasTotal))+'h';
+    if(restCong>0)_eqModalHdrMeta+=' · '+esc(_eqFmtMinutosHM(restCong));
+  }
+  if(rt.estado==='deshielando'&&rt.deshieloHoraInicio)_eqModalHdrMeta=' · '+esc(rt.deshieloHoraInicio);
   document.getElementById('modalBody').innerHTML=`
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-      <span class="badge ${b.c}" style="font-size:12px;"><span class="badge-dot"></span>${b.t}</span>
-      <span style="font-size:12px;color:var(--text-3);">${eq.tipo==='tunel'?'Túnel':'Placa'} · Capacidad ${eq.capacidad} ${esc(eq.unidad)}${eq.tipo==='placa'?' · En placa: <strong>'+_eqUnitsOnPlate(rt)+'</strong> / '+eq.capacidad:''}</span>
-      ${rt.horaInicio&&rt.estado!=='deshielando'?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Inicio: <strong>${esc(rt.horaInicio)}</strong></span>`:''}
-      ${rt.estado==='deshielando'&&rt.deshieloHoraInicio?`<span style="font-size:12px;color:var(--text-3);margin-left:auto;">Deshielo · inicio <strong style="font-family:var(--mono,monospace);">${esc(rt.deshieloHoraInicio)}</strong></span>`:''}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <span class="badge ${b.c}"><span class="badge-dot"></span>${b.t}</span>
+      <span style="font-size:12px;color:var(--text-3);font-family:var(--mono,monospace);">${_eqModalHdrMeta}</span>
     </div>
     ${deshieloEnCurso}
     ${deshieloVacíoHint}
-    ${rt.estado==='congelando'&&restCong>0?`<div style="font-size:12px;color:var(--text-2);margin:-6px 0 12px;padding:8px 10px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">Tiempo de frío: <strong>${esc(String(rt.horasTotal||0))} h</strong> · Resta aprox.: <strong>${esc(_eqFmtMinutosHM(restCong))}</strong></div>`:''}
     ${rt.estado==='listo'&&rt.cierreAnticipado?`<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:12px;padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">Frío finalizado <strong>antes de tiempo</strong>${rt.cierreMinRestantes!=null?' (faltaban ~'+esc(_eqFmtMinutosHM(rt.cierreMinRestantes))+')':''}.<br><span style="color:var(--text-2);font-weight:600;">Causal:</span> ${esc(rt.cierreCausal||'—')}</div>`:''}
-    <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Productos cargados</label>
     ${itemsHtml}
     ${actions.join('')}
     ${_eqModalHistorialDescargasHtml(eq.codigo)}`;
