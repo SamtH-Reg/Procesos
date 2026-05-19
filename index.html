@@ -1711,9 +1711,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
   font-size:11px;font-weight:600;
 }
 .fs-combo-item-ficha{
-  flex-shrink:0;margin-left:auto;padding-left:8px;font-size:12px;color:var(--text-3);font-weight:500;white-space:nowrap;
+  flex-shrink:0;margin-left:auto;min-width:60px;padding:4px 12px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
 }
-.fs-combo-ficha-num{color:#dc2626;font-weight:800;font-size:15px;letter-spacing:.02em;}
+.fs-combo-ficha-lbl{font-size:10px;color:var(--text-3);font-weight:500;line-height:1.2;}
+.fs-combo-ficha-num{color:#dc2626;font-weight:800;font-size:18px;line-height:1.15;letter-spacing:.03em;}
 .fs-combo-item-body{flex:1;min-width:0;}
 .fs-combo-item-name{font-size:13px;font-weight:600;color:var(--text-3);line-height:1.25;word-break:break-word;}
 .fs-combo-item-name em{font-style:normal;background:rgba(255,214,10,.65);border-radius:2px;padding:0 1px;color:var(--text);}
@@ -9139,7 +9141,7 @@ function _fsComboItemSubHtml(t,qLow){
 function _fsComboItemFichaHtml(t,qLow){
   const ficha=t&&t.ficha!=null&&String(t.ficha).trim()?String(t.ficha).trim():'';
   if(!ficha)return '';
-  return '<span class="fs-combo-item-ficha">Ficha <span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span></span>';
+  return '<span class="fs-combo-item-ficha"><span class="fs-combo-ficha-lbl">Ficha</span><span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span></span>';
 }
 function _fsComboCodeBadge(t){
   const c=String(t&&t.codigo||'').trim();
