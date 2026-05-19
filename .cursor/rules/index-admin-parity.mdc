@@ -55,3 +55,9 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 ## CSS compartido (modales)
 
 - Reglas bajo `.modal`, `.modal-body`, `.modal-ftr` y `.modal > form` afectan a **todos** los modales dinámicos; al cambiar scroll o flex, comprobar armado Pesaje/Moldes y modales sin `form` (hdr + body + ftr).
+
+## Registro general — molde/placa operativo
+
+- Presets con `usoEquipo === 'general'` (o tipo molde) y **horas túnel o placa** &gt; 0 se guardan en `RT.generales` / `RT.data.generales`, pero cuentan como molde operativo: `_presetEsConteoMoldePlaca` (index) / `_adminPresetEsConteoMoldePlaca` (admin).
+- **Carga:** `aggregatePendientes` / `consumirPendientes` ya mezclan `moldes` + `generales`; placa/túnel manual usan el mismo criterio de preset (general con horas túnel sí en lista manual de túnel).
+- **Resumen molde:** `_moldeRowsOperativos()` (tablet) y `_adminMoldeRowsForResumen()` (admin) unen filas virtuales con nombre `(Registro general)`. **Resumen pesaje** no las incluye (sin operario).

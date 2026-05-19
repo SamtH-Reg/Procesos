@@ -3186,7 +3186,7 @@ function _resumenRecMatchesScope(r,mod){
 function _resumenRawRecs(mod){
   if(!RT.data)return[];
   if(mod==='pes')return(Array.isArray(RT.data.pesajes)?RT.data.pesajes:[]).slice();
-  return(Array.isArray(RT.data.moldes)?RT.data.moldes:[]).filter(r=>!r.esGeneral);
+  return _adminMoldeRowsForResumen();
 }
 function _resumenPivotStore(mod){return _resumenPivotFilt[mod==='pes'?'pes':'mol'];}
 function _resumenPivotEnsure(mod){return _resumenPivotStore(mod);}
@@ -3200,6 +3200,33 @@ function _adminPresetForRec(r){
   const tipo=String((r&&r.tipo)||'').trim();
   if(tipo){const p=pres.find(x=>String(x.nombre||'').trim()===tipo);if(p)return p;}
   return null;
+}
+function _adminPresetEsConteoMoldePlaca(p){
+  if(!p||p.activo===false)return false;
+  const t=String(p.tipo||'').toLowerCase();
+  const u=typeof inferUsoEquipo==='function'?inferUsoEquipo(p):String(p.usoEquipo||'').toLowerCase();
+  if(t==='molde')return true;
+  if(u==='general'&&((+p.horasTunel||0)>0||(+p.horasPlaca||0)>0))return true;
+  return false;
+}
+/** Moldes + generales molde/placa para Resumen molde (admin). */
+function _adminMoldeRowsForResumen(){
+  const mol=(Array.isArray(RT.data.moldes)?RT.data.moldes:[]).filter(r=>!r.esGeneral);
+  const extra=[];
+  (RT.data.generales||[]).forEach(g=>{
+    const pr=_adminPresetForRec(g);
+    if(!pr||!_adminPresetEsConteoMoldePlaca(pr))return;
+    extra.push({
+      ...g,
+      codigo:'',
+      nombre:'(Registro general)',
+      ficha:'',
+      cant:g.cant,
+      kg:g.kg,
+      pendiente:g.pendiente!=null?g.pendiente:g.cant
+    });
+  });
+  return mol.concat(extra);
 }
 function _adminResumenTurnoLabel(r,kind){
   let cod=String((r&&r.turno)||'').trim();

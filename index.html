@@ -3491,12 +3491,12 @@ function _presetUsoEquipoPersist(p){
   if(hp>0&&ht<=0)return'placa';
   return'ambos';
 }
-/** Lista manual al cargar túnel (no incluye solo-registro-general). */
+/** Lista manual al cargar túnel (excluye solo placa; general con horas túnel sí). */
 function _presetParaCargaTunelManual(p){
   if(!p||p.activo===false)return false;
   const u=_presetUsoEquipo(p);
-  if(u==='general')return false;
   if(u==='placa')return false;
+  if(u==='general')return(+p.horasTunel||0)>0;
   return true;
 }
 /** Presets visibles en pestaña Registro general (tablet). */
@@ -3512,6 +3512,38 @@ function _presetSoloRegistroGeneral(p){
   const u=_presetUsoEquipo(p);
   const t=String(p&&p.tipo||'').toLowerCase();
   return u==='general'||t==='general';
+}
+/** Preset molde/placa contado en General pero con flujo de carga (túnel/placa). */
+function _presetEsConteoMoldePlaca(p){
+  if(!p||p.activo===false)return false;
+  const t=String(p.tipo||'').toLowerCase();
+  const u=_presetUsoEquipo(p);
+  if(t==='molde')return true;
+  if(u==='general'&&((+p.horasTunel||0)>0||(+p.horasPlaca||0)>0))return true;
+  return false;
+}
+/** Fila RT.generales vista como molde (resumen, ver registros, por cargar). */
+function _generalARowMoldeVirtual(g){
+  if(!g)return null;
+  const p=DB.data.presets.find(x=>String(x.id)===String(g.presetId));
+  if(!_presetEsConteoMoldePlaca(p))return null;
+  return{
+    id:g.id,_fromGeneral:true,esGeneral:true,
+    hora:g.hora,fecha:g.fecha,turno:g.turno,linea:g.linea,
+    codigo:'',nombre:'(Registro general)',ficha:'',
+    producto:g.producto,presetId:g.presetId,
+    destino:g.destino,calibre:g.calibre,especie:g.especie,
+    cant:g.cant,pendiente:g.pendiente!=null?g.pendiente:g.cant,kg:g.kg,guia:g.guia
+  };
+}
+/** Moldes + generales molde/placa (misma lógica operativa). */
+function _moldeRowsOperativos(){
+  const out=(RT.moldes||[]).map(r=>({...r,_fromGeneral:!!r._fromGeneral}));
+  (RT.generales||[]).forEach(g=>{
+    const v=_generalARowMoldeVirtual(g);
+    if(v)out.push(v);
+  });
+  return out;
 }
 const THEME_KEY='friosur_theme';
 const CONTRAST_KEY='friosur_contrast';
@@ -4403,7 +4435,7 @@ function _tbMergeRtRowsPeer(beforeArr, incomingArr){
 }
 /** KPIs del panel Moldes (tablet). */
 function idxRefreshMoldesKpis(){
-  const m=Array.isArray(RT.moldes)?RT.moldes:[];
+  const m=typeof _moldeRowsOperativos==='function'?_moldeRowsOperativos():(Array.isArray(RT.moldes)?RT.moldes:[]);
   const p=Array.isArray(RT.pesajes)?RT.pesajes:[];
   const totCant=m.reduce((s,r)=>s+(+r.cant||0),0);
   const kgM=m.reduce((s,r)=>s+(+r.kg||0),0);
@@ -5488,7 +5520,8 @@ function _mVerRowsInActiveArmado(rows,fechaFiltro){
 }
 function renderMoldesTable(){
   const tb=document.getElementById('tbMoldes');if(!tb)return;
-  const badge=document.getElementById('moldVerBadge');if(badge)badge.textContent=RT.moldes.length;
+  const opRows=_moldeRowsOperativos();
+  const badge=document.getElementById('moldVerBadge');if(badge)badge.textContent=opRows.length;
   const mount=document.getElementById('mVerFiltrosMount');
   const state=_readMoldesListaFiltrosFromDom();
   if(mount){
@@ -5499,7 +5532,7 @@ function renderMoldesTable(){
     });
   }
   const fBuscar=norm((document.getElementById('mVerBuscar')||{}).value||'');
-  let rows=_mVerRowsInActiveArmado(RT.moldes.slice(),state.fechaTurno);
+  let rows=_mVerRowsInActiveArmado(opRows.slice(),state.fechaTurno);
   rows=_filterMoldesPorListaFiltros(rows,state);
   if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar)||norm(_especieDe(r)).includes(fBuscar));
   // Info badge
@@ -5515,24 +5548,27 @@ function renderMoldesTable(){
     }
   }
   if(!rows.length){
-    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">'+(RT.moldes.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde la pestaña "Registrar".')+'</td></tr>';
+    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">'+(opRows.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde Moldes › Registrar o General (molde/placa).')+'</td></tr>';
     return;
   }
   const canCor=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
   tb.innerHTML=rows.map(r=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
     const pendBadge=pend===0?'<span class="badge slate" style="font-size:10px;">Cargado</span>':pend<r.cant?`<span class="badge amber" style="font-size:10px;">${pend}/${r.cant} pend.</span>`:'';
+    const genBadge=r._fromGeneral?' <span class="badge blue" style="font-size:10px;">General</span>':'';
     const kg=r.kg||0;
     const fechaDisp=r.fecha?r.fecha.split('-').reverse().join('/'):'—';
     const actBtns=canCor
-      ?`<button class="row-icon-btn" onclick="editMolde(${r.id})" aria-label="Editar" style="margin-right:4px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="row-icon-btn danger" onclick="delMolde(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`
+      ?(r._fromGeneral
+        ?`<button class="row-icon-btn danger" onclick="delGeneral(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`
+        :`<button class="row-icon-btn" onclick="editMolde(${r.id})" aria-label="Editar" style="margin-right:4px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="row-icon-btn danger" onclick="delMolde(${r.id})" aria-label="Eliminar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`)
       :'';
     return `<tr>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(fechaDisp)}</td>
     <td class="mono">${esc(r.hora)}</td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
-    <td>${esc(r.producto)} ${pendBadge}</td>
+    <td>${esc(r.producto)} ${pendBadge}${genBadge}</td>
     <td>${esc(_especieDe(r))}</td>
     <td class="num">${r.cant||0}</td>
     <td class="num">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
@@ -5717,11 +5753,14 @@ function regGeneral(){
   };
   RT.generales.unshift(rec);rtSave();
   renderGeneralesTable();renderPorCargar();renderEquipos();renderAnalisis();
+  if(typeof renderMoldesTable==='function')renderMoldesTable();
+  if(typeof renderMResumen==='function'){try{const mr=document.getElementById('mResumen');if(mr&&!mr.classList.contains('hidden'))renderMResumen();}catch(_){}}
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   document.getElementById('gRegCant').value='';
   document.getElementById('gRegKg').value='';
   gRegCalcKg();
-  showToast('Registro general guardado · '+cant+' '+p.tipo+' = '+kg+' kg','success');
+  const enMolde=_presetEsConteoMoldePlaca(p);
+  showToast('Registro general guardado · '+cant+' '+p.tipo+' = '+kg+' kg'+(enMolde?' · visible en moldes/túneles':''),'success');
 }
 function clearGReg(){
   document.getElementById('gRegCant').value='';
@@ -5890,8 +5929,11 @@ function delGeneral(id){
   if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
   if(!confirm('¿Eliminar este registro general?'))return;
   RT.generales=RT.generales.filter(r=>r.id!==id);rtSave();
-  renderGeneralesTable();
+  renderGeneralesTable();renderPorCargar();renderEquipos();
+  if(typeof renderMoldesTable==='function')renderMoldesTable();
+  if(typeof renderAnalisis==='function')renderAnalisis();
   if(typeof renderGResumen==='function'){try{const gr=document.getElementById('genResumen');if(gr&&!gr.classList.contains('hidden'))renderGResumen();}catch(_){}}
+  if(typeof renderMResumen==='function'){try{const mr=document.getElementById('mResumen');if(mr&&!mr.classList.contains('hidden'))renderMResumen();}catch(_){}}
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   showToast('Registro eliminado','success');
 }
@@ -6018,14 +6060,13 @@ function renderEquipos(){
 }
 function aggregatePendientes(filterTipo){
   // Suma pendiente por presetId. filterTipo null = todos (túneles). 'molde' = sólo molde (placas).
-  // Incluye RT.moldes y RT.generales: lo registrado en General con uso «solo registro general»
-  // aparece aquí para «Por cargar desde conteo» en túneles (no en el desplegable manual).
+  // Incluye RT.moldes y RT.generales (molde/placa con horas túnel o placa en preset general).
   const map={};
   const push=(r)=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
     if(pend<=0)return;
     const p=DB.data.presets.find(x=>String(x.id)===String(r.presetId));if(!p)return;
-    if(filterTipo==='molde'&&p.tipo!=='molde')return;
+    if(filterTipo==='molde'&&!_presetEsConteoMoldePlaca(p))return;
     if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,especieRow:''};
     map[r.presetId].cant+=pend;
     const rowEsp=String(r.especie||'').trim();
@@ -6208,11 +6249,9 @@ function openEqModal(codigo){
   const presets=DB.data.presets.filter(p=>{
     if(!p.activo)return false;
     const uso=_presetUsoEquipo(p)||'ambos';
-    if(eq.tipo==='placa'&&p.tipo!=='molde')return false;
+    if(eq.tipo==='placa'&&!_presetEsConteoMoldePlaca(p))return false;
     if(eq.tipo==='tunel'&&uso==='placa')return false;
     if(eq.tipo==='placa'&&uso==='tunel')return false;
-    if(eq.tipo==='tunel'&&uso==='general')return false;
-    if(eq.tipo==='placa'&&uso==='general')return false;
     return true;
   });
   const presetsTunelManual=eq.tipo==='tunel'?presets.filter(_presetParaCargaTunelManual):presets;
@@ -7568,8 +7607,7 @@ function _mResumenActiveFechas(){
 function _mResumenRowsForScope(fecha,turno,lineaCod){
   const codActual=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
   const matchTurno=turno==='actual'?String(codActual):(turno==='todos'?null:String(turno));
-  let mol=(RT.moldes||[]).filter(r=>{
-    if(r.esGeneral)return false;
+  let mol=_moldeRowsOperativos().filter(r=>{
     if(matchTurno==null||matchTurno==='todos'){
       return r.fecha===fecha||(!r.fecha&&fecha===nowDate());
     }
@@ -7814,7 +7852,7 @@ function renderMResumen(){
 function renderMConsol(){
   const wrap=document.getElementById('mConsolWrap');if(!wrap)return;
   const sub=document.getElementById('mConsolSub');
-  const allMol=(RT.moldes||[]).filter(r=>!r.esGeneral);
+  const allMol=_moldeRowsOperativos();
   if(!allMol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados aún.</div>';if(sub)sub.textContent='0 moldes';return;}
   const availableDates=_collectCycleDates(allMol,_recordCycleForMolde);
   const fd=availableDates[0]||nowDate(),td=availableDates[availableDates.length-1]||fd;
@@ -7868,7 +7906,7 @@ function renderMConsol(){
 function renderMEspecie(){
   const wrap=document.getElementById('mEspecieWrap');if(!wrap)return;
   const sub=document.getElementById('mEspecieSub');
-  const mol=(RT.moldes||[]).filter(r=>!r.esGeneral);
+  const mol=_moldeRowsOperativos();
   if(!mol.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes registrados aún.</div>';if(sub)sub.textContent='0 moldes';return;}
   const espSet=new Set();mol.forEach(r=>espSet.add(r.especie||'—'));
   const esps=[...espSet].sort();
@@ -9964,7 +10002,7 @@ function _especieDe(r){
 }
 function renderAnalisis(){
   // General stats
-  const moldes=RT.moldes||[],pesajes=RT.pesajes||[];
+  const moldes=typeof _moldeRowsOperativos==='function'?_moldeRowsOperativos():(RT.moldes||[]),pesajes=RT.pesajes||[];
   const kgMol=moldes.reduce((s,r)=>s+(r.kg||0),0);
   const cantMol=moldes.reduce((s,r)=>s+(r.cant||0),0);
   const kgPes=pesajes.reduce((s,r)=>s+(r.kg||0),0);
@@ -10149,7 +10187,7 @@ function renderAnalisis(){
 }
 function exportarAnalisis(){
   // CSV simple del consolidado por especie
-  const moldes=RT.moldes||[],pesajes=RT.pesajes||[];
+  const moldes=typeof _moldeRowsOperativos==='function'?_moldeRowsOperativos():(RT.moldes||[]),pesajes=RT.pesajes||[];
   const map={};
   moldes.forEach(r=>{const e=_especieDe(r);if(!map[e])map[e]={cant:0,kgMol:0,kgPes:0};map[e].cant+=(r.cant||0);map[e].kgMol+=(r.kg||0);});
   pesajes.forEach(r=>{const e=_especieDe(r);if(!map[e])map[e]={cant:0,kgMol:0,kgPes:0};map[e].kgPes+=(r.kg||0);});
