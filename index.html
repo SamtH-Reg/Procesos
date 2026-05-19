@@ -4715,6 +4715,50 @@ function _ventanaTurnoFechaRefMs(fechaRef,cod){
   if(s==null||e==null)return null;
   return{start:s,end:e};
 }
+/** Ventanas de turno entre fechas ancla (inclusive), p. ej. día 18 y noche 18–19. */
+function _collectTurnoWindows(desde,hasta,cod){
+  const c=String(cod||'').trim();
+  if(!c)return null;
+  const out=[];
+  let cur=_cycleDateNorm(desde);
+  const end=_cycleDateNorm(hasta||desde);
+  if(!cur||!end)return null;
+  for(let guard=0;guard<800;guard++){
+    const w=_ventanaTurnoFechaRefMs(cur,c);
+    if(w)out.push(w);
+    if(cur>=end)break;
+    cur=_addDaysLocalYmd(cur,1);
+  }
+  return out.length?out:null;
+}
+/** Fecha ancla (inicio del turno) que contiene el instante ts. */
+function _anchorDateForTsInTurno(ts,codTurno){
+  const c=String(codTurno||'dia').trim();
+  if(ts==null||!c)return null;
+  const base=_cycleDateNorm(_ymdFromMs(ts));
+  const def=_turnoDefFromCodigo(c);
+  if(!def)return base;
+  const a=_parseHMToMinutes(def.inicio),b=_parseHMToMinutes(def.fin);
+  if(a==null||b==null||b>a)return base;
+  let cur=_addDaysLocalYmd(base,-1);
+  for(let i=0;i<3;i++){
+    const w=_ventanaTurnoFechaRefMs(cur,c);
+    if(w&&ts>=w.start&&ts<w.end)return cur;
+    cur=_addDaysLocalYmd(cur,1);
+  }
+  cur=_addDaysLocalYmd(base,-10);
+  for(let j=0;j<25;j++){
+    const w=_ventanaTurnoFechaRefMs(cur,c);
+    if(w&&ts>=w.start&&ts<w.end)return cur;
+    cur=_addDaysLocalYmd(cur,1);
+  }
+  return base;
+}
+function _ymdFromMs(ms){
+  const d=new Date(ms);
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
 function _moldeTurnoNorm(r){
   const d=String((r&&r.turno)||'').trim().toLowerCase();
   if(d==='noche'||d==='dia')return d;
@@ -7581,13 +7625,17 @@ function _consolKeepRangeFromDom(prefix,fallbackRange){
   return cur;
 }
 function _recordCycleForMolde(r){
-  const fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
-  const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoMoldesForLinea((r&&r.linea)||'',fecha)||'dia');
+  const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoMoldesForLinea((r&&r.linea)||'',(r&&r.fecha)||'')||'dia');
+  const ts=_registroTsMolde(r);
+  let fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
+  if(ts!=null){const a=_anchorDateForTsInTurno(ts,turno);if(a)fecha=a;}
   return {fecha,turno,idx:_cycleIndex(fecha,turno)};
 }
 function _recordCycleForPesaje(r){
-  const fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
-  const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoPesajeForLinea((r&&r.linea)||'',fecha)||'dia');
+  const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoPesajeForLinea((r&&r.linea)||'',(r&&r.fecha)||'')||'dia');
+  const ts=_registroTsPesaje(r);
+  let fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
+  if(ts!=null){const a=_anchorDateForTsInTurno(ts,turno);if(a)fecha=a;}
   return {fecha,turno,idx:_cycleIndex(fecha,turno)};
 }
 function _collectCycleDates(rows,mapper){
@@ -7609,6 +7657,18 @@ function _mResumenRowsForScope(fecha,turno,lineaCod){
   const matchTurno=turno==='actual'?String(codActual):(turno==='todos'?null:String(turno));
   let mol=_moldeRowsOperativos().filter(r=>{
     if(matchTurno==null||matchTurno==='todos'){
+      const fRef=_cycleDateNorm(fecha);
+      const ts=_registroTsMolde(r);
+      const codes=(DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim()).filter(Boolean);
+      const all=codes.length?codes:['dia','noche'];
+      if(ts!=null){
+        for(const cod of all){
+          if(_moldeTurnoNorm(r)!==String(cod).toLowerCase())continue;
+          const wins=_collectTurnoWindows(fRef,fRef,cod);
+          if(wins&&wins.some(w=>ts>=w.start&&ts<w.end))return true;
+        }
+        return false;
+      }
       return r.fecha===fecha||(!r.fecha&&fecha===nowDate());
     }
     return _moldeCoincideFechaTurnoFiltro(r,fecha,matchTurno);

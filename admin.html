@@ -2004,8 +2004,17 @@ function _adminPesajeMatchesTurnoFilter(r,filtro){
 }
 function _filterRecs(recs, kind){
   const arr=Array.isArray(recs)?recs:[];
+  const fdYmd=_filters.desde?_dateObjToLocalYmd(_filters.desde):'';
+  const fhYmd=_filters.hasta?_dateObjToLocalYmd(_filters.hasta):fdYmd;
+  const useCycleDates=!!(fdYmd||fhYmd);
   return arr.filter(r=>{
-    if(_filters.turno){
+    if(useCycleDates){
+      const mod=kind==='pesaje'?'pes':'mol';
+      const d0=_ieCycleDateNorm(fdYmd||fhYmd||_adminTodayLocalYmd());
+      const h0=_ieCycleDateNorm(fhYmd||d0);
+      const tur=String(_filters.turno||'').trim();
+      if(!_adminRecordInCycleScope(r,mod,d0,h0,tur))return false;
+    }else if(_filters.turno){
       const filtro=String(_filters.turno||'').trim();
       if(kind==='pesaje'){if(!_adminPesajeMatchesTurnoFilter(r,filtro))return false;}
       else if(kind==='molde'){if(!_adminMoldeMatchesTurnoFilter(r,filtro))return false;}
@@ -2032,7 +2041,10 @@ function _filterRecs(recs, kind){
       }
       if(!okLn)return false;
     }
-    if(!_adminDashRecordMatchesDateTimeFilters(r))return false;
+    const hasHora=_filters.horaDesdeMin!=null&&_filters.horaHastaMin!=null;
+    if(useCycleDates){
+      if(hasHora&&!_adminDashRecordMatchesDateTimeFilters(r))return false;
+    }else if(!_adminDashRecordMatchesDateTimeFilters(r))return false;
     return true;
   });
 }
@@ -3139,8 +3151,9 @@ function _resumenInitOnPageOpen(){
       fd.value=slFd.value;
       fh.value=(slFh&&slFh.value)||slFd.value;
     }else{
-      fd.value='2026-05-18';
-      fh.value='2026-05-18';
+      const y=_adminTodayLocalYmd();
+      fd.value=y;
+      fh.value=y;
     }
   }
   _resumenReadScopeFromDom();
@@ -3171,17 +3184,50 @@ function resumenSyncScopeFromDashboard(){
   renderResumen();
   toast('Filtros copiados del dashboard','info');
 }
+/**
+ * Ciclo de turno por fecha+hora real (día 07:00–19:00, noche 19:00–07:00 día sig., según Turnos).
+ * @param {string} mod 'mol'|'pes'
+ * @param {string} d0 fecha ancla desde YYYY-MM-DD
+ * @param {string} h0 fecha ancla hasta YYYY-MM-DD
+ * @param {string} tur '' = todos los turnos; 'actual'|codigo = uno
+ */
+function _adminRecordInCycleScope(r,mod,d0,h0,tur){
+  const modKey=mod==='pes'?'pesajes':'moldes';
+  const ts=_ieGetRecordTs(r,modKey);
+  const activos=(DB.data.turnos||[]).filter(t=>t.activo!==false);
+  const turnoCodes=activos.map(t=>String(t.codigo||'').trim()).filter(Boolean);
+  const codes=tur
+    ?(tur==='actual'?[_adminInferTurnoCodigoPorHorario()||'dia']:[tur])
+    :(turnoCodes.length?turnoCodes:['dia','noche']);
+  for(const cod of codes){
+    if(!cod)continue;
+    const cLower=String(cod).toLowerCase();
+    if(mod==='pes'){
+      if(tur&&!_adminPesajeMatchesTurnoFilter(r,tur))continue;
+      const rt=String(r.turno||'').toLowerCase();
+      const arm=_adminTurnoArmadoPesajeForLinea(r.linea,r&&r.fecha);
+      if(rt&&rt!==cLower&&(!arm||String(arm).toLowerCase()!==cLower))continue;
+    }else if(_ieMoldeTurnoNorm(r)!==cLower)continue;
+    const wins=_ieCollectTurnoWindows(d0,h0,cod);
+    if(wins&&wins.length&&ts!=null&&wins.some(w=>ts>=w.start&&ts<w.end))return true;
+  }
+  if(ts==null){
+    const ymd=_resumenRecFechaYmd(r);
+    return!!ymd&&ymd>=d0&&ymd<=h0;
+  }
+  return false;
+}
+function _adminResumenRecordInScope(r,mod){
+  const fd=String(_resumenScope.fechaDesde||'').trim();
+  const fh=String(_resumenScope.fechaHasta||fd).trim();
+  const tur=String(_resumenScope.turno||'').trim();
+  if(!fd&&!fh&&!tur)return true;
+  const d0=_ieCycleDateNorm(fd||fh||_adminTodayLocalYmd());
+  const h0=_ieCycleDateNorm(fh||d0);
+  return _adminRecordInCycleScope(r,mod,d0,h0,tur);
+}
 function _resumenRecMatchesScope(r,mod){
-  const ymd=_resumenRecFechaYmd(r);
-  if(!ymd)return false;
-  const fd=_resumenScope.fechaDesde||'';
-  const fh=_resumenScope.fechaHasta||fd;
-  if(fd&&ymd<fd)return false;
-  if(fh&&ymd>fh)return false;
-  const tur=_resumenScope.turno;
-  if(!tur)return true;
-  if(mod==='pes')return _adminPesajeMatchesTurnoFilter(r,tur);
-  return _adminMoldeMatchesTurnoFilter(r,tur);
+  return _adminResumenRecordInScope(r,mod);
 }
 function _resumenRawRecs(mod){
   if(!RT.data)return[];
@@ -3510,7 +3556,7 @@ function renderResumen(){
   if(title)title.textContent=mod==='pes'?'Pesaje':'Recolección moldes';
   const rawN=_resumenRawRecs(mod).length;
   const hint=document.getElementById('resumenDashHint');
-  if(hint)hint.textContent=rawN?'Filtros: clic en columna (▼), marcar valores y pulsar Establecer filtro. Kilos según fechas y turno de arriba.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
+  if(hint)hint.textContent=rawN?'Filtros: clic en columna (▼), marcar valores y pulsar Establecer filtro. Fechas = inicio de ciclo (día 07:00–19:00, noche 19:00–07:00 día sig.) según Turnos.':'Sin datos en memoria — pulsa ☁ Traer datos y Aplicar fechas.';
   renderResumenTableOnly();
 }
 function exportResumenExcel(){
@@ -5982,10 +6028,15 @@ function _ieFilterMolPes(mod,recs){
         if(String(r.turno||'').toLowerCase()!==cod)return false;
       }else if(ts==null||!wins.some(w=>ts>=w.start&&ts<w.end))return false;
     }else{
+      const allCodes=(DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim()).filter(Boolean);
+      const codes=allCodes.length?allCodes:['dia','noche'];
       if(ts!=null){
-        const ymd=_ieYmdFromMs(ts);
-        if(desde&&ymd<d0)return false;
-        if(hasta&&ymd>h0)return false;
+        let inWin=false;
+        for(const cod of codes){
+          const wins=_ieCollectTurnoWindows(d0,h0,cod);
+          if(wins&&wins.some(w=>ts>=w.start&&ts<w.end)){inWin=true;break;}
+        }
+        if(!inWin)return false;
       }else{
         const d=_recDate(r);
         if(d&&desde&&d.getTime()<_ymdToLocalStart(desde).getTime())return false;

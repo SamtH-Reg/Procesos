@@ -61,3 +61,10 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 - Presets con `usoEquipo === 'general'` (o tipo molde) y **horas túnel o placa** &gt; 0 se guardan en `RT.generales` / `RT.data.generales`, pero cuentan como molde operativo: `_presetEsConteoMoldePlaca` (index) / `_adminPresetEsConteoMoldePlaca` (admin).
 - **Carga:** `aggregatePendientes` / `consumirPendientes` ya mezclan `moldes` + `generales`; placa/túnel manual usan el mismo criterio de preset (general con horas túnel sí en lista manual de túnel).
 - **Resumen molde:** `_moldeRowsOperativos()` (tablet) y `_adminMoldeRowsForResumen()` (admin) unen filas virtuales con nombre `(Registro general)`. **Resumen pesaje** no las incluye (sin operario).
+
+## Filtros por ciclo de turno (hora real)
+
+- Catálogo **Turnos** (Supabase `turnos`): día típico `07:00–19:00`, noche `19:00–07:00` (cruce medianoche).
+- **Admin resumen** (`_adminResumenRecordInScope`): filtra por `fecha+hora` del registro dentro de ventanas `_ieVentanaTurnoFechaRefMs` / `_ieCollectTurnoWindows`, no solo `r.fecha` civil.
+- **Tablet** (`_moldeCoincideFechaTurnoFiltro`, `_collectTurnoWindows`, `_anchorDateForTsInTurno`, `_recordCycleForMolde`): misma regla para resumen/consolidado.
+- **Import/export** (`_ieFilterMolPes`): con turno vacío, también usa unión de ventanas (no solo YMD del timestamp).
