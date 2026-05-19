@@ -1608,7 +1608,7 @@ body[data-theme="dark"] .especie-chip:hover{background:rgba(30,58,138,.9);}
 #mRegistrar .ios-picker-trigger .trigger-name,
 #pRegistrar .ios-picker-trigger .trigger-name{
   color:var(--text);
-  font-weight:700;
+  font-weight:600;
 }
 #mRegistrar .ios-picker-trigger .trigger-arrow,
 #pRegistrar .ios-picker-trigger .trigger-arrow{
@@ -1717,7 +1717,24 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .codigo-rojo{color:#dc2626 !important;font-weight:700;}
 body[data-theme="dark"] .fs-combo-code,body[data-theme="dark"] .fs-combo-item-code{background:rgba(127,29,29,.35);border-color:#991b1b;color:#fca5a5;}
 .fs-combo-empty{padding:28px 16px;text-align:center;color:var(--text-3);font-size:13px;}
-#mRegistrar .fs-combo-trigger,#pRegistrar .fs-combo-trigger{border-width:2px;border-color:var(--navy-600);}
+#mRegistrar .fs-combo-trigger,#pRegistrar .fs-combo-trigger{
+  border-width:2px;border-color:var(--navy-600);
+  min-height:40px;padding:8px 12px;gap:8px;font-size:13px;
+}
+#mRegistrar .fs-combo-ph,#pRegistrar .fs-combo-ph{
+  font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#mRegistrar .fs-combo-val-name,#pRegistrar .fs-combo-val-name{font-size:13px;}
+#mRegistrar .fs-combo-code,#pRegistrar .fs-combo-code{font-size:11px;padding:3px 8px;}
+#mRegistrar .fs-combo-chevron,#pRegistrar .fs-combo-chevron{width:14px;height:14px;}
+#mRegistrar .ios-picker-trigger,#pRegistrar .ios-picker-trigger{
+  min-height:40px;padding:8px 12px;gap:8px;font-size:13px;
+}
+#mRegistrar .ios-picker-trigger .trigger-name,#pRegistrar .ios-picker-trigger .trigger-name{
+  font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#mRegistrar .ios-picker-trigger .trigger-arrow:first-of-type,#pRegistrar .ios-picker-trigger .trigger-arrow:first-of-type{display:none;}
+#mRegistrar .ios-picker-trigger .trigger-arrow,#pRegistrar .ios-picker-trigger .trigger-arrow{width:14px;height:14px;}
 body[data-theme="dark"] .fs-combo-trigger{background:var(--surface-alt);border-color:var(--border-strong);color:var(--text);}
 body[data-theme="dark"] .fs-combo-panel{background:var(--surface);border-color:var(--border-strong);}
 body[data-theme="dark"] .fs-combo-item{background:var(--surface);}
@@ -1859,11 +1876,13 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
         </div>
         <div class="form-field">
           <label class="form-label">Trabajador <span id="mRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
-          <button class="ios-picker-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange',true,_getMRegPickerWorkers)">
-            <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span class="trigger-name">SELECCIONE AL TRABAJADOR</span>
-            <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          <div class="fs-combo">
+          <button class="fs-combo-trigger" type="button" id="mRegTrabPicker" onclick="openRegPicker('mRegTrab','Seleccionar Trabajador','onMRegTrabChange',true,_getMRegPickerWorkers)">
+            <span class="fs-combo-ph">Seleccionar trabajador…</span>
+            <span class="fs-combo-val" hidden></span>
+            <svg class="fs-combo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </button>
+          </div>
           <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="mRegTrab" onchange="onMRegTrabChange()"></select>
         </div>
       </div>
@@ -2184,11 +2203,13 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
               <div class="form-grid cols-2" style="margin-top:4px;">
                 <div class="form-field">
                   <label class="form-label">Planillero</label>
-                  <button class="ios-picker-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false,_getPRegPickerPlanilleros)">
-                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <span class="trigger-name">SELECCIONE AL PLANILLERO</span>
-                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  <div class="fs-combo">
+                  <button class="fs-combo-trigger" type="button" id="pRegPlanilleroPicker" onclick="openRegPicker('pRegPlanillero','Seleccionar Planillero',null,false,_getPRegPickerPlanilleros)">
+                    <span class="fs-combo-ph">Seleccionar planillero…</span>
+                    <span class="fs-combo-val" hidden></span>
+                    <svg class="fs-combo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
+                  </div>
                   <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegPlanillero"></select>
                 </div>
                 <div class="form-field">
@@ -2222,11 +2243,13 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
               <div class="form-grid cols-2">
                 <div class="form-field span-2">
                   <label class="form-label">Trabajador <span class="required">*</span> <span id="pRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
-                  <button class="ios-picker-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
-                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <span class="trigger-name">SELECCIONE AL TRABAJADOR</span>
-                    <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  <div class="fs-combo">
+                  <button class="fs-combo-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
+                    <span class="fs-combo-ph">Seleccionar trabajador…</span>
+                    <span class="fs-combo-val" hidden></span>
+                    <svg class="fs-combo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                   </button>
+                  </div>
                   <select style="display:none;position:absolute;width:0;height:0;opacity:0;pointer-events:none;" id="pRegTrab" onchange="onPRegTrabChange()"></select>
                 </div>
               </div>
@@ -5177,13 +5200,7 @@ function onMRegTrabChange(){
   if(!badge)return;
   if(!val){
     badge.style.display='none';
-    const btn=document.getElementById('mRegTrabPicker');
-    if(btn){
-      btn.innerHTML=`
-      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <span class="trigger-name">SELECCIONE AL TRABAJADOR</span>
-      <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-    }
+    if(typeof _updateRegPickerDisplay==='function')_updateRegPickerDisplay('mRegTrab','','');
     if(window.renderMRegPresets)renderMRegPresets();
     return;
   }
@@ -6758,15 +6775,9 @@ function renderPRegPlanilleros(){
       if(w)_updateRegPickerDisplay('pRegPlanillero',w.nombre,_pRegPlanilleroDisplayMeta(w));
     }
   }else if(!workers.length){
-    const pb=document.getElementById('pRegPlanilleroPicker');
-    if(pb){
-      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">SELECCIONE AL TRABAJADOR</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-    }
+    if(typeof _updateRegPickerDisplay==='function')_updateRegPickerDisplay('pRegPlanillero','','');
   }else if(workers.length&&!String(sel.value||'').trim()){
-    const pb=document.getElementById('pRegPlanilleroPicker');
-    if(pb){
-      pb.innerHTML=`<svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><span class="trigger-name">SELECCIONE AL TRABAJADOR</span><svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-    }
+    if(typeof _updateRegPickerDisplay==='function')_updateRegPickerDisplay('pRegPlanillero','','');
   }
   if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
 }
@@ -9125,7 +9136,7 @@ function _fsComboEnsureWrap(anchorEl){
   anchorEl.type='button';
   anchorEl.setAttribute('aria-haspopup','listbox');
   const ph=anchorEl.querySelector('.trigger-name,.fs-combo-ph');
-  const label=(ph&&ph.textContent&&ph.textContent.trim())||'SELECCIONE AL TRABAJADOR';
+  const label=(ph&&ph.textContent&&ph.textContent.trim())||'Seleccionar trabajador…';
   anchorEl.innerHTML=`
     <span class="fs-combo-ph">${esc(label)}</span>
     <span class="fs-combo-val" hidden></span>
@@ -9379,7 +9390,7 @@ function _updateRegPickerDisplay(selectId,nombre,codigo){
   const ph=btn.querySelector('.fs-combo-ph');
   const val=btn.querySelector('.fs-combo-val');
   if(!nombre){
-    if(ph){ph.hidden=false;ph.textContent=selectId==='pRegPlanillero'?'SELECCIONE AL PLANILLERO':'SELECCIONE AL TRABAJADOR';}
+    if(ph){ph.hidden=false;ph.textContent=selectId==='pRegPlanillero'?'Seleccionar planillero…':'Seleccionar trabajador…';}
     if(val)val.hidden=true;
     return;
   }
@@ -9399,7 +9410,7 @@ function clearRegPicker(selectId,changeFnName){
     _fsComboEnsureWrap(btn);
     const ph=btn.querySelector('.fs-combo-ph');
     const val=btn.querySelector('.fs-combo-val');
-    if(ph){ph.hidden=false;ph.textContent=selectId==='pRegPlanillero'?'SELECCIONE AL PLANILLERO':'SELECCIONE AL TRABAJADOR';}
+    if(ph){ph.hidden=false;ph.textContent=selectId==='pRegPlanillero'?'Seleccionar planillero…':'Seleccionar trabajador…';}
     if(val)val.hidden=true;
   }
   if(changeFnName&&window[changeFnName])window[changeFnName]();
