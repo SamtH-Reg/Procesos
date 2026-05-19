@@ -726,6 +726,7 @@ body[data-theme="dark"] .preset-card.selected .preset-details{color:#86efac;}
 .preset-tag.molde{background:#dbeafe;color:#1e40af;}
 .preset-tag.tunel{background:#e0e7ff;color:#3730a3;}
 .preset-tag.placa{background:#cffafe;color:#155e75;}
+.preset-tag.general{background:#f1f5f9;color:#475569;}
 
 /* ═══ WORKER BADGE ════════════════════════════════════════════ */
 .worker-badge{
@@ -2425,7 +2426,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
     <div id="genRegistrar" class="gen-tab">
       <div class="alert info" style="margin-bottom:14px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-        <div><strong>Sin trabajador</strong> — conteos de pallet, carro o castillo según presets (tipo distinto de molde).</div>
+        <div><strong>Sin trabajador</strong> — conteos según presets con tipo General / Pallet / Carro / Castillo o uso «Solo registro general» en Admin.</div>
       </div>
       <div class="form-grid cols-3" style="margin-bottom:14px;">
         <div class="form-field">
@@ -3460,7 +3461,7 @@ function coercePresetFields(p){
   if((p.horasPlaca==null||p.horasPlaca==='')&&p.horas_placa!=null)p.horasPlaca=+p.horas_placa;
   if((p.tempObj==null||p.tempObj==='')&&p.temp_obj!=null)p.tempObj=+p.temp_obj;
   const usoRaw=String(p.usoEquipo||p.uso_equipo||'').toLowerCase();
-  if(usoRaw==='tunel'||usoRaw==='placa'||usoRaw==='ambos')p.usoEquipo=usoRaw;
+  if(usoRaw==='tunel'||usoRaw==='placa'||usoRaw==='ambos'||usoRaw==='general')p.usoEquipo=usoRaw;
   else{
     const ht=+p.horasTunel||0;
     const hp=+p.horasPlaca||0;
@@ -3476,6 +3477,24 @@ function mergePresetsWithLocalSnapshot(remoteRows){
     out.push(r);
   });
   return out;
+}
+const _PRESET_TIPO_LABELS={molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo',general:'General'};
+function _presetUsoEquipo(p){
+  return String(p&&p.usoEquipo||p&&p.uso_equipo||'').toLowerCase();
+}
+/** Presets visibles en pestaña Registro general (tablet). */
+function _presetParaRegistroGeneral(p){
+  if(!p||p.activo===false)return false;
+  const t=String(p.tipo||'').toLowerCase();
+  const u=_presetUsoEquipo(p);
+  if(u==='general')return true;
+  return t==='general'||t==='pallet'||t==='carro'||t==='castillo';
+}
+/** Solo registro general — no en moldes ni túneles/placas. */
+function _presetSoloRegistroGeneral(p){
+  const u=_presetUsoEquipo(p);
+  const t=String(p&&p.tipo||'').toLowerCase();
+  return u==='general'||t==='general';
 }
 const THEME_KEY='friosur_theme';
 const CONTRAST_KEY='friosur_contrast';
@@ -5270,7 +5289,7 @@ function _presetCardDetailHtml(p){
 }
 function renderMRegPresets(){
   const grid=document.getElementById('mRegPresetGrid');if(!grid)return;
-  const allPresets=DB.data.presets.filter(p=>p.activo);
+  const allPresets=DB.data.presets.filter(p=>p.activo&&!_presetSoloRegistroGeneral(p));
   const especie=_getMRegEspecie();
   const presets=especie?allPresets.filter(p=>p.especie===especie):allPresets;
   const cntEl=document.getElementById('mRegPresetCount');
@@ -5289,7 +5308,7 @@ function renderMRegPresets(){
     <button type="button" class="preset-card ${String(RT.selPresetM)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetM(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
       ${_presetCardDetailHtml(p)}
-      <div class="preset-meta"><span class="preset-tag ${p.tipo==='molde'?'molde':'bandeja'}">${({molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
+      <div class="preset-meta"><span class="preset-tag ${p.tipo==='molde'?'molde':'bandeja'}">${_PRESET_TIPO_LABELS[p.tipo]||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
 }
 function _clearMRegEspecieFilter(){
@@ -5619,14 +5638,14 @@ function renderGRegTurnos(){
 }
 function renderGRegPresets(){
   const grid=document.getElementById('gRegPresetGrid');if(!grid)return;
-  const presets=DB.data.presets.filter(p=>p.activo&&p.tipo!=='molde');
-  document.getElementById('gRegPresetCount').textContent=presets.length+' presets (pallet/carro/castillo)';
-  if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets generales — créalos en Admin con tipo pallet/carro/castillo</div>';return;}
+  const presets=DB.data.presets.filter(_presetParaRegistroGeneral);
+  document.getElementById('gRegPresetCount').textContent=presets.length+' preset'+(presets.length!==1?'s':'')+' (general)';
+  if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets para Registro general — en Admin usa <strong>tipo General</strong> o <strong>uso: Solo registro general</strong> (también Pallet / Carro / Castillo).</div>';return;}
   grid.innerHTML=presets.map(p=>`
     <button type="button" class="preset-card ${String(RT.selPresetG)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetG(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
       ${_presetCardDetailHtml(p)}
-      <div class="preset-meta"><span class="preset-tag ${p.tipo}">${({pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[p.tipo])||p.tipo}</span><strong>${p.kgRef} kg/u</strong></div>
+      <div class="preset-meta"><span class="preset-tag ${({general:'general',pallet:'pallet',carro:'carro',castillo:'castillo',molde:'molde'}[String(p.tipo||'').toLowerCase()])||'bandeja'}">${_PRESET_TIPO_LABELS[p.tipo]||p.tipo||'—'}</span><strong>${p.kgRef} kg/u</strong></div>
     </button>`).join('');
 }
 function selectPresetG(id){
@@ -6175,6 +6194,7 @@ function openEqModal(codigo){
     if(eq.tipo==='placa'&&p.tipo!=='molde')return false;
     if(eq.tipo==='tunel'&&uso==='placa')return false;
     if(eq.tipo==='placa'&&uso==='tunel')return false;
+    if(uso==='general')return false;
     return true;
   });
   const b=estadoBadgeTP[rt.estado]||estadoBadgeTP.libre;
