@@ -2428,7 +2428,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         <div><strong>Sin trabajador</strong> — conteos según presets con tipo General / Pallet / Carro / Castillo o uso «Solo registro general» en Admin.</div>
       </div>
-      <div class="form-grid cols-3" style="margin-bottom:14px;">
+      <div class="form-grid cols-4" style="margin-bottom:14px;">
         <div class="form-field">
           <label class="form-label">Turno <span class="required">*</span></label>
           <select class="select filled" id="gRegTurno" onchange="onGRegTurnoChange()"></select>
@@ -2446,6 +2446,12 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
             <option value="L4">L4 — Línea 4</option>
             <option value="L5">L5 — Línea 5</option>
             <option value="—">— Sin línea</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Especie</label>
+          <select class="select filled" id="gRegEspecie" onchange="onGRegEspecieChange()">
+            <option value="">Todas las especies</option>
           </select>
         </div>
       </div>
@@ -5733,11 +5739,60 @@ function renderGRegTurnos(){
   const fe=document.getElementById('gRegFecha');
   if(fe&&(!String(fe.value||'').trim()||applied))fe.value=_fechaArmadoOperativa(sel.value);
 }
+function _gRegEspeciesFromPresets(){
+  const seen=new Set(),out=[];
+  (DB.data.presets||[]).filter(_presetParaRegistroGeneral).forEach(p=>{
+    const e=String(p.especie||'').trim();
+    if(!e||seen.has(e))return;
+    seen.add(e);out.push(e);
+  });
+  out.sort((a,b)=>a.localeCompare(b,'es'));
+  return out;
+}
+function _getGRegEspecieFilter(){
+  const el=document.getElementById('gRegEspecie');
+  return el?String(el.value||'').trim():'';
+}
+function renderGRegEspecieSelect(){
+  const sel=document.getElementById('gRegEspecie');if(!sel)return;
+  const prev=_getGRegEspecieFilter();
+  const especies=_gRegEspeciesFromPresets();
+  sel.innerHTML='<option value="">Todas las especies</option>'+
+    especies.map(e=>`<option value="${esc(e)}">${esc(e)}</option>`).join('');
+  if(prev&&especies.includes(prev))sel.value=prev;
+  else sel.value='';
+}
+function onGRegEspecieChange(){
+  const especie=_getGRegEspecieFilter();
+  if(especie&&RT.selPresetG){
+    const p=DB.data.presets.find(x=>x.id===RT.selPresetG);
+    if(p&&String(p.especie||'').trim()!==especie){RT.selPresetG=null;rtSave();}
+  }
+  renderGRegPresets();gRegCalcKg();
+}
+function _clearGRegEspecieFilter(){
+  const sel=document.getElementById('gRegEspecie');
+  if(sel)sel.value='';
+  onGRegEspecieChange();
+}
 function renderGRegPresets(){
+  renderGRegEspecieSelect();
   const grid=document.getElementById('gRegPresetGrid');if(!grid)return;
-  const presets=DB.data.presets.filter(_presetParaRegistroGeneral);
-  document.getElementById('gRegPresetCount').textContent=presets.length+' preset'+(presets.length!==1?'s':'')+' (general)';
-  if(!presets.length){grid.innerHTML='<div style="color:var(--text-3);padding:20px;text-align:center;">Sin presets para Registro general — en Admin usa <strong>tipo General</strong> o <strong>uso: Solo registro general</strong> (también Pallet / Carro / Castillo).</div>';return;}
+  const allPresets=DB.data.presets.filter(_presetParaRegistroGeneral);
+  const especie=_getGRegEspecieFilter();
+  const presets=especie?allPresets.filter(p=>String(p.especie||'').trim()===especie):allPresets;
+  const cntEl=document.getElementById('gRegPresetCount');
+  if(cntEl){
+    if(especie){
+      cntEl.innerHTML=`${presets.length} preset${presets.length!==1?'s':''} (general) <span class="especie-chip" title="Quitar filtro de especie" onclick="_clearGRegEspecieFilter()">🐟 ${esc(especie)} ×</span>`;
+    } else {
+      cntEl.textContent=presets.length+' preset'+(presets.length!==1?'s':'')+' (general)';
+    }
+  }
+  if(!presets.length){
+    grid.innerHTML=`<div style="color:var(--text-3);padding:20px;text-align:center;">${especie?'Sin presets para <strong>'+esc(especie)+'</strong> en Registro general':'Sin presets para Registro general — en Admin usa <strong>tipo General</strong> o <strong>uso: Solo registro general</strong> (también Pallet / Carro / Castillo).'}</div>`;
+    return;
+  }
   grid.innerHTML=presets.map(p=>`
     <button type="button" class="preset-card ${String(RT.selPresetG)===String(p.id)?'selected':''}" data-preset="${p.id}" onclick="selectPresetG(${p.id})">
       <div class="preset-name">${esc(p.nombre)}</div>
@@ -5982,7 +6037,7 @@ function delGeneral(id){
   showToast('Registro eliminado','success');
 }
 window.regGeneral=regGeneral;window.clearGReg=clearGReg;window.selectPresetG=selectPresetG;window.gRegCalcKg=gRegCalcKg;window.delGeneral=delGeneral;
-window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;
+window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;window.onGRegEspecieChange=onGRegEspecieChange;window.renderGRegPresets=renderGRegPresets;window._clearGRegEspecieFilter=_clearGRegEspecieFilter;
 
 /* ═══ TÚNELES / PLACAS — render + state machine ════════════════ */
 const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'navy',t:'Listo'},deshielando:{c:'ice',t:'Deshielando'}};
