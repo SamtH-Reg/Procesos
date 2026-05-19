@@ -3105,6 +3105,7 @@ const _RESUMEN_TBL_COLS=[
   {key:'turno',label:'Turno',th:'TURNO'},
   {key:'linea',label:'Línea',th:'LÍNEA'},
   {key:'especie',label:'Especie',th:'ESPECIE'},
+  {key:'producto',label:'Preset',th:'PRESET'},
   {key:'guia',label:'Guía',th:'GUÍA'},
   {key:'calibre',label:'Calibre',th:'CALIBRE'},
   {key:'destino',label:'Destino',th:'DESTINO'}
@@ -3338,23 +3339,26 @@ function _adminResumenTurnoLabel(r,kind){
 }
 function _adminResumenRowFromMolde(r){
   const pr=_adminPresetForRec(r);
+  const presetNom=String(r.producto||'').trim()||(pr&&String(pr.nombre||'').trim())||'—';
   return{
     turno:_adminResumenTurnoLabel(r,'molde'),
     especie:_adminEspecieForRec(r)||'—',
+    producto:presetNom,
     guia:String(r.guia||'').trim()||'—',
     calibre:String(r.calibre||'').trim()||(pr&&pr.calibre)||'—',
     destino:String(r.destino||'').trim()||(pr&&pr.destino)||'—',
     linea:String(r.linea||'').trim().toUpperCase()||'—',
-    producto:String(r.producto||'').trim()||'—',
     cant:+r.cant||0,
     kg:+r.kg||0
   };
 }
 function _adminResumenRowFromPesaje(r){
   const pr=_adminPresetForRec(r);
+  const presetNom=String(r.producto||'').trim()||(pr&&String(pr.nombre||'').trim())||String(r.tipo||'').trim()||'—';
   return{
     turno:_adminResumenTurnoLabel(r,'pesaje'),
     especie:_adminEspecieForRec(r)||'—',
+    producto:presetNom,
     guia:String(r.guia||'').trim()||'—',
     calibre:String(r.tipo||'').trim()||(pr&&pr.calibre)||'—',
     destino:(pr&&pr.destino)||'—',
