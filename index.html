@@ -4500,7 +4500,19 @@ function todayLocalYmd(){
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
 }
 const nowDate=()=>todayLocalYmd();
-const nextId=arr=>arr.reduce((m,x)=>Math.max(m,x.id||0),0)+1;
+/**
+ * ID único entre tablets: combina timestamp ms (13 dígitos) + 3 dígitos random.
+ * Evita colisión cuando 2+ tablets registran simultáneamente y suben con upsert(onConflict:id).
+ * Math.max es 2^53-1 ≈ 9e15 → caben hasta el año 2255. JS y Postgres BIGINT lo aceptan.
+ * Si por error el array trae un id mayor (legacy/local), se respeta y se incrementa.
+ */
+const nextId=arr=>{
+  const tsId=Date.now()*1000+Math.floor(Math.random()*1000);
+  if(!Array.isArray(arr)||!arr.length)return tsId;
+  const maxLegacy=arr.reduce((m,x)=>Math.max(m,+x.id||0),0);
+  // Si el max local ya supera tsId (reloj atrasado / IDs preexistentes muy altos), usa max+1.
+  return maxLegacy>=tsId?maxLegacy+1:tsId;
+};
 /** Supabase → filas RT.moldes (camelCase). */
 function _tbParseSbMolde(rec){
   if(!rec||rec.id==null)return null;
@@ -4636,6 +4648,8 @@ async function tbManualPullMoldesPesajes(opts){
   }
   try{
     const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
+    const CHUNK=1000;
+    const MAX_ROWS=20000; // techo defensivo para no congelar tablet en tablas enormes
     for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
       let totalInDb=null;
@@ -4643,10 +4657,23 @@ async function tbManualPullMoldesPesajes(opts){
         const cr=await _tbSb.from(t).select('*',{count:'exact',head:true});
         if(!cr.error&&cr.count!=null)totalInDb=+cr.count;
       }catch(e){/* conteo opcional */}
-      const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).limit(4000);
-      if(error){console.warn('[tb pull]',t,error);if(!silent&&typeof showToast==='function')showToast(t+': '+error.message,'error');continue;}
+      // Pull paginado: descarga en chunks de 1000 hasta agotar la tabla o llegar al techo
+      let allData=[];
+      let from=0,gotErr=null;
+      while(allData.length<MAX_ROWS){
+        const to=from+CHUNK-1;
+        const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).range(from,to);
+        if(error){gotErr=error;break;}
+        const chunk=Array.isArray(data)?data:[];
+        if(!chunk.length)break;
+        allData=allData.concat(chunk);
+        if(chunk.length<CHUNK)break; // última página
+        from+=CHUNK;
+      }
+      if(gotErr){console.warn('[tb pull]',t,gotErr);if(!silent&&typeof showToast==='function')showToast(t+': '+gotErr.message,'error');continue;}
       const lastSig=(typeof TBSync!=='undefined'&&TBSync._lastSig)?TBSync._lastSig[t]:'';
-      RT[t]=_tbMergeRtByIdForPull(localBefore,data||[],mapFor(t),{pullLimit:4000,totalInDb,lastPushedSig:lastSig});
+      const pulledAll=totalInDb!=null?allData.length>=totalInDb:allData.length<MAX_ROWS;
+      RT[t]=_tbMergeRtByIdForPull(localBefore,allData,mapFor(t),{pullLimit:pulledAll?Number.MAX_SAFE_INTEGER:MAX_ROWS,totalInDb,lastPushedSig:lastSig});
     }
     _rtPurgeDemoFromRt();
     rtSave();
@@ -11134,7 +11161,10 @@ const TBSync={
   _pushDebounceMs:400,
   _pushGapMs:800,
   _eqKvPushLastAt:0,
-  _eqKvPushMinGapMs:4000,
+  _eqKvPushMinGapMs:8000, // duplicado: blob eqKv es grande, no necesita sync sub-segundo
+  _eqKvLastUploadedSig:'', // firma del último blob efectivamente subido (post-confirmación)
+  _retryAttempt:0,
+  _retryTimer:null,
   _lastSig:{moldes:'',pesajes:'',generales:'',armado:'',eqKv:''},
   _statusMsg:'',
   _statusColor:'#16a34a',
@@ -11256,10 +11286,11 @@ const TBSync={
   async pushEqKvOnly(){
     if(!_tbSb||!_tbUser||!tbNavigatorOnline())return Promise.resolve({ok:true,skipped:true});
     const esig=_tbEqRuntimeSig();
-    if(esig===this._lastSig.eqKv)return Promise.resolve({ok:true});
+    if(esig===this._lastSig.eqKv||esig===this._eqKvLastUploadedSig)return Promise.resolve({ok:true,skipped:true});
     const{error:kvErr}=await _tbSb.from('app_kv').upsert({key:TB_EQ_CLOUD_KEY,value:{eqState:RT.eqState||{},eqHist:RT.eqHist||{},source:'tablet',at:Date.now()}},{onConflict:'key'});
     if(kvErr){console.warn('[sb push eq_runtime]',kvErr.message||kvErr);return Promise.resolve({ok:false,err:kvErr.message})}
     this._lastSig.eqKv=esig;
+    this._eqKvLastUploadedSig=esig;
     this._eqKvPushLastAt=Date.now();
     _tbPersistLastPushSigsToStorage();
     return Promise.resolve({ok:true});
@@ -11422,14 +11453,25 @@ const TBSync={
       if(_tbUser&&!opts.skipEqKv){
         const esig=_tbEqRuntimeSig();
         const now=Date.now();
-        const eqDue=esig!==this._lastSig.eqKv&&(opts.forceEqKv||!this._lastSig.eqKv||now-this._eqKvPushLastAt>=this._eqKvPushMinGapMs);
-        if(eqDue){
+        // Tres condiciones para subir:
+        // 1) firma cambió respecto al último push pendiente
+        // 2) firma distinta a la última que confirmamos en la nube (anti-rebote por Realtime)
+        // 3) respeta gap mínimo (8s) salvo forceEqKv
+        const changedVsLast=esig!==this._lastSig.eqKv;
+        const changedVsUploaded=esig!==this._eqKvLastUploadedSig;
+        const gapOk=opts.forceEqKv||!this._lastSig.eqKv||now-this._eqKvPushLastAt>=this._eqKvPushMinGapMs;
+        if(changedVsLast&&changedVsUploaded&&gapOk){
           const{error:kvErr}=await _tbSb.from('app_kv').upsert({key:TB_EQ_CLOUD_KEY,value:{eqState:RT.eqState||{},eqHist:RT.eqHist||{},source:'tablet',at:Date.now()}},{onConflict:'key'});
           if(kvErr)console.warn('[sb push eq_runtime]',kvErr.message||kvErr);
-          else{this._lastSig.eqKv=esig;this._eqKvPushLastAt=now;}
+          else{
+            this._lastSig.eqKv=esig;
+            this._eqKvLastUploadedSig=esig;
+            this._eqKvPushLastAt=now;
+          }
         }
       }
       this._pushLastAt=Date.now();
+      this._retryAttempt=0; // éxito → reset backoff
       this.setStatus('☁ Sync','#16a34a');
       _tbPersistLastPushSigsToStorage();
       return{ok:true};
@@ -11437,7 +11479,27 @@ const TBSync={
       console.warn('[sb pushAll]',e);
       this.setStatus('⚠ Error','#dc2626');
       const m=e&&e.message?String(e.message):String(e);
-      if(typeof showToast==='function')showToast('No se completó la sincronización con la nube: '+m,'error');
+      // Retry con backoff exponencial: 2s, 5s, 15s, 45s. Tras 4 intentos, queda pendiente para el usuario.
+      const RETRY_DELAYS=[2000,5000,15000,45000];
+      this._retryAttempt=(this._retryAttempt||0);
+      if(this._retryAttempt<RETRY_DELAYS.length&&tbNavigatorOnline()){
+        const delay=RETRY_DELAYS[this._retryAttempt];
+        this._retryAttempt++;
+        if(this._retryTimer)clearTimeout(this._retryTimer);
+        this._retryTimer=setTimeout(()=>{
+          this._retryTimer=null;
+          if(!tbNavigatorOnline()){_tbMarkPendingPush(true);return;}
+          this.setStatus('☁ reintentando ('+this._retryAttempt+'/'+RETRY_DELAYS.length+')…','#f59e0b');
+          this.pushAll(opts);
+        },delay);
+        if(typeof showToast==='function'&&this._retryAttempt===1){
+          showToast('Sync con la nube fallido — reintentando en '+(delay/1000)+'s…','warning');
+        }
+      }else{
+        // Sin retries disponibles o sin red → queda pendiente
+        _tbMarkPendingPush(true);
+        if(typeof showToast==='function')showToast('No se completó la sincronización con la nube: '+m+' · Toca el badge para reintentar manualmente.','error');
+      }
       return{ok:false,err:m};
     }
   },
