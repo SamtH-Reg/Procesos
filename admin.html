@@ -5680,9 +5680,25 @@ function _ieVentanaTurnoFechaRefMs(fechaRef,cod){
   if(s==null||e==null)return null;
   return{start:s,end:e};
 }
+/** Infiere turno desde la hora, mismo patrón que index. */
+function _ieTurnoFromHoraStr(horaStr){
+  const hm=_adminParseHMToMinutes(horaStr);
+  if(hm==null)return null;
+  const turnos=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  for(const t of turnos){
+    const a=_adminParseHMToMinutes(t.inicio),b=_adminParseHMToMinutes(t.fin);
+    if(a==null||b==null)continue;
+    if(b>a){if(hm>=a&&hm<b)return String(t.codigo||'').trim().toLowerCase();}
+    else{if(hm>=a||hm<b)return String(t.codigo||'').trim().toLowerCase();}
+  }
+  return (hm>=7*60&&hm<19*60)?'dia':'noche';
+}
 function _ieMoldeTurnoNorm(r){
   const d=String((r&&r.turno)||'').trim().toLowerCase();
-  return d==='noche'?'noche':'dia';
+  if(d)return d;
+  // Fallback: inferir desde la hora del registro
+  const inferred=_ieTurnoFromHoraStr(r&&r.hora);
+  return inferred||'dia';
 }
 /** Misma regla que en tablet: fecha + hora en calendario local (la fila ya trae la fecha correcta en madrugada de noche). */
 function _ieRegistroTsMolde(r){
@@ -6124,9 +6140,17 @@ function _ieFilterMolPes(mod,recs){
     if(linea&&String(r.linea||'').trim().toUpperCase()!==linea)return false;
     const ts=_ieGetRecordTs(r,mod);
     if(turno){
-      const cod=String(turno).toLowerCase();
+      const cod=String(turno).toLowerCase().trim();
       if(mod==='moldes'&&_ieMoldeTurnoNorm(r)!==cod)return false;
-      if(mod==='pesajes'&&r.turno&&String(r.turno).toLowerCase()!==cod)return false;
+      if(mod==='pesajes'){
+        const rt=String(r.turno||'').toLowerCase().trim();
+        // Si r.turno existe, debe coincidir; si no, se infiere desde hora más abajo en wins
+        if(rt&&rt!==cod)return false;
+        if(!rt){
+          const inferred=_ieTurnoFromHoraStr(r.hora);
+          if(inferred&&inferred!==cod)return false;
+        }
+      }
       const wins=_ieCollectTurnoWindows(d0,h0,cod);
       if(!wins||!wins.length){
         const d=_recDate(r);

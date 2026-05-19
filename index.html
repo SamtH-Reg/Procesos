@@ -4854,6 +4854,18 @@ function _armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoCod){
 function _fechaArmadoOperativa(turnoCod){
   const tc=String(turnoCod||'dia').toLowerCase();
   const ymd=todayLocalYmd();
+  // Buscar la definición del turno para usar inicio/fin reales (no hardcoded 7am)
+  const def=_turnoDefFromCodigo(tc);
+  if(def){
+    const a=_parseHMToMinutes(def.inicio),b=_parseHMToMinutes(def.fin);
+    if(a!=null&&b!=null&&b<a){
+      // Turno cruza medianoche: si estamos en madrugada (antes de fin), pertenece al día anterior
+      const mins=_minutesNowLocal();
+      if(mins>=0&&mins<b)return _addDaysLocalYmd(ymd,-1);
+    }
+    return ymd;
+  }
+  // Fallback legacy: para 'noche' literal sin def, asumir ventana 19:00-07:00
   if(tc!=='noche')return ymd;
   const mins=_minutesNowLocal();
   if(mins>=0&&mins<7*60)return _addDaysLocalYmd(ymd,-1);
@@ -4986,9 +4998,12 @@ function _ymdFromMs(ms){
 }
 function _moldeTurnoNorm(r){
   const d=String((r&&r.turno)||'').trim().toLowerCase();
-  if(d==='noche'||d==='dia')return d;
+  if(d)return d;
   const arm=_turnoArmadoMoldesForLinea((r&&r.linea)||'',(r&&r.fecha)||'');
-  return arm==='noche'?'noche':'dia';
+  if(arm!=null)return String(arm).toLowerCase();
+  // Fallback final: inferir desde la hora
+  const inferred=_turnoFromHoraStr(r&&r.hora);
+  return inferred||'dia';
 }
 /** Timestamp local del molde: fecha+hora en calendario local (la fecha ya refleja madrugada del turno noche cuando aplica). */
 function _registroTsMolde(r){
@@ -5809,7 +5824,19 @@ function renderMoldesTable(){
     }
   }
   if(!rows.length){
-    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">'+(opRows.length?'Sin registros que coincidan con los filtros.':'Sin registros aún. Registra un conteo desde Moldes › Registrar o General (molde/placa).')+'</td></tr>';
+    const fechaDisp=state&&state.fechaTurno?state.fechaTurno.split('-').reverse().join('/'):'';
+    const turnoDisp=state&&state.filtro&&state.filtro!=='todos'?state.filtro:'';
+    let msg;
+    if(!opRows.length){
+      msg='Sin registros aún. Registra un conteo desde Moldes › Registrar o General (molde/placa).';
+    } else {
+      const hints=[];
+      if(fechaDisp)hints.push('fecha <strong>'+esc(fechaDisp)+'</strong>');
+      if(turnoDisp)hints.push('turno <strong>'+esc(turnoDisp)+'</strong>');
+      if(state&&state.lineaVal)hints.push('línea <strong>'+esc(state.lineaVal)+'</strong>');
+      msg='Sin registros que coincidan con '+(hints.join(' · ')||'los filtros')+'.<br><span style="font-size:11px;color:var(--text-muted);">Total operativo: '+opRows.length+' registros. Cambia la fecha o turno para ver datos.</span>';
+    }
+    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">'+msg+'</td></tr>';
     return;
   }
   const canCor=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
@@ -7620,7 +7647,7 @@ function renderPesajeTable(){
   if(!rows.length){
     const hoyStr=state.fechaTurno.split('-').reverse().join('/');
     const filtroSub=_resumenFiltroTurnoSub(state.filtro);
-    tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.</td></tr>';
+    tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.<br><span style="font-size:11px;color:var(--text-muted);">Total: '+tot+' pesajes en otras fechas/turnos. Cambia el filtro para verlos.</span></td></tr>';
     return;
   }
   const canCorP=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
@@ -7866,26 +7893,48 @@ function _readTurnoLineaFilter(selectId){
   const v=(el&&el.value)||'todos';
   return v==='dia'||v==='noche'||v==='actual'?v:'todos';
 }
-function _moldeMatchesTurnoLineaFiltro(r,filtro){
-  if(filtro==='todos')return true;
-  const codAct=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
-  if(filtro==='actual'){
-    if(r&&r.turno)return String(r.turno)===String(codAct);
-    const arm=_turnoArmadoMoldesForLinea(r.linea,r&&r.fecha||'');
-    return arm!=null&&String(arm)===String(codAct);
+/** Infiere turno (dia/noche/codigo) a partir de la hora del registro, usando los turnos definidos. */
+function _turnoFromHoraStr(horaStr){
+  const hm=_parseHMToMinutes(horaStr);
+  if(hm==null)return null;
+  const turnos=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  for(const t of turnos){
+    const a=_parseHMToMinutes(t.inicio),b=_parseHMToMinutes(t.fin);
+    if(a==null||b==null)continue;
+    if(b>a){if(hm>=a&&hm<b)return String(t.codigo||'').trim().toLowerCase();}
+    else{if(hm>=a||hm<b)return String(t.codigo||'').trim().toLowerCase();}
   }
-  if(r&&r.turno){return String(r.turno)===String(filtro);}
+  // Fallback duro si no hay turnos definidos
+  return (hm>=7*60&&hm<19*60)?'dia':'noche';
+}
+function _moldeMatchesTurnoLineaFiltro(r,filtro){
+  const fNorm=String(filtro||'').toLowerCase().trim();
+  if(fNorm==='todos')return true;
+  const codAct=String(typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia').toLowerCase();
+  const want=fNorm==='actual'?codAct:fNorm;
+  const rt=String((r&&r.turno)||'').trim().toLowerCase();
+  if(rt)return rt===want;
+  // Sin r.turno → primero intenta armado de la línea
   const arm=_turnoArmadoMoldesForLinea(r.linea,r&&r.fecha||'');
-  if(arm==null)return false;
-  return arm===filtro;
+  if(arm!=null)return String(arm).toLowerCase()===want;
+  // Sin armado → último recurso: inferir desde la hora del registro
+  const inferred=_turnoFromHoraStr(r&&r.hora);
+  return inferred!=null&&inferred===want;
 }
 function _pesajeMatchesTurnoLineaFiltro(r,filtro){
-  if(filtro==='todos')return true;
-  const codAct=typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia';
+  const fNorm=String(filtro||'').toLowerCase().trim();
+  if(fNorm==='todos')return true;
+  const codAct=String(typeof _inferTurnoCodigoPorHorario==='function'?_inferTurnoCodigoPorHorario():'dia').toLowerCase();
+  const want=fNorm==='actual'?codAct:fNorm;
+  const rt=String((r&&r.turno)||'').trim().toLowerCase();
+  if(rt&&rt===want)return true;
   const arm=_turnoArmadoPesajeForLinea(r.linea,r&&r.fecha||'');
-  if(filtro==='actual')return arm!=null&&String(arm)===String(codAct);
-  if(r&&r.turno&&String(r.turno)===String(filtro))return true;
-  if(arm!=null&&String(arm)===String(filtro))return true;
+  if(arm!=null&&String(arm).toLowerCase()===want)return true;
+  // Fallback por hora si no hay turno ni armado
+  if(!rt&&arm==null){
+    const inferred=_turnoFromHoraStr(r&&r.hora);
+    if(inferred!=null&&inferred===want)return true;
+  }
   return false;
 }
 function _cycleTurnoNorm(t){return String(t||'dia').toLowerCase()==='noche'?'noche':'dia';}
