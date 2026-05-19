@@ -68,3 +68,4 @@ Solo existen estos dos HTML en el repo; comparten **la misma base local** y debe
 - **Admin resumen** (`_adminResumenRecordInScope`): filtra por `fecha+hora` del registro dentro de ventanas `_ieVentanaTurnoFechaRefMs` / `_ieCollectTurnoWindows`, no solo `r.fecha` civil.
 - **Tablet** (`_moldeCoincideFechaTurnoFiltro`, `_collectTurnoWindows`, `_anchorDateForTsInTurno`, `_recordCycleForMolde`): misma regla para resumen/consolidado.
 - **Import/export** (`_ieFilterMolPes`): con turno vacío, también usa unión de ventanas (no solo YMD del timestamp).
+- **Filtro hora (resumen):** Admin `resumenHoraDesde`/`resumenHoraHasta` + «Horario turno»; tablet Moldes/Pesaje «Resumen x hora» (`mResumenHora*`, `pResumenHora*`, `_resumenResolveHoraRange`). Si hay turno elegido y horas vacías, se usan inicio/fin del catálogo Turnos.

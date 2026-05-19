@@ -651,7 +651,10 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="slicer-bar resumen-scope-bar" id="resumenScopeBar">
     <div class="slicer"><label class="form-label">Fecha desde</label><input type="date" class="input" id="resumenFechaDesde" onchange="onResumenScopeChange()"></div>
     <div class="slicer"><label class="form-label">Fecha hasta</label><input type="date" class="input" id="resumenFechaHasta" onchange="onResumenScopeChange()"></div>
-    <div class="slicer"><label class="form-label">Turno</label><select class="select" id="resumenTurno" onchange="onResumenScopeChange()"><option value="">Todos</option></select></div>
+    <div class="slicer"><label class="form-label">Turno</label><select class="select" id="resumenTurno" onchange="onResumenTurnoChange()"><option value="">Todos</option></select></div>
+    <div class="slicer"><label class="form-label">Hora desde</label><input type="time" class="input" id="resumenHoraDesde" onchange="onResumenScopeChange()"></div>
+    <div class="slicer"><label class="form-label">Hora hasta</label><input type="time" class="input" id="resumenHoraHasta" onchange="onResumenScopeChange()"></div>
+    <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSyncHoraFromTurno(true)">Horario turno</button></div>
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn sm" onclick="resumenApplyScope()">Aplicar</button></div>
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSetFechaHoy()">Hoy</button></div>
     <div class="slicer" style="align-self:flex-end;"><button type="button" class="btn ghost sm" onclick="resumenSyncScopeFromDashboard()">↻ Desde dashboard</button></div>
@@ -3110,7 +3113,26 @@ function _resumenFilterDims(){return _RESUMEN_TBL_COLS;}
 /** Argumento JS entre comillas simples para onclick/onchange en HTML (evita romper atributos con JSON.stringify). */
 function _resumenJsArg(s){return "'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";}
 let _resumenMod='mol';
-const _resumenScope={fechaDesde:'',fechaHasta:'',turno:''};
+const _resumenScope={fechaDesde:'',fechaHasta:'',turno:'',horaDesdeMin:null,horaHastaMin:null};
+function _adminTsMatchesHoraFiltro(ts,aMin,bMin){
+  if(ts==null||aMin==null||bMin==null)return true;
+  const d=new Date(ts);
+  const hm=d.getHours()*60+d.getMinutes();
+  if(aMin<=bMin)return hm>=aMin&&hm<=bMin;
+  return hm>=aMin||hm<=bMin;
+}
+function _resumenEffectiveHoraMinMax(){
+  const a=_resumenScope.horaDesdeMin,b=_resumenScope.horaHastaMin;
+  if(a!=null&&b!=null)return{a,b};
+  const tur=String(_resumenScope.turno||'').trim();
+  if(!tur)return null;
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo)===tur);
+  if(!t)return null;
+  const ai=_adminParseHMToMinutes(t.inicio),bi=_adminParseHMToMinutes(t.fin);
+  if(ai==null||bi==null)return null;
+  const bEnd=bi<ai?Math.max(0,bi*1-1):Math.max(ai,bi-1);
+  return{a:ai,b:bEnd};
+}
 const _resumenPivotFilt={mol:{},pes:{}};
 const _resumenPivotPending={mol:{},pes:{}};
 function _resumenPivotPendingStore(mod){return _resumenPivotPending[mod==='pes'?'pes':'mol'];}
@@ -3131,6 +3153,26 @@ function _resumenReadScopeFromDom(){
   _resumenScope.fechaDesde=fd&&fd.value?String(fd.value).trim():'';
   _resumenScope.fechaHasta=fh&&fh.value?String(fh.value).trim():_resumenScope.fechaDesde;
   _resumenScope.turno=tur&&tur.value?String(tur.value).trim():'';
+  const hd=document.getElementById('resumenHoraDesde');
+  const hh=document.getElementById('resumenHoraHasta');
+  _resumenScope.horaDesdeMin=hd&&hd.value?_adminParseHMToMinutes(hd.value):null;
+  _resumenScope.horaHastaMin=hh&&hh.value?_adminParseHMToMinutes(hh.value):null;
+}
+function onResumenTurnoChange(){resumenSyncHoraFromTurno(false);_resumenReadScopeFromDom();}
+function resumenSyncHoraFromTurno(showToastOk){
+  const tur=(document.getElementById('resumenTurno')||{}).value;
+  const hd=document.getElementById('resumenHoraDesde');
+  const hh=document.getElementById('resumenHoraHasta');
+  if(!hd||!hh)return;
+  if(!tur){hd.value='';hh.value='';if(showToastOk)toast('Elige un turno para copiar horario','info');return;}
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo)===String(tur));
+  if(!t||!t.inicio||!t.fin){if(showToastOk)toast('Sin inicio/fin en Turnos','warn');return;}
+  const iniM=_adminParseHMToMinutes(t.inicio),finM=_adminParseHMToMinutes(t.fin);
+  if(iniM==null||finM==null)return;
+  hd.value=_minutesToHHMM(iniM);
+  hh.value=_minutesToHHMM(finM<iniM?Math.max(0,finM*1-1):Math.max(iniM,finM-1));
+  if(showToastOk)toast('Horas: '+hd.value+' – '+hh.value,'success');
+  _resumenReadScopeFromDom();
 }
 function _resumenPopulateTurnoSelect(){
   const sel=document.getElementById('resumenTurno');
@@ -3159,7 +3201,12 @@ function _resumenInitOnPageOpen(){
   _resumenReadScopeFromDom();
 }
 function onResumenScopeChange(){_resumenReadScopeFromDom();}
-function resumenApplyScope(){_resumenReadScopeFromDom();renderResumen();}
+function resumenApplyScope(){
+  _resumenReadScopeFromDom();
+  if(_resumenScope.turno)resumenSyncHoraFromTurno(false);
+  _resumenReadScopeFromDom();
+  renderResumen();
+}
 function resumenSetFechaHoy(){
   const y=_adminTodayLocalYmd();
   const fd=document.getElementById('resumenFechaDesde');
@@ -3224,7 +3271,12 @@ function _adminResumenRecordInScope(r,mod){
   if(!fd&&!fh&&!tur)return true;
   const d0=_ieCycleDateNorm(fd||fh||_adminTodayLocalYmd());
   const h0=_ieCycleDateNorm(fh||d0);
-  return _adminRecordInCycleScope(r,mod,d0,h0,tur);
+  if(!_adminRecordInCycleScope(r,mod,d0,h0,tur))return false;
+  const hr=_resumenEffectiveHoraMinMax();
+  if(!hr)return true;
+  const modKey=mod==='pes'?'pesajes':'moldes';
+  const ts=_ieGetRecordTs(r,modKey);
+  return _adminTsMatchesHoraFiltro(ts,hr.a,hr.b);
 }
 function _resumenRecMatchesScope(r,mod){
   return _adminResumenRecordInScope(r,mod);
@@ -3581,6 +3633,8 @@ window.resumenColFilterToggle=resumenColFilterToggle;
 window.resumenColFilterApply=resumenColFilterApply;
 window.onResumenScopeChange=onResumenScopeChange;
 window.resumenApplyScope=resumenApplyScope;
+window.resumenSyncHoraFromTurno=resumenSyncHoraFromTurno;
+window.onResumenTurnoChange=onResumenTurnoChange;
 window.resumenSetFechaHoy=resumenSetFechaHoy;
 window.resumenSyncScopeFromDashboard=resumenSyncScopeFromDashboard;
 window._resumenInitOnPageOpen=_resumenInitOnPageOpen;
