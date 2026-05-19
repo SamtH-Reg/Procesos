@@ -8273,13 +8273,6 @@ function editPArmadoLinea(ln){
             Agregar
           </button>
         </div>
-        <div id="pArmManualBox" style="display:none;margin-top:10px;">
-          <label class="form-label" style="font-size:11px;">Nombre manual</label>
-          <div style="display:flex;gap:8px;">
-            <input class="input" id="pArmManualNombre" placeholder="Nombre completo del trabajador" style="flex:1;">
-            <button class="btn ghost sm" type="button" onclick="addPArmTrabManual()">OK</button>
-          </div>
-        </div>
       </div>
     </div>
     <div class="modal-ftr">
@@ -8367,12 +8360,7 @@ function _pArmSetPlanillero(id,nombre){
   renderPArmModal();
 }
 function _pArmAddById(id,nombre){
-  if(id==='__manual__'){
-    const mb=document.getElementById('pArmManualBox');if(mb)mb.style.display='block';
-    setTimeout(()=>{const inp=document.getElementById('pArmManualNombre');if(inp)inp.focus();},80);
-    return;
-  }
-  const t=DB.data.trabajadores.find(x=>x.id===id);
+  const t=DB.data.trabajadores.find(x=>String(x.id)===String(id));
   if(!t)return;
   // Mostrar preview de la persona seleccionada
   const preview=document.getElementById('pArmSelectedPreview');
@@ -8422,12 +8410,11 @@ function addPArmTrab(){
   // Resolver nombre y trabId (sin borrar pendingId aún — se borra solo si no hay duplicado)
   let nombre='',trabId=null,hasPending=!!(fichaIn&&fichaIn.dataset.pendingId);
   if(hasPending){
-    const t=DB.data.trabajadores.find(x=>x.id===parseInt(fichaIn.dataset.pendingId));
+    const t=DB.data.trabajadores.find(x=>String(x.id)===String(fichaIn.dataset.pendingId));
     if(t){nombre=t.nombre;trabId=t.id;}
   } else {
-    const manNom=(document.getElementById('pArmManualNombre')||{}).value||'';
-    nombre=manNom.trim();
-    if(!nombre){showToast('Selecciona o ingresa un trabajador','error');return;}
+    showToast('Selecciona un trabajador del listado','error');
+    return;
   }
   // Chequeo duplicado — comparación robusta String() para evitar number vs string
   const dup=_editPArmado.trabajadores.find(x=>String(x.ficha)===String(ficha));
@@ -8440,22 +8427,8 @@ function addPArmTrab(){
   if(hasPending&&fichaIn){delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;}
   _editPArmado.trabajadores.push({trabId,nombre:nombre.toUpperCase(),ficha});
   clearPArmSelection();
-  const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';const mn=document.getElementById('pArmManualNombre');if(mn)mn.value='';}
   renderPArmModal();
   showToast(nombre.toUpperCase()+' agregado · Ficha '+ficha,'success');
-}
-function addPArmTrabManual(){
-  const nombre=(document.getElementById('pArmManualNombre')||{value:''}).value.trim();
-  if(!nombre){showToast('Escribe el nombre','error');return;}
-  const ficha=(document.getElementById('pArmAddFicha')||{value:''}).value.trim();
-  if(!ficha){showToast('Ficha obligatoria','error');document.getElementById('pArmAddFicha')&&document.getElementById('pArmAddFicha').focus();return;}
-  const dupM=_editPArmado.trabajadores.find(x=>String(x.ficha)===String(ficha));
-  if(dupM){showToast('⚠️ Ficha '+ficha+' ya fue asignada a '+dupM.nombre,'error');document.getElementById('pArmAddFicha')&&document.getElementById('pArmAddFicha').select();return;}
-  _editPArmado.trabajadores.push({trabId:null,nombre:nombre.toUpperCase(),ficha});
-  document.getElementById('pArmAddFicha').value='';
-  const mb=document.getElementById('pArmManualBox');if(mb){mb.style.display='none';document.getElementById('pArmManualNombre').value='';}
-  renderPArmModal();
-  showToast(nombre.toUpperCase()+' agregado','success');
 }
 /** Muestra la fecha de referencia del turno homólogo anterior (día↔día, noche↔noche). mod: 'p' pesaje | 'm' moldes */
 function _armModalUpdateCopySourceHint(mod){
@@ -8610,7 +8583,7 @@ function savePArmado(){
 }
 window.addPLinea=addPLinea;window.closePAddLinea=closePAddLinea;window.confirmPAddLinea=confirmPAddLinea;window.removePLinea=removePLinea;window.guardarPArmadoSnapshot=guardarPArmadoSnapshot;
 window.onPArmScopeChange=onPArmScopeChange;window.onPArmScopeTurnoPick=onPArmScopeTurnoPick;
-window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.addPArmTrabManual=addPArmTrabManual;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
+window.onPArmSelectChange=onPArmSelectChange;window.addPArmTrab=addPArmTrab;window.setPArmPlanillero=setPArmPlanillero;window.renderPArmModal=renderPArmModal;
 window._pArmSetPlanillero=_pArmSetPlanillero;window._pArmAddById=_pArmAddById;window.clearPArmSelection=clearPArmSelection;window._setPArmFicha=_setPArmFicha;
 window.renderPResumen=renderPResumen;window.renderPConsol=renderPConsol;window.renderPArmado=renderPArmado;window.editPArmadoLinea=editPArmadoLinea;window.closePArmado=closePArmado;window.savePArmado=savePArmado;
 window.openMoverTrabArmadoPesajeFromChip=openMoverTrabArmadoPesajeFromChip;window.openMoverTrabArmadoPesaje=openMoverTrabArmadoPesaje;window.closeMoverTrabArmadoPesaje=closeMoverTrabArmadoPesaje;window.confirmMoverTrabArmadoPesaje=confirmMoverTrabArmadoPesaje;
@@ -9303,7 +9276,8 @@ function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
   const defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
   const allTrabs=Array.isArray(list)?list:defaultPool;
   const isRegistro=Array.isArray(list);
-  const hideManual=!!(isRegistro&&list&&list._enArmadoLinea&&allTrabs.length>0);
+  const isArmadoPicker=!isRegistro;
+  const hideManual=isArmadoPicker||!!(isRegistro&&list&&list._enArmadoLinea&&allTrabs.length>0);
   openFsCombo({
     anchorEl,
     mode,
@@ -9312,15 +9286,7 @@ function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
     hideManual,
     emptyMsg:isRegistro?'Sin trabajadores asignados en esta línea':'Sin resultados',
     onSelect:function(id,nombre,codigo){
-      if(id==='__manual__'){
-        const manBox=document.getElementById('mArmManualBox')||document.getElementById('pArmManualBox');
-        if(manBox)manBox.style.display='block';
-        setTimeout(()=>{
-          const inp=document.getElementById('mArmManualNombre')||document.getElementById('pArmManualNombre');
-          if(inp)inp.focus();
-        },80);
-        return;
-      }
+      if(id==='__manual__')return;
       if(cb)cb(id,nombre,codigo);
     }
   });
@@ -9510,16 +9476,6 @@ function editMArmadoLinea(ln){
           <span class="trigger-name">Buscar por nombre o código…</span>
           <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
-        <div id="mArmManualBox" style="display:none;margin-top:8px;">
-          <label class="form-label" style="font-size:11px;">Nombre manual</label>
-          <div style="display:flex;gap:8px;">
-            <input class="input" id="mArmManualNombre" placeholder="Nombre completo del trabajador" style="flex:1;">
-            <button class="btn success" type="button" onclick="addMArmTrabManual()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-              Agregar
-            </button>
-          </div>
-        </div>
       </div>
     </div>
     <div class="modal-ftr">
@@ -9723,23 +9679,12 @@ function _mArmSetPlanillero(id,nombre,codigo){
   renderMArmModal();
 }
 function _mArmAddById(id,nombre,codigo){
-  if(id==='__manual__')return; // handled via openIosPicker
-  const t=DB.data.trabajadores.find(x=>x.id===id);
+  const t=DB.data.trabajadores.find(x=>String(x.id)===String(id));
   if(!t)return;
   if(_editMArmado.trabajadores.some(x=>x.trabId===t.id)){showToast('Ya está agregado','error');return;}
   _editMArmado.trabajadores.push({trabId:t.id,nombre:t.nombre});
   renderMArmModal();
   showToast(t.nombre+' agregado','success');
-}
-function addMArmTrabManual(){
-  const inp=document.getElementById('mArmManualNombre');
-  const nombre=(inp&&inp.value||'').trim();
-  if(!nombre){showToast('Escribe el nombre','error');inp&&inp.focus();return;}
-  _editMArmado.trabajadores.push({trabId:null,nombre});
-  inp.value='';
-  document.getElementById('mArmManualBox').style.display='none';
-  renderMArmModal();
-  showToast(nombre+' agregado','success');
 }
 function onMArmSelectChange(){} // legacy compat no-op
 function addMArmTrab(){} // legacy compat no-op
@@ -9812,7 +9757,7 @@ function saveMArmado(){
 window.renderMArmado=renderMArmado;window.editMArmadoLinea=editMArmadoLinea;window.closeMArmado=closeMArmado;window.saveMArmado=saveMArmado;
 window.addMLinea=addMLinea;window.closeMAddLinea=closeMAddLinea;window.confirmMAddLinea=confirmMAddLinea;window.removeMLinea=removeMLinea;window.guardarMArmadoSnapshot=guardarMArmadoSnapshot;
 window.openMoverTrabArmadoMoldeFromChip=openMoverTrabArmadoMoldeFromChip;window.openMoverTrabArmadoMolde=openMoverTrabArmadoMolde;window.closeMoverTrabArmadoMolde=closeMoverTrabArmadoMolde;window.confirmMoverTrabArmadoMolde=confirmMoverTrabArmadoMolde;
-window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;window.addMArmTrabManual=addMArmTrabManual;
+window.setMArmPlanillero=setMArmPlanillero;window.onMArmSelectChange=onMArmSelectChange;window.addMArmTrab=addMArmTrab;
 window.openFsCombo=openFsCombo;window.closeFsCombo=closeFsCombo;window.openIosPicker=openIosPicker;window.closeIosPicker=closeIosPicker;
 window._mArmUpdatePresetHint=_mArmUpdatePresetHint;window._mArmSetPlanillero=_mArmSetPlanillero;window._mArmAddById=_mArmAddById;window._mArmPrefillPlanilleroDesdePesaje=_mArmPrefillPlanilleroDesdePesaje;
 window.syncPArmadoLineaDesdeMoldes=syncPArmadoLineaDesdeMoldes;window.syncPArmadoScopeDesdeMoldes=syncPArmadoScopeDesdeMoldes;
