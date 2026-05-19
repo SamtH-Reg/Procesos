@@ -1676,7 +1676,7 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .fs-combo-val[hidden],.fs-combo-ph[hidden]{display:none !important;}
 .fs-combo-code{
   flex-shrink:0;padding:4px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;
-  color:#dc2626;font-size:12px;font-weight:800;letter-spacing:.02em;
+  color:#b91c1c;font-size:12px;font-weight:900;letter-spacing:.02em;
 }
 .fs-combo-val-name{font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .fs-combo-chevron{width:16px;height:16px;flex-shrink:0;opacity:.55;color:var(--navy-700);}
@@ -1707,14 +1707,15 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .fs-combo-item:hover,.fs-combo-item:focus{background:color-mix(in srgb,var(--brand-accent) 10%,#fff);outline:none;}
 .fs-combo-item-code{
   flex-shrink:0;min-width:52px;padding:5px 10px;border-radius:8px;text-align:center;
-  background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:12px;font-weight:800;
+  background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:12px;font-weight:900;
 }
+.fs-combo-ficha-num{color:#dc2626;font-weight:800;}
 .fs-combo-item-body{flex:1;min-width:0;}
 .fs-combo-item-name{font-size:14px;font-weight:700;color:var(--text);line-height:1.25;word-break:break-word;}
 .fs-combo-item-name em{font-style:normal;background:rgba(255,214,10,.65);border-radius:2px;padding:0 1px;}
 .fs-combo-item-sub{font-size:11px;color:var(--text-3);margin-top:3px;line-height:1.3;}
 .fs-combo-item-manual .fs-combo-item-code{background:#eff6ff;border-color:#bfdbfe;color:#007aff;}
-.codigo-rojo{color:#dc2626 !important;font-weight:700;}
+.codigo-rojo{color:#dc2626 !important;font-weight:800;}
 body[data-theme="dark"] .fs-combo-code,body[data-theme="dark"] .fs-combo-item-code{background:rgba(127,29,29,.35);border-color:#991b1b;color:#fca5a5;}
 .fs-combo-empty{padding:28px 16px;text-align:center;color:var(--text-3);font-size:13px;}
 #mRegistrar .fs-combo-trigger,#pRegistrar .fs-combo-trigger{
@@ -1725,7 +1726,7 @@ body[data-theme="dark"] .fs-combo-code,body[data-theme="dark"] .fs-combo-item-co
   font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 #mRegistrar .fs-combo-val-name,#pRegistrar .fs-combo-val-name{font-size:13px;}
-#mRegistrar .fs-combo-code,#pRegistrar .fs-combo-code{font-size:11px;padding:3px 8px;}
+#mRegistrar .fs-combo-code,#pRegistrar .fs-combo-code{font-size:11px;padding:3px 8px;font-weight:900;color:#b91c1c;}
 #mRegistrar .fs-combo-chevron,#pRegistrar .fs-combo-chevron{width:14px;height:14px;}
 #mRegistrar .ios-picker-trigger,#pRegistrar .ios-picker-trigger{
   min-height:40px;padding:8px 12px;gap:8px;font-size:13px;
@@ -9116,6 +9117,16 @@ function _fsComboAreaSub(t){
   if(area)return area;
   return t&&t.codigo?('Código '+t.codigo):'';
 }
+function _fsComboItemSubHtml(t,qLow){
+  const ficha=t&&t.ficha!=null&&String(t.ficha).trim()?String(t.ficha).trim():'';
+  const areaMap={moldes:'PRODUCCIÓN MOLDES',pesaje:'PRODUCCIÓN PESAJE',empaque:'EMPAQUE',general:'GENERAL'};
+  const area=areaMap[String(t&&t.area||'').toLowerCase()]||String(t&&t.area||'').toUpperCase();
+  if(ficha&&area)return 'Ficha <span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span> · '+esc(area);
+  if(ficha)return 'Ficha <span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span>';
+  if(area)return esc(area);
+  const c=String(t&&t.codigo||'').trim();
+  return c?('Código <span class="fs-combo-ficha-num">'+_fsComboHi(c,qLow)+'</span>'):'';
+}
 function _fsComboCodeBadge(t){
   const c=String(t&&t.codigo||'').trim();
   if(c)return c;
@@ -9220,7 +9231,7 @@ function _fsComboRenderList(trabs,q,opts){
       <span class="fs-combo-item-code">${_fsComboHi(code,qLow)}</span>
       <span class="fs-combo-item-body">
         <span class="fs-combo-item-name">${_fsComboHi(t.nombre||'',qLow)}</span>
-        <span class="fs-combo-item-sub">${esc(_fsComboAreaSub(t))}</span>
+        <span class="fs-combo-item-sub">${_fsComboItemSubHtml(t,qLow)}</span>
       </span>
     </button>`;
   });
