@@ -5851,6 +5851,7 @@ function regGeneral(){
     cant,pendiente:cant,kg,guia,
   };
   RT.generales.unshift(rec);rtSave();
+  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();
   renderGeneralesTable();renderPorCargar();renderEquipos();renderAnalisis();
   if(typeof renderMoldesTable==='function')renderMoldesTable();
   if(typeof renderMResumen==='function'){try{const mr=document.getElementById('mResumen');if(mr&&!mr.classList.contains('hidden'))renderMResumen();}catch(_){}}
@@ -6028,6 +6029,7 @@ function delGeneral(id){
   if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
   if(!confirm('¿Eliminar este registro general?'))return;
   RT.generales=RT.generales.filter(r=>r.id!==id);rtSave();
+  if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();
   renderGeneralesTable();renderPorCargar();renderEquipos();
   if(typeof renderMoldesTable==='function')renderMoldesTable();
   if(typeof renderAnalisis==='function')renderAnalisis();
@@ -10645,8 +10647,8 @@ try{
   const _c=_tbResolveSupabaseCreds();
   if(window.supabase)_tbSb=window.supabase.createClient(_c.url,_c.key,_tbSbAuthOptions());
 }catch(e){console.warn('[sb] init',e);}
-/** Ahorro de cuota Realtime: por defecto activo. Solo `localStorage friosur_tb_msg_economy === '0'` activa WS moldes/pesajes (vivo). `armado_lineas` sigue en vivo salvo que cambies la suscripción en código. */
-function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')!=='0';}catch(e){return true;}}
+/** Ahorro de cuota Realtime: solo si `localStorage friosur_tb_msg_economy === '1'`. Por defecto vivo (WS moldes/pesajes/generales). */
+function tbMsgEconomy(){try{return localStorage.getItem('friosur_tb_msg_economy')==='1';}catch(e){return false;}}
 /** Catálogo (presets, turnos, equipos, roles) por Realtime: solo si `friosur_tb_rt_catalog==='1'`; por defecto OFF (ahorra mensajes; pull en login / Sincronizar / al volver a la pestaña). */
 function tbRtCatalogRealtime(){try{return localStorage.getItem('friosur_tb_rt_catalog')==='1';}catch(e){return false;}}
 /** Valor `fecha` tal como lo espera .eq() contra Postgres (AAAA-MM-DD o prefijo ISO). */
@@ -11018,8 +11020,8 @@ const TBSync={
     if(!_tbSb||!_tbUser||this._pushQueued)return;
     if(!tbNavigatorOnline()){this.setStatus('⚠ Offline','#dc2626');return;}
     const eco=tbMsgEconomy();
-    const deb=eco?9000:this._pushDebounceMs;
-    const gap=eco?14000:this._pushMinGapMs;
+    const deb=eco?9000:1200;
+    const gap=eco?14000:2500;
     const now=Date.now();
     const wait=Math.max(deb,(this._pushLastAt+gap)-now);
     this._pushQueued=true;
@@ -11239,9 +11241,7 @@ const TBSync={
         this._catVisT=setTimeout(()=>{try{this.pullCatalogs();}catch(_){}},2800);
       });
     }
-    /* moldes + pesajes: un solo canal Realtime (menos suscripciones WS que dos canales).
-       Registro general (generales) no usa Realtime: solo REST push/pull → ahorro de mensajes.
-       Modo ahorro por defecto; friosur_tb_msg_economy='0' fuerza WS moldes/pesajes (vivo). */
+    /* moldes + pesajes + generales: un canal Realtime. Modo ahorro solo si friosur_tb_msg_economy='1'. */
     if(!tbMsgEconomy()){
       _tbSb.channel('tb-ops')
         .on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
@@ -11266,6 +11266,20 @@ const TBSync={
         _rtSaveOrig&&_rtSaveOrig();
         if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
         if(typeof renderPesajeTable==='function')renderPesajeTable();
+      })
+        .on('postgres_changes',{event:'*',schema:'public',table:'generales'},(p)=>{
+        const rec=p.new||p.old;if(!rec)return;
+        const local=_tbParseSbGeneral(rec);
+        if(!local)return;
+        const i=RT.generales.findIndex(r=>String(r.id)===String(local.id));
+        if(p.eventType==='DELETE'){if(i>=0)RT.generales.splice(i,1);}
+        else{if(i>=0)RT.generales[i]=local;else RT.generales.unshift(local);}
+        _rtSaveOrig&&_rtSaveOrig();
+        if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
+        if(typeof renderGeneralesTable==='function')renderGeneralesTable();
+        if(typeof renderPorCargar==='function')renderPorCargar();
+        if(typeof renderEquipos==='function')renderEquipos();
+        if(typeof renderMoldesTable==='function')renderMoldesTable();
       }).subscribe();
     }
     // ── Realtime armado de línea ──────────────────────────────

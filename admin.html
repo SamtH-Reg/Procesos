@@ -907,7 +907,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div class="form-field" style="margin-top:14px;padding:12px;background:var(--surface-alt);border-radius:8px;border:1px solid var(--border);">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px;line-height:1.45;">
           <input type="checkbox" id="sbMsgEconomy" onchange="sbMsgEconomyOnChange()" style="margin-top:3px;">
-          <span><strong>Modo ahorro de mensajes</strong> (activado por defecto para no agotar la cuota Realtime del plan Free): sin WS ni polling automático sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span>. El <strong>armado de línea</strong> sigue en vivo. Usa <strong>Traer moldes y pesajes</strong> para actualizar registros. <em>Desmarca</em> esta casilla solo si necesitas ver moldes/pesajes al instante (gasta muchos mensajes).</span>
+          <span><strong>Modo ahorro de mensajes</strong> (desactivado por defecto): sin WS ni polling automático sobre <span class="kbd">moldes</span> / <span class="kbd">pesajes</span> / <span class="kbd">generales</span>. El <strong>armado de línea</strong> sigue en vivo. Marca esta casilla solo si quieres ahorrar cuota Realtime y actualizar con <strong>Traer moldes y pesajes</strong>.</span>
         </label>
         <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer;font-size:13px;line-height:1.45;">
           <input type="checkbox" id="sbRtCatalog" onchange="sbRtCatalogOnChange()" style="margin-top:3px;">
@@ -1009,9 +1009,9 @@ const STORE_KEY='friosur_app_v1';
 const RT_KEY='friosur_rt_v1';
 /** Credenciales Supabase compartidas con index.html (tablet): misma clave en localStorage. */
 const SB_KEY='friosur_sb';
-/** Modo ahorro Realtime: por defecto activo. Solo valor `'0'` = vivo (WS + poll en moldes/pesajes). */
+/** Modo ahorro Realtime: solo si valor `'1'`. Por defecto vivo (WS + poll en moldes/pesajes/generales). */
 const SB_MSG_ECONOMY_KEY='friosur_admin_msg_economy';
-function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)!=='0';}catch(e){return true;}}
+function sbMsgEconomyEnabled(){try{return localStorage.getItem(SB_MSG_ECONOMY_KEY)==='1';}catch(e){return false;}}
 function sbMsgEconomySet(on){try{localStorage.setItem(SB_MSG_ECONOMY_KEY,on?'1':'0');}catch(e){}}
 function sbMsgEconomyInitCheckbox(){const el=document.getElementById('sbMsgEconomy');if(el)el.checked=sbMsgEconomyEnabled();}
 function sbMsgEconomyOnChange(){
@@ -5083,7 +5083,7 @@ function sbSubscribeRealtime(){
   const liveRt=!sbMsgEconomyEnabled();
   const catRt=sbRtCatalogRealtimeEnabled();
   const subs=[
-    ...(liveRt?[{tbl:'moldes',     target:'RT',  key:'moldes'},{tbl:'pesajes',    target:'RT',  key:'pesajes'}]:[]),
+    ...(liveRt?[{tbl:'moldes',target:'RT',key:'moldes'},{tbl:'pesajes',target:'RT',key:'pesajes'},{tbl:'generales',target:'RT',key:'generales'}]:[]),
     ...(catRt?[
       {tbl:'presets',    target:'DB',  key:'presets',    render:()=>typeof renderPresets==='function'&&renderPresets()},
       {tbl:'turnos',     target:'DB',  key:'turnos',     render:()=>typeof renderTurnos==='function'&&renderTurnos()},
