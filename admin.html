@@ -4974,7 +4974,16 @@ function applyRolePermissions(){
     el.style.display=hidden.includes(p)?'none':'';
   });
 }
-function sbLog(msg,ok=true){const el=document.getElementById('sbLog');const line=document.createElement('div');line.style.color=ok?'var(--ok)':'var(--err)';line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(line);el.scrollTop=el.scrollHeight;}
+function sbLog(msg,ok=true){
+  try{
+    const el=document.getElementById('sbLog');
+    if(!el){console[ok?'log':'warn']('[sbLog]',msg);return;}
+    const line=document.createElement('div');
+    line.style.color=ok?'var(--ok)':'var(--err)';
+    line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+    el.appendChild(line);el.scrollTop=el.scrollHeight;
+  }catch(e){try{console.warn('[sbLog catch]',e,msg);}catch(_){}}
+}
 async function connectSupabase(silent){
   const url=document.getElementById('sbUrl').value.trim();const key=document.getElementById('sbKey').value.trim();
   if(!url||!key){
@@ -5382,18 +5391,37 @@ async function adminSyncRoleRowToSupabase(rid){
 async function sbUpsertPresets(rows){
   if(!_sb)return{error:new Error('Sin Supabase')};
   // No usar await getSession() aquí: en algunos navegadores puede bloquearse y dejar el modal en «Guardando…» sin resolver.
-  const mapped=(_sbRows('presets',rows||[])).map(r=>{
-    const o=_sbSanitizeRow(r);
-    if(Object.prototype.hasOwnProperty.call(o,'id')&&o.id!=null)o.id=_presetNumericId(o.id);
-    return _sbSanitizeRow(o);
-  });
-  const{error}=await _sb.from('presets').upsert(mapped,{onConflict:'id'});
-  return{data:null,error};
+  let mapped;
+  try{
+    mapped=(_sbRows('presets',rows||[])).map(r=>{
+      const o=_sbSanitizeRow(r);
+      if(Object.prototype.hasOwnProperty.call(o,'id')&&o.id!=null)o.id=_presetNumericId(o.id);
+      return _sbSanitizeRow(o);
+    });
+  }catch(e){
+    console.error('[sbUpsertPresets map]',e);
+    return{error:new Error('Error preparando datos del preset: '+(e.message||String(e)))};
+  }
+  // Carrera contra timeout local (12s) — si la promesa de Supabase nunca resuelve, este timeout sí lo hace.
+  try{
+    const upsertP=_sb.from('presets').upsert(mapped,{onConflict:'id'});
+    const timeoutP=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 12s en upsert presets (red lenta o sesión caducada)')),12000));
+    const{error}=await Promise.race([upsertP,timeoutP]);
+    return{data:null,error};
+  }catch(e){
+    return{error:e instanceof Error?e:new Error(String(e))};
+  }
 }
 async function sbDeletePresetRemote(id){
   if(!_sb||id==null)return{error:null};
-  const{error}=await _sb.from('presets').delete().eq('id',id);
-  return{error};
+  try{
+    const delP=_sb.from('presets').delete().eq('id',id);
+    const timeoutP=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 12s al borrar preset')),12000));
+    const{error}=await Promise.race([delP,timeoutP]);
+    return{error};
+  }catch(e){
+    return{error:e instanceof Error?e:new Error(String(e))};
+  }
 }
 
 /** Upsert de una fila de catálogo (presets / equipos / turnos) — paridad tablet `pullCatalogs`. */
@@ -5501,33 +5529,64 @@ function setTheme(t){document.body.setAttribute('data-theme',t);localStorage.set
 /* ════════════ MODAL helper ════════════ */
 /** Evita UI colgada si una promesa (p. ej. red/Supabase) no termina nunca. */
 function _modalAsyncWithTimeout(p,ms){
-  const m=ms||35000;
+  const m=ms||15000;
   let tid;
   const timeout=new Promise((_,rej)=>{
-    tid=setTimeout(()=>rej(new Error('Tiempo de espera ('+Math.round(m/1000)+' s). Revisa conexión o vuelve a entrar en Cuenta.')),m);
+    tid=setTimeout(()=>rej(new Error('Tiempo de espera ('+Math.round(m/1000)+' s). Revisa conexión a Supabase o vuelve a entrar en Cuenta.')),m);
   });
   return Promise.race([p,timeout]).finally(()=>{try{clearTimeout(tid);}catch(_){}});
 }
 let _modalCallback=null;
+let _modalSaving=false;
 function openModal(title,body,cb){
   _modalCallback=cb;
+  _modalSaving=false;
   const m=document.createElement('div');m.className='modal-backdrop';m.id='__modal';
-  m.innerHTML=`<div class="modal"><div class="modal-hdr"><div class="modal-title">${esc(title)}</div><button class="modal-x" onclick="closeModal()">×</button></div><div class="modal-body">${body}</div><div class="modal-ftr"><button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" onclick="confirmModal()">Guardar</button></div></div>`;
+  m.innerHTML=`<div class="modal"><div class="modal-hdr"><div class="modal-title">${esc(title)}</div><button class="modal-x" onclick="closeModal(true)">×</button></div><div class="modal-body">${body}</div><div class="modal-ftr"><button class="btn ghost" onclick="closeModal(true)">Cancelar</button><button class="btn" onclick="confirmModal()">Guardar</button></div></div>`;
   document.body.appendChild(m);
 }
-function closeModal(){const m=document.getElementById('__modal');if(m)m.remove();_modalCallback=null;}
+/** Cierra el modal. Si force=true, cierra incluso si está guardando (escape de emergencia). */
+function closeModal(force){
+  const m=document.getElementById('__modal');
+  if(m){
+    // Si está guardando y no es force, solo permite cerrar si el usuario insiste (botón X / Cancelar)
+    if(_modalSaving&&!force)return;
+    m.remove();
+  }
+  _modalCallback=null;
+  _modalSaving=false;
+}
 function confirmModal(){
-  if(!_modalCallback){closeModal();return;}
+  if(!_modalCallback){closeModal(true);return;}
+  if(_modalSaving)return; // doble click protección
   const root=document.getElementById('__modal');
   const btn=root?root.querySelector('.modal-ftr .btn:not(.ghost)'):null;
   const lab=btn?btn.textContent:'';
-  const ret=_modalCallback();
+  let ret;
+  try{ret=_modalCallback();}catch(syncErr){
+    const sm=syncErr&&syncErr.message?syncErr.message:String(syncErr);
+    toast('Error al preparar guardado: '+sm,'err');
+    console.error('[confirmModal sync]',syncErr);
+    return;
+  }
   if(ret&&typeof ret.then==='function'){
+    _modalSaving=true;
     if(btn){btn.disabled=true;btn.textContent='Guardando…';}
-    _modalAsyncWithTimeout(ret,35000).then(ok=>{
+    // Fallback duro: si pasados 18s la UI sigue trabada, fuerza reset (cinturón y tirantes).
+    const hardFallback=setTimeout(()=>{
+      if(!_modalSaving)return;
+      _modalSaving=false;
       if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
-      if(ok!==false)closeModal();
+      toast('La operación tardó demasiado. Inténtalo de nuevo.','err');
+    },18000);
+    _modalAsyncWithTimeout(ret,15000).then(ok=>{
+      clearTimeout(hardFallback);
+      _modalSaving=false;
+      if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
+      if(ok!==false)closeModal(true);
     }).catch(e=>{
+      clearTimeout(hardFallback);
+      _modalSaving=false;
       if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
       const m=e&&e.message?e.message:String(e);
       toast('Error al guardar: '+m,'err');
@@ -5536,7 +5595,7 @@ function confirmModal(){
     });
     return;
   }
-  if(ret!==false)closeModal();
+  if(ret!==false)closeModal(true);
 }
 
 function tabletLink(){window.open('index.html','_blank');}
