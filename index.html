@@ -4336,7 +4336,7 @@ function _rtPurgeDemoFromRt(){
   let touched=false;
   if(Array.isArray(RT.moldes)&&RT.moldes.some(_rtIsDemoMolde)){RT.moldes=RT.moldes.filter(r=>!_rtIsDemoMolde(r));touched=true;}
   if(Array.isArray(RT.pesajes)&&RT.pesajes.some(_rtIsDemoPesaje)){RT.pesajes=RT.pesajes.filter(r=>!_rtIsDemoPesaje(r));touched=true;}
-  if(touched)try{rtSave();}catch(_){}
+  if(touched)try{_rtSaveLocal();}catch(_){}
 }
 
 function rtLoad(){
@@ -4390,8 +4390,11 @@ function rtLoad(){
   }
   if(!Array.isArray(RT.generales))RT.generales=[];
   RT.generales.forEach(r=>{if(r.pendiente==null)r.pendiente=r.cant;});
-  if(!RT.empacados.length){RT.empacados=[];}
-  if(!RT.empaques)RT.empaques=[];
+  if(!Array.isArray(RT.empacados))RT.empacados=[];
+  if(!Array.isArray(RT.empaques))RT.empaques=[];
+  if(!RT.eqState||typeof RT.eqState!=='object')RT.eqState={};
+  if(!RT.armadoMolde||typeof RT.armadoMolde!=='object')RT.armadoMolde={};
+  if(!RT.armadoPesaje||typeof RT.armadoPesaje!=='object')RT.armadoPesaje={};
   if(!RT.empaques.length&&!hadPersistedRt){
     RT.empaques=[
       {id:701,hora:'14:15',lote:'L-0428',producto:'Filete Reineta Bloque',presetId:6,cant:48,kgUnit:7.5,kg:360,guia:'G-2026-045',destino:'Cámara 3 — Producto Terminado',qc:'OK'},
@@ -4412,7 +4415,17 @@ function rtLoad(){
     const pc=RT.eqState['P-03'];if(pc){pc.estado='cargando';pc.items=[{producto:'Filete Merluza 170-UP Bloque',presetId:1,cant:40,guia:'G-2026-044',horasTotal:4.5}];}
   }
   _rtPurgeDemoFromRt();
-  rtSave();
+  rtSave({skipCloudSchedule:true});
+}
+let _armadoBackupRtThrottle=0;
+/** Copia de seguridad periódica del armado al guardar RT (no sustituye el snapshot justo antes del pull). */
+function _tbMaybeStoreArmadoBackupOnRtSave(){
+  const now=Date.now();
+  if(now-_armadoBackupRtThrottle<90000)return;
+  const m=RT.armadoMolde||{},p=RT.armadoPesaje||{};
+  if(!Object.keys(m).length&&!Object.keys(p).length)return;
+  _armadoBackupRtThrottle=now;
+  _tbTryStoreArmadoEmergencyBackup();
 }
 function _rtSaveLocal(){
   try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}
@@ -4420,19 +4433,23 @@ function _rtSaveLocal(){
 function rtSave(opts){
   _rtSaveLocal();
   const skipCloud=opts&&opts.skipCloudSchedule;
-  if(!skipCloud){
+  if(skipCloud)return;
+  try{
     if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
     _tbMaybeStoreArmadoBackupOnRtSave();
-    if(!tbNavigatorOnline())_tbMarkPendingPush(true);
-    if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();
-    else if(!tbNavigatorOnline())_tbMarkPendingPush(true);
-    if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();
-  }
+    if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())_tbMarkPendingPush(true);
+  }catch(e){console.warn('[rtSave]',e);}
+  try{
+    const sync=typeof TBSync!=='undefined'?TBSync:null;
+    if(sync&&sync.schedulePush)sync.schedulePush();
+    else if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())_tbMarkPendingPush(true);
+    if(sync&&sync._applySyncBadge)sync._applySyncBadge();
+  }catch(_){/* TBSync aún no inicializado durante el arranque */}
 }
 /** Tras cambiar armado de línea: fuerza subida a Supabase (además del debounce de rtSave). */
 function rtPushArmadoCloud(){try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();}catch(e){}}
 window.RT=RT;
-rtLoad();
+try{rtLoad();}catch(e){console.error('[rtLoad]',e);}
 
 const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 function todayLocalYmd(){
@@ -5111,17 +5128,6 @@ function restoreArmadoEmergencyBackup(){
   }
 }
 window.restoreArmadoEmergencyBackup=restoreArmadoEmergencyBackup;
-
-let _armadoBackupRtThrottle=0;
-/** Copia de seguridad periódica del armado al guardar RT (no sustituye el snapshot justo antes del pull). */
-function _tbMaybeStoreArmadoBackupOnRtSave(){
-  const now=Date.now();
-  if(now-_armadoBackupRtThrottle<90000)return;
-  const m=RT.armadoMolde||{},p=RT.armadoPesaje||{};
-  if(!Object.keys(m).length&&!Object.keys(p).length)return;
-  _armadoBackupRtThrottle=now;
-  _tbTryStoreArmadoEmergencyBackup();
-}
 
 /**
  * Corrige filas legacy (linea/fecha intercambiadas o fecha vacía con `updated_at`).
