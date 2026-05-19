@@ -3482,6 +3482,23 @@ const _PRESET_TIPO_LABELS={molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:
 function _presetUsoEquipo(p){
   return String(p&&p.usoEquipo||p&&p.uso_equipo||'').toLowerCase();
 }
+function _presetUsoEquipoPersist(p){
+  const u=_presetUsoEquipo(p);
+  if(u==='tunel'||u==='placa'||u==='ambos'||u==='general')return u;
+  const ht=+p.horasTunel||0;
+  const hp=+p.horasPlaca||0;
+  if(ht>0&&hp<=0)return'tunel';
+  if(hp>0&&ht<=0)return'placa';
+  return'ambos';
+}
+/** Lista manual al cargar túnel (no incluye solo-registro-general). */
+function _presetParaCargaTunelManual(p){
+  if(!p||p.activo===false)return false;
+  const u=_presetUsoEquipo(p);
+  if(u==='general')return false;
+  if(u==='placa')return false;
+  return true;
+}
 /** Presets visibles en pestaña Registro general (tablet). */
 function _presetParaRegistroGeneral(p){
   if(!p||p.activo===false)return false;
@@ -6000,14 +6017,14 @@ function renderEquipos(){
   renderPorCargar();
 }
 function aggregatePendientes(filterTipo){
-  // Suma pendiente por presetId. filterTipo null = todos. 'molde' = sólo molde.
-  // Incluye tanto RT.moldes como RT.generales (pallet/carro/castillo) — generales
-  // sólo aparecen cuando filterTipo==null (los túneles los aceptan; las placas no).
+  // Suma pendiente por presetId. filterTipo null = todos (túneles). 'molde' = sólo molde (placas).
+  // Incluye RT.moldes y RT.generales: lo registrado en General con uso «solo registro general»
+  // aparece aquí para «Por cargar desde conteo» en túneles (no en el desplegable manual).
   const map={};
   const push=(r)=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
     if(pend<=0)return;
-    const p=DB.data.presets.find(x=>x.id===r.presetId);if(!p)return;
+    const p=DB.data.presets.find(x=>String(x.id)===String(r.presetId));if(!p)return;
     if(filterTipo==='molde'&&p.tipo!=='molde')return;
     if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,especieRow:''};
     map[r.presetId].cant+=pend;
@@ -6036,7 +6053,7 @@ function renderPorCargar(){
   tot.textContent=totMoldes+' moldes pendientes por asignar';
   list.innerHTML=items.map((it,i)=>{
     const last=i===items.length-1;
-    const tipoLabel=({molde:'Molde',pallet:'Pallet',carro:'Carro',castillo:'Castillo'}[it.preset.tipo])||it.preset.tipo;
+    const tipoLabel=_PRESET_TIPO_LABELS[it.preset.tipo]||it.preset.tipo;
     return `<div style="padding:14px 18px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:12px;background:var(--surface);">
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;">${esc(it.preset.nombre)}</div>
@@ -6190,13 +6207,15 @@ function openEqModal(codigo){
   // - Túnel: todos (molde + pallet + carro + castillo)
   const presets=DB.data.presets.filter(p=>{
     if(!p.activo)return false;
-    const uso=String(p.usoEquipo||'ambos');
+    const uso=_presetUsoEquipo(p)||'ambos';
     if(eq.tipo==='placa'&&p.tipo!=='molde')return false;
     if(eq.tipo==='tunel'&&uso==='placa')return false;
     if(eq.tipo==='placa'&&uso==='tunel')return false;
-    if(uso==='general')return false;
+    if(eq.tipo==='tunel'&&uso==='general')return false;
+    if(eq.tipo==='placa'&&uso==='general')return false;
     return true;
   });
+  const presetsTunelManual=eq.tipo==='tunel'?presets.filter(_presetParaCargaTunelManual):presets;
   const b=estadoBadgeTP[rt.estado]||estadoBadgeTP.libre;
   const capRestPlaca=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):null;
   const placaFull=capRestPlaca!=null&&capRestPlaca<=0;
@@ -6249,7 +6268,7 @@ function openEqModal(codigo){
     actions.push(`<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
       <label style="font:700 12px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;display:block;">Agregar items al túnel (manual)</label>
       <div class="form-grid" style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">
-        <select id="eqAddPreset"><option value="">— Selecciona —</option>${presets.map(p=>`<option value="${p.id}">${esc(p.nombre)} (${p.kgRef}kg/u · ${p.tipo})</option>`).join('')}</select>
+        <select id="eqAddPreset"><option value="">— Selecciona —</option>${presetsTunelManual.map(p=>`<option value="${p.id}">${esc(p.nombre)} (${p.kgRef}kg/u · ${p.tipo})</option>`).join('')}</select>
         <input type="number" id="eqAddCant" min="1"${eq.tipo==='placa'&&capRestPlaca!=null?' max="'+capRestPlaca+'"':''} placeholder="Cantidad">
         <input type="text" id="eqAddGuia" placeholder="Guía">
       </div>

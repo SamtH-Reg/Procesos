@@ -22,7 +22,7 @@ create table if not exists presets(
   kg_ref       numeric,
   horas_tunel  numeric,
   horas_placa  numeric,
-  uso_equipo   text,           -- 'tunel' | 'placa' | 'ambos' (paridad admin/tablet)
+  uso_equipo   text,           -- 'tunel' | 'placa' | 'ambos' | 'general' (check presets_uso_equipo_check)
   temp_obj     numeric,
   activo       boolean default true,
   created_at   timestamptz default now(),

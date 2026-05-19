@@ -1047,6 +1047,12 @@ function inferUsoEquipo(p){
   if(hp>0&&ht<=0)return'placa';
   return'ambos';
 }
+/** Valor a persistir en Supabase: respeta elección explícita del formulario (p. ej. general). */
+function presetUsoEquipoForCloud(p){
+  const u=String(p&&(p.usoEquipo||p.uso_equipo)||'').toLowerCase();
+  if(u==='tunel'||u==='placa'||u==='ambos'||u==='general')return u;
+  return inferUsoEquipo(p);
+}
 
 /* DB compartida con la Tablet */
 const DB={data:null,
@@ -5175,7 +5181,7 @@ async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}t
 const _today=()=>new Date().toISOString().slice(0,10);
 const SB_MAP={
   presets:{
-    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:inferUsoEquipo(r),temp_obj:r.tempObj??r.temp_obj??null,activo:r.activo!==false}),
+    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:presetUsoEquipoForCloud(r),temp_obj:r.tempObj??r.temp_obj??null,activo:r.activo!==false}),
     in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo,usoEquipo:r.uso_equipo})
   },
   trabajadores:{
