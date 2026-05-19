@@ -878,13 +878,34 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   50%{filter:brightness(1.14) saturate(1.08);}
 }
 .eq-tile.congelando{
-  animation:eq-tile-frio-pulse 2.4s ease-in-out infinite;
+  border-color:#0284c7;
+  color:#0c4a6e;
+  background:linear-gradient(110deg,#e0f2fe 0%,#bae6fd 16%,#7dd3fc 32%,#38bdf8 48%,#0ea5e9 52%,#38bdf8 68%,#7dd3fc 84%,#e0f2fe 100%);
+  background-size:240% 100%;
+  animation:eq-tile-frio-pulse 2.4s ease-in-out infinite,eq-freeze-shimmer 5.5s linear infinite;
 }
 .eq-tile.congelando::before{
-  animation:eq-tile-top-glow 1.8s ease-in-out infinite;
+  height:4px;
+  background:linear-gradient(90deg,#0369a1,#0ea5e9,#38bdf8,#7dd3fc,#38bdf8,#0ea5e9,#0369a1);
+  background-size:200% 100%;
+  animation:eq-tile-top-glow 1.8s ease-in-out infinite,eq-freeze-shimmer 4.2s linear infinite;
 }
+.eq-tile.congelando .eq-id,
+.eq-tile.congelando .eq-type,
+.eq-tile.congelando .eq-stats .lbl,
+.eq-tile.congelando .eq-time{color:#0369a1;}
+.eq-tile.congelando .eq-name,
+.eq-tile.congelando .eq-stats .val{color:#0c4a6e;}
+.eq-tile.congelando .eq-name[style]{color:#0c4a6e!important;}
+.eq-tile.congelando .eq-progress{background:rgba(255,255,255,.5);}
 .eq-tile.congelando .eq-progress-bar{
+  background:linear-gradient(90deg,#0369a1,#0284c7);
   animation:eq-tile-bar-pulse 2s ease-in-out infinite;
+}
+.eq-tile.congelando .badge.blue{
+  background:rgba(255,255,255,.92);
+  color:#0369a1;
+  border:1px solid rgba(3,105,161,.25);
 }
 .eq-tile.congelando .badge.blue .badge-dot{
   animation:eq-freeze-dot 1.35s ease-in-out infinite;
@@ -910,7 +931,8 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   .eq-tile.congelando .badge.blue .badge-dot,.eq-tile.deshielando .badge.ice .badge-dot{
     animation:none!important;
   }
-  .eq-tile.deshielando::before{background:var(--accent);background-size:100% 100%;}
+  .eq-tile.congelando{background-size:100% 100%;}
+  .eq-tile.congelando::before,.eq-tile.deshielando::before{background:var(--accent);background-size:100% 100%;}
 }
 
 /* Tema oscuro: pulso y borde superior más visibles sobre surface oscuro */
@@ -935,13 +957,33 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   50%{transform:scale(1.18);opacity:1;box-shadow:0 0 0 12px rgba(56,189,248,0);}
 }
 body[data-theme="dark"] .eq-tile.congelando{
-  animation:eq-tile-frio-pulse-dark 2.4s ease-in-out infinite;
+  border-color:#38bdf8;
+  color:#e0f2fe;
+  background:linear-gradient(110deg,rgba(8,47,73,.95) 0%,rgba(3,105,161,.88) 20%,rgba(14,165,233,.82) 42%,rgba(2,132,199,.9) 50%,rgba(14,165,233,.82) 58%,rgba(3,105,161,.88) 80%,rgba(8,47,73,.95) 100%);
+  background-size:240% 100%;
+  animation:eq-tile-frio-pulse-dark 2.4s ease-in-out infinite,eq-freeze-shimmer 5.5s linear infinite;
 }
 body[data-theme="dark"] .eq-tile.congelando::before{
-  animation:eq-tile-top-glow-dark 1.8s ease-in-out infinite;
+  background:linear-gradient(90deg,#075985,#0369a1,#0ea5e9,#38bdf8,#0ea5e9,#0369a1,#075985);
+  background-size:200% 100%;
+  animation:eq-tile-top-glow-dark 1.8s ease-in-out infinite,eq-freeze-shimmer 4.2s linear infinite;
 }
+body[data-theme="dark"] .eq-tile.congelando .eq-id,
+body[data-theme="dark"] .eq-tile.congelando .eq-type,
+body[data-theme="dark"] .eq-tile.congelando .eq-stats .lbl,
+body[data-theme="dark"] .eq-tile.congelando .eq-time{color:#bae6fd;}
+body[data-theme="dark"] .eq-tile.congelando .eq-name,
+body[data-theme="dark"] .eq-tile.congelando .eq-stats .val{color:#f0f9ff;}
+body[data-theme="dark"] .eq-tile.congelando .eq-name[style]{color:#f0f9ff!important;}
+body[data-theme="dark"] .eq-tile.congelando .eq-progress{background:rgba(15,23,42,.35);}
 body[data-theme="dark"] .eq-tile.congelando .eq-progress-bar{
+  background:linear-gradient(90deg,#38bdf8,#7dd3fc);
   animation:eq-tile-bar-pulse-dark 2s ease-in-out infinite;
+}
+body[data-theme="dark"] .eq-tile.congelando .badge.blue{
+  background:rgba(15,23,42,.55);
+  color:#e0f2fe;
+  border-color:rgba(125,211,252,.35);
 }
 body[data-theme="dark"] .eq-tile.congelando .badge.blue .badge-dot{
   animation:eq-freeze-dot-dark 1.35s ease-in-out infinite;
