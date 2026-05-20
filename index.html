@@ -6509,74 +6509,95 @@ function _eqHistGuiasFromItems(h){
   return[...set].join(', ');
 }
 /** Listado de últimas descargas (`RT.eqHist`) en el modal de equipo: inicio, fin, duración real, anticipado + causal. */
+/** Mini-stat para tarjetas de historial: etiqueta arriba + valor abajo. */
+function _eqHistStat(label,value,opts){
+  opts=opts||{};
+  const mono=opts.mono!==false;
+  const big=!!opts.big;
+  const color=opts.color||'var(--text)';
+  return`<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+    <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;">${esc(label)}</span>
+    <span style="font-size:${big?'15px':'13px'};font-weight:${big?'800':'700'};color:${color};${mono?'font-family:var(--mono,monospace);':''}white-space:nowrap;">${esc(value)}</span>
+  </div>`;
+}
 function _eqModalHistorialDescargasHtml(codigo){
   const list=(RT.eqHist&&RT.eqHist[codigo])?RT.eqHist[codigo].slice(0,10):[];
   if(!list.length){
     return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
       <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimos registros</div>
-      <div style="font-size:12px;color:var(--text-3);padding:10px 12px;background:var(--surface-alt);border-radius:8px;border:1px dashed var(--border);">Sin registros de frío ni deshielo en este equipo.</div>
+      <div style="font-size:12px;color:var(--text-3);padding:10px 12px;background:var(--surface-alt);border-radius:8px;border:1px dashed var(--border);text-align:center;">Sin registros de frío ni deshielo en este equipo.</div>
     </div>`;
   }
   const rows=list.map(h=>{
     const esDesh=h.tipoEvento==='deshielo';
     const prod=Array.isArray(h.productos)?h.productos.join(', '):String(h.productos||'—');
     const guias=_eqHistGuiasFromItems(h);
-    const hi=esc(h.horaInicio||'—');
-    const hf=esc(h.horaDescarga||'—');
+    const hi=h.horaInicio||'—';
+    const hf=h.horaDescarga||'—';
     const durMin=_eqDiffMinutosHoraIniFin(h.horaInicio,h.horaDescarga);
     const durTxt=durMin==null?'—':_eqFmtMinutosHM(durMin);
     const objH=Number(h.horasTotal||0);
-    const ant=h.cierreAnticipado?'<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--safety-red-bg);color:var(--safety-red-dark);margin-left:6px;vertical-align:middle;">Anticipado</span>':'';
     const causal=String(h.cierreCausal||'').trim();
     const tieneFalt=h.cierreMinRestantes!=null&&!isNaN(Number(h.cierreMinRestantes));
     const faltTxt=tieneFalt?_eqFmtMinutosHM(Number(h.cierreMinRestantes)):'';
     const anticipoBlock=h.cierreAnticipado
-      ?`<div style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;font-size:11px;line-height:1.45;color:#7f1d1d;">
-          <div style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10px;margin-bottom:4px;color:#991b1b;">Cierre anticipado</div>
-          <div><span style="font-weight:700;">Causal:</span> ${esc(causal||'—')}</div>
-          ${tieneFalt?`<div style="margin-top:4px;"><span style="font-weight:700;">Faltaba congelar (aprox.):</span> ${esc(faltTxt)}</div>`:''}
+      ?`<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;font-size:11.5px;line-height:1.5;color:#7f1d1d;">
+          <div style="display:flex;align-items:center;gap:6px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10px;margin-bottom:6px;color:#991b1b;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Cierre anticipado
+          </div>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:start;">
+            <span style="font-weight:700;">Causal:</span><span>${esc(causal||'—')}</span>
+            ${tieneFalt?`<span style="font-weight:700;">Faltaba:</span><span>${esc(faltTxt)} de congelación</span>`:''}
+          </div>
         </div>`
       :'';
     if(esDesh){
-      return`<div style="padding:10px 12px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #7dd3fc;border-radius:10px;font-size:12px;">
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.45;">
-          <span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#0369a1;color:white;text-transform:uppercase;letter-spacing:.05em;">Deshielo</span>
-          <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Inicio</span>
-          <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hi}</span>
-          <span style="color:var(--text-3);">·</span>
-          <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Término</span>
-          <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hf}</span>
-          <span style="color:var(--text-3);">·</span>
-          <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Duración</span>
-          <span style="font-weight:700;color:var(--text);">${esc(durTxt)}</span>
+      return`<div style="padding:12px 14px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #7dd3fc;border-radius:12px;font-size:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:999px;background:#0369a1;color:white;text-transform:uppercase;letter-spacing:.06em;">Deshielo</span>
+            <span style="font-size:12px;font-weight:600;color:#0c4a6e;">Equipo vacío (limpieza/serpentín)</span>
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-top:6px;font-weight:600;">Registro de deshielo (equipo vacío)</div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+          ${_eqHistStat('Inicio',hi)}
+          ${_eqHistStat('Término',hf)}
+          ${_eqHistStat('Duración',durTxt,{mono:false})}
+        </div>
       </div>`;
     }
-    return`<div style="padding:10px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;font-size:12px;">
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;line-height:1.45;">
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Inicio</span>
-        <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hi}</span>
-        <span style="color:var(--text-3);">·</span>
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Término</span>
-        <span style="font-family:var(--mono,monospace);font-weight:800;color:var(--text);">${hf}</span>
-        <span style="color:var(--text-3);">·</span>
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">En congelación</span>
-        <span style="font-weight:700;color:var(--text);">${esc(durTxt)}</span>
-        <span style="color:var(--text-3);">·</span>
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-3);">Objetivo</span>
-        <span style="font-weight:700;color:var(--text);">${objH} h</span>
-        <span style="color:var(--text-3);">·</span>
-        <span style="font-weight:800;color:var(--text);">${h.cant||0} u</span>${ant}
+    const cantU=(h.cant||0)+' u';
+    const ribbon=h.cierreAnticipado
+      ?'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:999px;background:#dc2626;color:white;text-transform:uppercase;letter-spacing:.06em;">Anticipado</span>'
+      :'<span style="font-size:9px;font-weight:800;padding:3px 9px;border-radius:999px;background:#16a34a;color:white;text-transform:uppercase;letter-spacing:.06em;">Completo</span>';
+    return`<div style="padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.03);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+          ${ribbon}
+          <span style="font-size:13px;font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(prod)}</span>
+        </div>
+        <span style="font-size:15px;font-weight:800;color:var(--text);font-family:var(--mono,monospace);">${esc(cantU)}</span>
       </div>
-      <div style="font-size:11px;color:var(--text-3);line-height:1.4;margin-top:6px;"><span style="font-weight:700;color:var(--text-2);text-transform:uppercase;font-size:10px;letter-spacing:.03em;">Guía(s)</span> · ${esc(guias)}</div>
-      <div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-top:4px;font-weight:500;">${esc(prod)}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 12px;padding:10px 12px;background:var(--surface-alt);border-radius:8px;">
+        ${_eqHistStat('Inicio',hi)}
+        ${_eqHistStat('Término',hf)}
+        ${_eqHistStat('Duración',durTxt,{mono:false,color:h.cierreAnticipado?'#b45309':'var(--text)'})}
+        ${_eqHistStat('Objetivo',objH+'h',{mono:false})}
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-3);line-height:1.45;">
+        <span style="font-weight:700;color:var(--text-2);text-transform:uppercase;font-size:10px;letter-spacing:.04em;">Guía${guias.indexOf(',')>=0?'s':''}</span>
+        <span style="font-family:var(--mono,monospace);color:var(--text-2);margin-left:6px;">${esc(guias)}</span>
+      </div>
       ${anticipoBlock}
     </div>`;
   }).join('');
-  return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">
-    <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Últimos ${list.length} registro(s)</div>
-    <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:2px;">${rows}</div>
+  return`<div class="eq-descarga-hist" style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;">Últimos ${list.length} registro${list.length===1?'':'s'}</div>
+      <div style="font-size:10px;color:var(--text-muted);">Más reciente primero</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:4px;">${rows}</div>
   </div>`;
 }
 let _eqModalCode=null;
@@ -6611,7 +6632,7 @@ function openEqModal(codigo){
     const fin=_eqHoraFinCongelacion(rt.horaInicio,rt.horasTotal);
     if(fin&&fin.hhmm&&fin.hhmm!=='—')finCongHm=fin.siguienteDia?fin.hhmm+' (+1d)':fin.hhmm;
   }
-  const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">'+rt.items.map((it,i)=>{
+  const itemsHtml=(rt.items||[]).length?('<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">'+rt.items.map((it,i)=>{
     const enFrio=rt.estado==='congelando';
     const rowCls=enFrio?'eq-item-congelando':'';
     const rowPad=enFrio?'12px 14px':'10px 12px';
@@ -6619,12 +6640,27 @@ function openEqModal(codigo){
       ?`display:flex;align-items:center;gap:10px;padding:${rowPad};border-radius:var(--radius-sm);`
       :`display:flex;align-items:center;gap:10px;padding:${rowPad};background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);`;
     const badge=enFrio?'<span class="eq-item-congelando__badge" title="En frío" aria-label="En frío"><span class="eq-freeze-dot" aria-hidden="true"></span></span>':'';
-    const metaSub=enFrio
-      ?`${it.cant} · ${esc(it.guia)}${finCongHm?' · '+esc(finCongHm):''}`
-      :`${it.cant} · ${esc(it.guia)} · ${it.horasTotal}h`;
+    // Sub-meta mejorada: chips compactos en vez de texto separado por "·"
+    let metaSubHtml;
+    if(enFrio){
+      metaSubHtml=`<div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap;font-size:11px;">
+        <span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Cant</span><span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text-2);">${it.cant}</span></span>
+        <span style="color:var(--border-strong);">·</span>
+        <span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Guía</span><span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text-2);">${esc(it.guia)}</span></span>
+        ${finCongHm?`<span style="color:var(--border-strong);">·</span><span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Fin</span><span style="font-family:var(--mono,monospace);font-weight:700;color:#b45309;">${esc(finCongHm)}</span></span>`:''}
+      </div>`;
+    } else {
+      metaSubHtml=`<div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap;font-size:11px;">
+        <span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Cant</span><span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text-2);">${it.cant}</span></span>
+        <span style="color:var(--border-strong);">·</span>
+        <span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Guía</span><span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text-2);">${esc(it.guia)}</span></span>
+        <span style="color:var(--border-strong);">·</span>
+        <span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Frío</span><span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text-2);">${it.horasTotal}h</span></span>
+      </div>`;
+    }
     return`<div class="${rowCls}" style="${rowBase}">
       ${badge}
-      <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;">${esc(it.producto)}</div><div style="font-size:12px;color:var(--text-3);font-family:var(--mono,monospace);margin-top:2px;">${metaSub}</div></div>
+      <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--text);">${esc(it.producto)}</div>${metaSubHtml}</div>
       ${rt.estado==='libre'||rt.estado==='cargando'?`<button class="btn btn-danger-outline" type="button" onclick="removeEqItem(${i})">Quitar</button>`:''}
     </div>`;
   }).join('')+'</div>'):'<div style="padding:14px;text-align:center;color:var(--text-3);font-size:12px;">—</div>';
@@ -6700,23 +6736,60 @@ function openEqModal(codigo){
   </div>`:'';
   document.getElementById('modalTitle').textContent=eq.nombre+' · '+eq.codigo;
   const restCong=rt.estado==='congelando'?_eqMinutosRestantesCongelacion(rt):0;
-  let _eqModalHdrMeta='';
-  if(eq.tipo==='placa')_eqModalHdrMeta='<strong>'+_eqUnitsOnPlate(rt)+'</strong>/'+eq.capacidad;
-  else _eqModalHdrMeta=String(eq.capacidad)+' '+esc(eq.unidad);
-  if(rt.horaInicio&&rt.estado!=='deshielando')_eqModalHdrMeta+=' · '+esc(rt.horaInicio);
-  if(rt.estado==='congelando'){
-    if((Number(rt.horasTotal)||0)>0)_eqModalHdrMeta+=' · '+esc(String(rt.horasTotal))+'h';
-    if(restCong>0)_eqModalHdrMeta+=' · '+esc(_eqFmtMinutosHM(restCong));
+  // Bloque de meta más legible: cada dato con su etiqueta clara
+  const metaChips=[];
+  if(eq.tipo==='placa'){
+    const used=_eqUnitsOnPlate(rt);
+    const cap=eq.capacidad||0;
+    const pct=cap>0?Math.min(100,Math.round(used/cap*100)):0;
+    metaChips.push(`<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;">
+      <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Capacidad</span>
+      <span style="font-size:13px;font-weight:800;color:var(--text);font-family:var(--mono,monospace);">${used}/${cap}</span>
+      <span style="font-size:9px;color:var(--text-muted);">${pct}% lleno</span>
+    </div>`);
+  } else {
+    metaChips.push(`<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;">
+      <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Capacidad</span>
+      <span style="font-size:13px;font-weight:800;color:var(--text);font-family:var(--mono,monospace);">${esc(String(eq.capacidad))} ${esc(eq.unidad||'')}</span>
+    </div>`);
   }
-  if(rt.estado==='deshielando'&&rt.deshieloHoraInicio)_eqModalHdrMeta=' · '+esc(rt.deshieloHoraInicio);
+  if(rt.horaInicio&&rt.estado!=='deshielando'){
+    metaChips.push(`<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;">
+      <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Inicio</span>
+      <span style="font-size:13px;font-weight:800;color:var(--text);font-family:var(--mono,monospace);">${esc(rt.horaInicio)}</span>
+    </div>`);
+  }
+  if(rt.estado==='congelando'&&(Number(rt.horasTotal)||0)>0){
+    metaChips.push(`<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;">
+      <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Objetivo</span>
+      <span style="font-size:13px;font-weight:800;color:var(--text);font-family:var(--mono,monospace);">${esc(String(rt.horasTotal))} h</span>
+    </div>`);
+    if(restCong>0){
+      const finFmt=_eqHoraFinCongelacion(rt.horaInicio,rt.horasTotal);
+      const finHm=finFmt&&finFmt.hhmm&&finFmt.hhmm!=='—'?(finFmt.siguienteDia?finFmt.hhmm+' (+1d)':finFmt.hhmm):'—';
+      metaChips.push(`<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;">
+        <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Restan</span>
+        <span style="font-size:13px;font-weight:800;color:#b45309;font-family:var(--mono,monospace);">${esc(_eqFmtMinutosHM(restCong))}</span>
+        <span style="font-size:9px;color:var(--text-muted);">Fin ≈ ${esc(finHm)}</span>
+      </div>`);
+    }
+  }
+  if(rt.estado==='deshielando'&&rt.deshieloHoraInicio){
+    metaChips.push(`<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;">
+      <span style="font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Inicio deshielo</span>
+      <span style="font-size:13px;font-weight:800;color:var(--text);font-family:var(--mono,monospace);">${esc(rt.deshieloHoraInicio)}</span>
+    </div>`);
+  }
   document.getElementById('modalBody').innerHTML=`
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-      <span class="badge ${b.c}"><span class="badge-dot"></span>${b.t}</span>
-      <span style="font-size:12px;color:var(--text-3);font-family:var(--mono,monospace);">${_eqModalHdrMeta}</span>
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface-alt);border-radius:12px;border:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;align-self:center;">
+        <span class="badge ${b.c}" style="font-size:11px;padding:5px 11px;"><span class="badge-dot"></span>${b.t}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px 22px;flex:1;min-width:0;">${metaChips.join('')}</div>
     </div>
     ${deshieloEnCurso}
     ${deshieloVacíoHint}
-    ${rt.estado==='listo'&&rt.cierreAnticipado?`<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:12px;padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;">Frío finalizado <strong>antes de tiempo</strong>${rt.cierreMinRestantes!=null?' (faltaban ~'+esc(_eqFmtMinutosHM(rt.cierreMinRestantes))+')':''}.<br><span style="color:var(--text-2);font-weight:600;">Causal:</span> ${esc(rt.cierreCausal||'—')}</div>`:''}
+    ${rt.estado==='listo'&&rt.cierreAnticipado?`<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:12px;padding:10px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;line-height:1.5;">Frío finalizado <strong>antes de tiempo</strong>${rt.cierreMinRestantes!=null?' (faltaban ~'+esc(_eqFmtMinutosHM(rt.cierreMinRestantes))+')':''}.<br><span style="color:var(--text-2);font-weight:600;">Causal:</span> ${esc(rt.cierreCausal||'—')}</div>`:''}
     ${itemsHtml}
     ${actions.join('')}
     ${_eqModalHistorialDescargasHtml(eq.codigo)}`;
