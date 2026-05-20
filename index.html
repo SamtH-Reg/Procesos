@@ -957,6 +957,13 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   border-color:rgba(4,120,87,.35);
   font-weight:700;
 }
+/* Tiempo cumplido pero usuario aún no pulsa "Finalizar frío" — variante visualmente "listo" pero con prefijo distintivo */
+.eq-tile.eq-tile-time-done .eq-time.warn::after{
+  content:" · esperando";
+  font-weight:600;
+  opacity:.75;
+  font-size:10px;
+}
 .eq-tile.deshielando{
   animation:eq-tile-desh-pulse 2.2s ease-in-out infinite;
 }
@@ -6448,23 +6455,35 @@ function calcEqProgreso(eq,rt){
 }
 function renderEqTile(eq){
   const rt=getEqRT(eq.codigo);
-  const b=estadoBadgeTP[rt.estado]||estadoBadgeTP.libre;
   const progreso=calcEqProgreso(eq,rt);
   const prod=rt.items&&rt.items.length?rt.items[0].producto:'—';
   const totCant=rt.items?rt.items.reduce((s,i)=>s+(i.cant||0),0):0;
-  const warn=rt.estado==='listo';
+  // Detección: tiempo de congelación expiró pero el usuario aún no pulsa "Finalizar frío"
+  // → visualmente lo tratamos como "listo" (verde) para invitar a descargar.
+  let estadoVisual=rt.estado;
+  let tiempoExpirado=false;
+  if(rt.estado==='congelando'){
+    const totalMin=(rt.horasTotal||0)*60;
+    const doneM=totalMin*progreso/100;
+    const restM=Math.max(0,totalMin-doneM);
+    if(totalMin>0&&restM<=0.5){estadoVisual='listo';tiempoExpirado=true;}
+  }
+  const b=estadoBadgeTP[estadoVisual]||estadoBadgeTP.libre;
+  const warn=estadoVisual==='listo';
   let tiempo='Disponible';
   if(rt.estado==='cargando')tiempo='Cargando · '+(rt.items?rt.items.length:0)+' item(s)';
   else if(rt.estado==='congelando'){
     const totalMin=(rt.horasTotal||0)*60;
     const done=totalMin*progreso/100;
     const rest=Math.max(0,totalMin-done);
-    tiempo=`${Math.floor(done/60)}h ${Math.round(done%60)}m · falta ${Math.floor(rest/60)}h ${Math.round(rest%60).toString().padStart(2,'0')}m`;
+    if(tiempoExpirado)tiempo='Tiempo cumplido · pulsa Finalizar frío';
+    else tiempo=`${Math.floor(done/60)}h ${Math.round(done%60)}m · falta ${Math.floor(rest/60)}h ${Math.round(rest%60).toString().padStart(2,'0')}m`;
   } else if(rt.estado==='deshielando'){
     const m=_eqMinutosDesdeHoraHm(rt.deshieloHoraInicio);
     tiempo='Deshielo · '+Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m · inicio '+(rt.deshieloHoraInicio||'—');
   } else if(rt.estado==='listo')tiempo='Listo para descargar';
-  return `<button class="eq-tile ${rt.estado}" type="button" onclick="openEqModal('${eq.codigo}')" style="text-align:left;">
+  const extraCls=tiempoExpirado?' eq-tile-time-done':'';
+  return `<button class="eq-tile ${estadoVisual}${extraCls}" type="button" onclick="openEqModal('${eq.codigo}')" style="text-align:left;">
     <div class="eq-hdr">
       <div><div class="eq-id">${esc(eq.nombre)}</div><div class="eq-name" style="font-size:11px;color:var(--text-3);">${esc(eq.codigo)}</div><div class="eq-type">${eq.tipo==='tunel'?'Túnel':'Placa'} · ${eq.capacidad} ${esc(eq.unidad)}</div></div>
       <span class="badge ${b.c}"><span class="badge-dot"></span>${b.t}</span>
@@ -6474,7 +6493,7 @@ function renderEqTile(eq){
       <div><div class="lbl">Producto</div><div class="val" style="font-family:var(--font);font-size:12px;font-weight:600;">${esc(prod)}</div></div>
       <div><div class="lbl">Cantidad</div><div class="val" style="font-family:var(--font);font-size:12px;font-weight:600;">${totCant?totCant+' u':'—'}</div></div>
     </div>
-    <div class="eq-time ${warn?'warn':''}">${rt.estado==='listo'?'\u2713 ':(warn?'\u26a0 ':'')}${tiempo}</div>
+    <div class="eq-time ${warn?'warn':''}">${warn?'\u2713 ':''}${tiempo}</div>
   </button>`;
 }
 function renderEquipos(){
@@ -11011,13 +11030,14 @@ document.addEventListener('visibilitychange',()=>{
   TBSync.pullCatalogs();
 });
 
-// Re-render equipos cada minuto (solo si el rol puede ver Túneles; evita trabajo y repaints innecesarios)
+// Re-render equipos cada 30s (solo si el rol puede ver Túneles; balance entre frescura y repaints).
+// Necesario para que la card vire a verde cuando el tiempo de congelación expira (estado visual "listo").
 setInterval(()=>{
   try{
     if(typeof _idxPerm==='function'&&!_idxPerm('tuneles'))return;
   }catch(_){}
   renderEquipos();
-},60000);
+},30000);
 
 /* ══════════════════════════════════════════════════════════════
    SUPABASE SYNC · Tablet
