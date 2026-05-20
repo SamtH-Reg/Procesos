@@ -2032,6 +2032,14 @@ function _filterRecs(recs, kind){
   const fhYmd=_filters.hasta?_dateObjToLocalYmd(_filters.hasta):fdYmd;
   const useCycleDates=!!(fdYmd||fhYmd);
   return arr.filter(r=>{
+    // Filtro consistente: para moldes y pesajes, excluir registros sin operario real
+    // (nombre vacío, "—", "-", o virtual de general). Mantiene paridad con index.
+    if(kind==='molde'||kind==='pesaje'){
+      if(r&&(r._fromGeneral||r.esGeneral))return false;
+      const nom=String((r&&r.nombre)||'').trim();
+      if(!nom||nom==='—'||nom==='-'||nom==='(Registro general)')return false;
+      if((r&&r.trabId==null)&&!(r&&r.codigo)&&!(r&&r.ficha))return false;
+    }
     if(useCycleDates){
       const mod=kind==='pesaje'?'pes':'mol';
       const d0=_ieCycleDateNorm(fdYmd||fhYmd||_adminTodayLocalYmd());
@@ -3906,7 +3914,7 @@ function renderAdminMResumenHora(){
     '<td class="num" style="'+fs+'">'+_admResFmtKg(totGrandKg)+'</td>'+
     '</tr></tfoot>';
   wrap.innerHTML=toolbar+'<div class="tbl-wrap"><table>'+hdr+body+foot+'</table></div>';
-  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+_admResFmtMol(totGrand)+' moldes · '+_admResFmtKg(totGrandKg)+' kg · '+hoyStr+(lineaVal?' · Línea '+lineaVal:'');
+  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+_admResFmtMol(totGrand)+' moldes · '+_admResFmtKg(totGrandKg)+' kg · '+hoyStr+(lineaVal?' · Línea '+lineaVal:'')+' · Fuente: solo Moldes (Generales aparte)';
 }
 function renderAdminPResumenHora(){
   const wrap=document.getElementById('adminPResumenWrap');if(!wrap)return;

@@ -3704,8 +3704,16 @@ function _generalARowMoldeVirtual(g){
     cant:g.cant,pendiente:g.pendiente!=null?g.pendiente:g.cant,kg:g.kg,guia:g.guia
   };
 }
-/** Moldes + generales molde/placa (misma lógica operativa). */
+/** Moldes operativos: SOLO RT.moldes (sin registros generales mezclados).
+ * Consistencia con admin: los registros del módulo "General" se cuentan
+ * por separado en su propia tabla. Si necesitas el merge histórico
+ * (e.g. aggregatePendientes), usa _moldeRowsOperativosMergedConGenerales. */
 function _moldeRowsOperativos(){
+  return(RT.moldes||[]).map(r=>({...r,_fromGeneral:!!r._fromGeneral}));
+}
+/** Versión merge legacy (incluye generales tipo molde como filas virtuales).
+ * Usar SOLO para pendientes/carga de placas, NO para reportes operario. */
+function _moldeRowsOperativosMergedConGenerales(){
   const out=(RT.moldes||[]).map(r=>({...r,_fromGeneral:!!r._fromGeneral}));
   (RT.generales||[]).forEach(g=>{
     const v=_generalARowMoldeVirtual(g);
@@ -5877,16 +5885,12 @@ window.renderMRegTurnos=renderMRegTurnos;window.onMRegFechaArmadoChange=onMRegFe
 function _armadoMoldeHasPeople(d){
   return !!(d&&(d.planillero||((d.trabajadores||[]).length>0)));
 }
+/** Gate de "armado con personas" REMOVIDO para consistencia con admin reports.
+ * Antes ocultaba registros de líneas sin armado para esa fecha; ahora retorna
+ * todos los registros y deja que el filtro fecha/turno haga el resto.
+ * Mantengo la firma para no romper llamadas existentes. */
 function _mVerRowsInActiveArmado(rows,fechaFiltro){
-  const fe=(fechaFiltro!=null&&String(fechaFiltro).trim()!=='')?String(fechaFiltro).trim():nowDate();
-  const exigir=_mResumenHasArmadoConPersonasParaFecha(fe);
-  if(!exigir)return(rows||[]).slice();
-  return(rows||[]).filter(r=>{
-    const turno=(r&&r.turno)||'dia';
-    const fecha=(r&&r.fecha)||nowDate();
-    const arm=_armGetEntry(r.linea,turno,fecha);
-    return _armadoMoldeHasPeople(arm);
-  });
+  return(rows||[]).slice();
 }
 function renderMoldesTable(){
   const tb=document.getElementById('tbMoldes');if(!tb)return;
@@ -5905,13 +5909,13 @@ function renderMoldesTable(){
   let rows=_mVerRowsInActiveArmado(opRows.slice(),state.fechaTurno);
   rows=_filterMoldesPorListaFiltros(rows,state);
   if(fBuscar)rows=rows.filter(r=>norm(r.nombre||'').includes(fBuscar)||norm(r.producto||'').includes(fBuscar)||norm(_especieDe(r)).includes(fBuscar));
-  // Info badge
+  // Info badge: contadores explícitos (solo RT.moldes, sin registros generales mezclados)
   const info=document.getElementById('mVerInfo');
   if(info){
     const totMol=rows.reduce((s,r)=>s+(r.cant||0),0);
     const totKg=rows.reduce((s,r)=>s+(r.kg||0),0);
     if(rows.length){
-      info.textContent=rows.length+' registros · '+totMol+' moldes · '+totKg.toLocaleString('es-CL',{maximumFractionDigits:1})+' kg';
+      info.textContent=rows.length+' registros · '+totMol+' moldes · '+totKg.toLocaleString('es-CL',{maximumFractionDigits:1})+' kg · Fuente: solo Moldes (Generales aparte)';
       info.style.display='';
     } else {
       info.style.display='none';
@@ -8267,13 +8271,12 @@ function _mResumenRowsForScope(fecha,turno,lineaCod,horaRange){
     const L=String(lineaCod).toUpperCase();
     mol=mol.filter(r=>String((r&&r.linea)||'').trim().toUpperCase()===L);
   }
-  const exigirArmado=_mResumenHasArmadoConPersonasParaFecha(fecha);
+  // Gate "armado con personas" REMOVIDO para consistencia con admin reports.
+  // Solo se aplica el filtro de turno (si corresponde).
   mol=mol.filter(r=>{
     const rt=String((r&&r.turno)||_moldeTurnoNorm(r)||'dia');
     if(matchTurno!=null&&matchTurno!=='todos'&&rt!==matchTurno)return false;
-    if(!exigirArmado)return true;
-    const arm=_armGetEntry(r.linea,rt,fecha);
-    return _armadoMoldeHasPeople(arm);
+    return true;
   });
   if(horaRange)mol=mol.filter(r=>_tsMatchesHoraFiltro(_registroTsMolde(r),horaRange));
   return mol;
@@ -8467,9 +8470,7 @@ function renderMResumen(){
   const{fechaTurno,filtro,lineaVal,horaRange}=state;
   const hoyStr=fechaTurno.split('-').reverse().join('/');
   let mol=_mResumenRowsForScope(fechaTurno,filtro,lineaVal||null,horaRange);
-  const hintArmado=_mResumenHasArmadoConPersonasParaFecha(fechaTurno)
-    ?'Solo incluye registros dentro del <strong>armado con personas</strong> de esa fecha/turno. Horas según turno (día 07–19, noche 19–07).'
-    :'Sin armado con personas para esta fecha: se muestran <strong>todos</strong> los moldes del día. Horas según turno (día 07–19, noche 19–07).';
+  const hintArmado='Muestra <strong>todos</strong> los moldes de RT.moldes para esa fecha/turno (sin generales). Horas según turno (día 07–19, noche 19–07).';
   const toolbar=`<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">
     <label class="form-label" style="margin:0;">Fecha (turno)</label>
     <input type="date" class="input" id="mResumenFechaInicio" value="${esc(fechaTurno)}" style="max-width:168px;" onchange="renderMResumen()">
@@ -8543,7 +8544,7 @@ function renderMResumen(){
   wrap.innerHTML=toolbar+`<table>${hdr}${body}${foot}</table>`;
   const filtroSub=_resumenFiltroTurnoSub(filtro);
   const lineaSub=lineaVal?' · Línea '+lineaVal:'';
-  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmtMol(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub;
+  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+fmtMol(totGrand)+' moldes · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub+' · Fuente: solo Moldes (Generales aparte)';
 }
 
 /* ═══ MOLDES — Consolidado (kg acumulados por persona, hoy) ═══════ */
