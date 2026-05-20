@@ -3829,8 +3829,16 @@ function renderAdminMResumenHora(){
   const state=_readAdmMResumenState();
   const{fecha,filtro,lineaVal}=state;
   const hoyStr=fecha.split('-').reverse().join('/');
-  // Solo RT.data.moldes (no generales, según pedido del usuario)
-  const src=Array.isArray(RT.data.moldes)?RT.data.moldes:[];
+  // Solo RT.data.moldes (no generales) Y solo con operario real (trabId o nombre con contenido)
+  // Filas con nombre vacío / "—" provienen de generales o registros sin operario y deben omitirse.
+  const src=(Array.isArray(RT.data.moldes)?RT.data.moldes:[]).filter(r=>{
+    if(!r)return false;
+    if(r._fromGeneral||r.esGeneral)return false; // por si llegó marcado
+    const nom=String(r.nombre||'').trim();
+    if(!nom||nom==='—'||nom==='-')return false; // sin trabajador asignado
+    if(r.trabId==null&&!r.codigo&&!r.ficha)return false; // sin ningún identificador de operario
+    return true;
+  });
   const mol=_admResRowsForFiltro(src,fecha,filtro,lineaVal||null);
   const toolbar='<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">'+
     '<label class="form-label" style="margin:0;">Fecha (turno)</label>'+
