@@ -6014,16 +6014,28 @@ async function saveEditMolde(id){
   _tbToastTrasCorreccionCloud(cloud,'Registro actualizado');
 }
 window.editMolde=editMolde;window.closeEditMolde=closeEditMolde;window.saveEditMolde=saveEditMolde;
-async function delMolde(id){
+function delMolde(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
   if(!confirm('¿Eliminar este registro? Se borrará también en la nube si hay sesión.'))return;
   RT.moldes=RT.moldes.filter(r=>r.id!==id);
   rtSave({skipCloudSchedule:true});
   renderMoldesTable();
+  showToast('Registro eliminado','success'); // feedback inmediato
   _tbDefer(()=>{renderPorCargar();if(document.getElementById('panelAnalisis')?.classList.contains('active')&&typeof renderAnalisis==='function')renderAnalisis();});
-  const cloud=await _tbCloudDeleteOperativoRow('moldes',id,_rtIsDemoMoldeId);
-  if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush();
-  _tbToastTrasCorreccionCloud(cloud,'Registro eliminado');
+  // Cloud delete en background — no bloquea la UI
+  void _tbCloudDeleteOperativoRow('moldes',id,_rtIsDemoMoldeId).then(cloud=>{
+    if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+      // Sin red/sesión → encolar push para limpiar la nube luego
+      try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+    }else if(cloud&&cloud.ok===false){
+      // Falló el delete directo → forzar pushAll inmediato para resolver vía delta
+      try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}
+      console.warn('[delMolde cloud]',cloud.err);
+    }
+  }).catch(e=>{
+    console.warn('[delMolde cloud catch]',e);
+    try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+  });
 }
 window.delMolde=delMolde;window.renderMoldesTable=renderMoldesTable;
 function exportarMoldesExcel(){
@@ -6363,23 +6375,36 @@ function renderGResumen(){
   if(sub)sub.textContent=out.length+' productos · '+rows.length+' registros · '+fmt(totGrand)+' u · '+fmtKg(totGrandKg)+' kg · '+hoyStr+' · '+filtroSub+lineaSub;
 }
 function delGeneral(id){
-  if(typeof _idxPerm==='function'&&!_idxPerm('eliminar')){showToast('Sin permiso para eliminar registros','error');return;}
+  // Permitir si el rol tiene 'eliminar' O es admin (mismo criterio que moldes/pesaje)
+  if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()
+     &&(typeof _idxPerm!=='function'||!_idxPerm('eliminar'))){
+    showToast('Sin permiso para eliminar registros','error');return;
+  }
   if(!confirm('¿Eliminar este registro general?'))return;
   RT.generales=RT.generales.filter(r=>r.id!==id);rtSave({skipCloudSchedule:true});
   renderGeneralesTable();
+  showToast('Registro eliminado','success'); // feedback inmediato
   _tbDefer(()=>{
     renderPorCargar();
     if(document.getElementById('panelTuneles')?.classList.contains('active')&&typeof renderEquipos==='function')renderEquipos();
   });
+  // Cloud delete en background con manejo de error
   void _tbCloudDeleteOperativoRow('generales',id).then(cloud=>{
-    if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush();
+    if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+      try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+    }else if(cloud&&cloud.ok===false){
+      try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}
+      console.warn('[delGeneral cloud]',cloud.err);
+    }
+  }).catch(e=>{
+    console.warn('[delGeneral cloud catch]',e);
+    try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
   });
   if(typeof renderMoldesTable==='function')renderMoldesTable();
   if(typeof renderAnalisis==='function')renderAnalisis();
   if(typeof renderGResumen==='function'){try{const gr=document.getElementById('genResumen');if(gr&&!gr.classList.contains('hidden'))renderGResumen();}catch(_){}}
   if(typeof renderMResumen==='function'){try{const mr=document.getElementById('mResumen');if(mr&&!mr.classList.contains('hidden'))renderMResumen();}catch(_){}}
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
-  showToast('Registro eliminado','success');
 }
 window.regGeneral=regGeneral;window.clearGReg=clearGReg;window.selectPresetG=selectPresetG;window.gRegCalcKg=gRegCalcKg;window.delGeneral=delGeneral;
 window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;window.onGRegEspecieChange=onGRegEspecieChange;window.renderGRegPresets=renderGRegPresets;window._clearGRegEspecieFilter=_clearGRegEspecieFilter;
@@ -7846,7 +7871,7 @@ function renderPesajeTable(){
   </tr>`;
   }).join('');
 }
-async function delPesaje(id){
+function delPesaje(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
   const i=RT.pesajes.findIndex(r=>String(r.id)===String(id));
   const r=i>=0?RT.pesajes[i]:null;if(!r)return;
@@ -7854,14 +7879,24 @@ async function delPesaje(id){
   RT.pesajes.splice(i,1);
   rtSave({skipCloudSchedule:true});
   renderPesajeTable();
+  showToast('Pesaje eliminado','success'); // feedback inmediato
   _tbDefer(()=>{
     if(document.getElementById('panelAnalisis')?.classList.contains('active')&&typeof renderAnalisis==='function')renderAnalisis();
     if(window.renderPResumen)renderPResumen();
     if(window.renderPConsol)renderPConsol();
   });
-  const cloud=await _tbCloudDeleteOperativoRow('pesajes',id,typeof _rtIsDemoPesajeId==='function'?_rtIsDemoPesajeId:null);
-  if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush();
-  _tbToastTrasCorreccionCloud(cloud,'Pesaje eliminado');
+  // Cloud delete en background — no bloquea la UI
+  void _tbCloudDeleteOperativoRow('pesajes',id,typeof _rtIsDemoPesajeId==='function'?_rtIsDemoPesajeId:null).then(cloud=>{
+    if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline')){
+      try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+    }else if(cloud&&cloud.ok===false){
+      try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)void TBSync.pushImmediate();}catch(_){}
+      console.warn('[delPesaje cloud]',cloud.err);
+    }
+  }).catch(e=>{
+    console.warn('[delPesaje cloud catch]',e);
+    try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+  });
 }
 function editPesaje(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
