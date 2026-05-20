@@ -6543,20 +6543,26 @@ function renderEquipos(){
 function aggregatePendientes(filterTipo){
   // Suma pendiente por presetId. filterTipo null = todos (túneles). 'molde' = sólo molde (placas).
   // Incluye RT.moldes y RT.generales (molde/placa con horas túnel o placa en preset general).
+  // Devuelve también totalRegistrado y consumido para diagnóstico.
   const map={};
   const push=(r)=>{
-    const pend=r.pendiente!=null?r.pendiente:r.cant;
-    if(pend<=0)return;
+    const cantR=+r.cant||0;
+    const pendR=r.pendiente!=null?(+r.pendiente||0):cantR;
+    const consumido=Math.max(0,cantR-pendR);
+    if(cantR<=0&&pendR<=0)return;
     const p=DB.data.presets.find(x=>String(x.id)===String(r.presetId));if(!p)return;
     if(filterTipo==='molde'&&!_presetEsConteoMoldePlaca(p))return;
-    if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,especieRow:''};
-    map[r.presetId].cant+=pend;
+    if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,totalRegistrado:0,consumido:0,especieRow:''};
+    map[r.presetId].cant+=Math.max(0,pendR);
+    map[r.presetId].totalRegistrado+=cantR;
+    map[r.presetId].consumido+=consumido;
     const rowEsp=String(r.especie||'').trim();
     if(rowEsp&&!map[r.presetId].especieRow)map[r.presetId].especieRow=rowEsp;
   };
   (RT.moldes||[]).forEach(push);
   (RT.generales||[]).forEach(push);
-  return Object.values(map).sort((a,b)=>b.cant-a.cant);
+  // Sólo entries con pendiente > 0 quedan visibles (compat. con renderPorCargar).
+  return Object.values(map).filter(x=>x.cant>0).sort((a,b)=>b.cant-a.cant);
 }
 /** Especie para UI “por cargar”: preset o primera del RT (molde/general). */
 function _idxEspeciePendiente(it){
@@ -6573,21 +6579,72 @@ function renderPorCargar(){
   if(!items.length){card.style.display='none';return;}
   card.style.display='';
   const totMoldes=items.reduce((s,i)=>s+i.cant,0);
-  tot.textContent=totMoldes+' moldes pendientes por asignar';
+  const totConsumido=items.reduce((s,i)=>s+(i.consumido||0),0);
+  const totRegistrado=items.reduce((s,i)=>s+(i.totalRegistrado||0),0);
+  // Header con desglose: pendientes / cargados / registrados
+  tot.innerHTML=`<strong>${totMoldes}</strong> pendientes <span style="opacity:.7;font-weight:500;">· ${totConsumido} ya cargados de ${totRegistrado} registrados</span>`;
   list.innerHTML=items.map((it,i)=>{
     const last=i===items.length-1;
     const tipoLabel=_PRESET_TIPO_LABELS[it.preset.tipo]||it.preset.tipo;
-    return `<div style="padding:14px 18px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:12px;background:var(--surface);">
+    const cons=it.consumido||0;
+    const totR=it.totalRegistrado||it.cant;
+    const pctCarg=totR>0?Math.round(cons/totR*100):0;
+    return `<div style="padding:14px 18px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:12px;background:var(--surface);" title="Pendientes: ${it.cant} · Cargados: ${cons} · Registrados: ${totR}">
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;">${esc(it.preset.nombre)}</div>
         <div style="font-size:11px;color:var(--text-3);"><span class="badge slate">${esc(tipoLabel)}</span> ${esc(it.preset.destino||'—')} · <strong>Esp.</strong> ${esc(_idxEspeciePendiente(it))} · ${esc(it.preset.calibre||'—')} · ${it.preset.kgRef} kg/u</div>
+        ${cons>0?`<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${cons}/${totR} ya cargados (${pctCarg}%)</div>`:''}
       </div>
-      <div style="font-size:22px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);">${it.cant}</div>
-      <div style="font-size:11px;color:var(--text-3);">moldes</div>
+      <div style="text-align:right;">
+        <div style="font-size:22px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);line-height:1;">${it.cant}</div>
+        <div style="font-size:10px;color:var(--text-3);">pendientes</div>
+      </div>
     </div>`;
   }).join('');
 }
 window.renderPorCargar=renderPorCargar;
+
+/** Diagnóstico: pendientes vs consumido vs registrado por preset.
+ *  Uso desde F12 Console: friosurAuditPendientes() */
+window.friosurAuditPendientes=function(){
+  const items=aggregatePendientes(null);
+  const breakdown={};
+  // Detalle por record (RT.moldes y RT.generales)
+  (RT.moldes||[]).forEach(r=>{
+    if(!r||r.presetId==null)return;
+    const k=String(r.presetId);
+    const cantR=+r.cant||0;
+    const pendR=r.pendiente!=null?(+r.pendiente||0):cantR;
+    if(!breakdown[k])breakdown[k]={preset:'',moldesRows:0,generalesRows:0,totalCant:0,totalPend:0,consumido:0};
+    breakdown[k].moldesRows++;
+    breakdown[k].totalCant+=cantR;
+    breakdown[k].totalPend+=pendR;
+    breakdown[k].consumido+=Math.max(0,cantR-pendR);
+  });
+  (RT.generales||[]).forEach(r=>{
+    if(!r||r.presetId==null)return;
+    const k=String(r.presetId);
+    const cantR=+r.cant||0;
+    const pendR=r.pendiente!=null?(+r.pendiente||0):cantR;
+    if(!breakdown[k])breakdown[k]={preset:'',moldesRows:0,generalesRows:0,totalCant:0,totalPend:0,consumido:0};
+    breakdown[k].generalesRows++;
+    breakdown[k].totalCant+=cantR;
+    breakdown[k].totalPend+=pendR;
+    breakdown[k].consumido+=Math.max(0,cantR-pendR);
+  });
+  // Nombre del preset
+  Object.keys(breakdown).forEach(k=>{
+    const p=DB.data.presets.find(x=>String(x.id)===k);
+    breakdown[k].preset=p?p.nombre:'(preset id '+k+' no encontrado)';
+  });
+  console.log('━━━ AUDITORÍA PENDIENTES ━━━');
+  console.log('Total visible en "Por cargar":',items.reduce((s,i)=>s+i.cant,0),'moldes');
+  console.log('Detalle por preset:');
+  console.table(breakdown);
+  console.log('Items "Por cargar":');
+  console.table(items.map(i=>({preset:i.preset.nombre,pendientes:i.cant,consumido:i.consumido,totalRegistrado:i.totalRegistrado})));
+  return breakdown;
+};
 function updateEqStats(){
   const panel=document.getElementById('panelTuneles');if(!panel)return;
   const stats=panel.querySelectorAll('.stat-value');if(stats.length<4)return;
@@ -6966,10 +7023,13 @@ function addEqItem(){
 /* Consumir pendientes FIFO (moldes + generales) por preset. */
 function consumirPendientes(presetId,cant){
   let rest=cant,guias=new Set();
+  // Comparación robusta con String() para evitar mismatch tipo string vs number.
+  const presetIdStr=String(presetId);
+  const matchPreset=r=>String(r&&r.presetId)===presetIdStr;
   const pool=[
-    ...(RT.moldes||[]).filter(r=>r.presetId===presetId&&(r.pendiente||0)>0),
-    ...(RT.generales||[]).filter(r=>r.presetId===presetId&&(r.pendiente||0)>0),
-  ].sort((a,b)=>a.id-b.id);
+    ...(RT.moldes||[]).filter(r=>matchPreset(r)&&(r.pendiente||0)>0),
+    ...(RT.generales||[]).filter(r=>matchPreset(r)&&(r.pendiente||0)>0),
+  ].sort((a,b)=>(+a.id||0)-(+b.id||0));
   for(const r of pool){
     if(rest<=0)break;
     const take=Math.min(r.pendiente,rest);
