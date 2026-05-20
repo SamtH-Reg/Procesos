@@ -3829,13 +3829,8 @@ function renderAdminMResumenHora(){
   const state=_readAdmMResumenState();
   const{fecha,filtro,lineaVal}=state;
   const hoyStr=fecha.split('-').reverse().join('/');
-  // Combinar moldes + generales (registro general también suma moldes/placas)
-  const src=[].concat(Array.isArray(RT.data.moldes)?RT.data.moldes:[],(Array.isArray(RT.data.generales)?RT.data.generales:[]).filter(g=>{
-    const pid=g&&(g.presetId!=null?g.presetId:g.preset_id);
-    const p=pid!=null?(DB.data.presets||[]).find(x=>String(x.id)===String(pid)):null;
-    if(!p)return false;
-    return String(p.tipo||'').toLowerCase()==='molde';
-  }));
+  // Solo RT.data.moldes (no generales, según pedido del usuario)
+  const src=Array.isArray(RT.data.moldes)?RT.data.moldes:[];
   const mol=_admResRowsForFiltro(src,fecha,filtro,lineaVal||null);
   const toolbar='<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">'+
     '<label class="form-label" style="margin:0;">Fecha (turno)</label>'+
