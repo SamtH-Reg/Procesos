@@ -420,6 +420,8 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="nav-item" data-page="reportes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Reportes</div>
   <div class="nav-item" data-page="tuneles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6v12M12 6v12M18 6v12"/></svg>Túneles y Placas</div>
   <div class="nav-item" data-page="analisis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Análisis</div>
+  <div class="nav-item" data-page="resumen-hora-mol"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Resumen x hora · Moldes</div>
+  <div class="nav-item" data-page="resumen-hora-pes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Resumen x hora · Pesaje</div>
   <div class="nav-item" data-page="resumen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 3v18"/></svg>Resumen molde / pesaje</div>
 
   <div class="nav-sec">Catálogos</div>
@@ -670,6 +672,32 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div class="card-hdr"><div class="card-title" id="resumenTblTitle">Moldes</div><div class="card-sub" id="resumenTblSub">—</div></div>
     <div class="tbl-wrap"><table class="resumen-pivot-tbl" id="resumenPivotTbl"><thead class="resumen-pivot-head"></thead><tbody></tbody><tfoot></tfoot></table></div>
   </div>
+</div>
+
+<!-- ═══ RESUMEN x HORA · MOLDES (paridad con index, sin columna PRODUCTO) ═══ -->
+<div class="page" id="page-resumen-hora-mol">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Resumen x hora · Moldes</h1><div class="page-sub">Pivot operario × hora · kg por celda · suma de moldes y kg</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn ghost sm" onclick="renderAdminMResumenHora()">↻ Actualizar</button>
+      <button type="button" class="btn ghost sm" onclick="exportAdminMResumenHoraExcel()">Exportar Excel</button>
+    </div>
+  </div>
+  <div id="adminMResumenWrap" class="card" style="margin-top:14px;overflow:hidden;"></div>
+  <div id="adminMResumenSub" class="page-sub" style="margin-top:8px;"></div>
+</div>
+
+<!-- ═══ RESUMEN x HORA · PESAJE (paridad con index) ═══ -->
+<div class="page" id="page-resumen-hora-pes">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Resumen x hora · Pesaje</h1><div class="page-sub">Pivot operario × hora · kg por celda · suma de pesajes y kg</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="btn ghost sm" onclick="renderAdminPResumenHora()">↻ Actualizar</button>
+      <button type="button" class="btn ghost sm" onclick="exportAdminPResumenHoraExcel()">Exportar Excel</button>
+    </div>
+  </div>
+  <div id="adminPResumenWrap" class="card" style="margin-top:14px;overflow:hidden;"></div>
+  <div id="adminPResumenSub" class="page-sub" style="margin-top:8px;"></div>
 </div>
 
 <!-- ═══ PRESETS ═══ -->
@@ -1249,6 +1277,8 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='tuneles')renderTunReport();
     if(id==='import')populateIEFilters();
     if(id==='analisis')renderAnalisis();
+    if(id==='resumen-hora-mol'&&typeof renderAdminMResumenHora==='function')renderAdminMResumenHora();
+    if(id==='resumen-hora-pes'&&typeof renderAdminPResumenHora==='function')renderAdminPResumenHora();
     if(id==='resumen'){_resumenInitOnPageOpen();renderResumen();}
     if(id==='presets')renderPresets();
     if(id==='trabajadores')renderTrabs();
@@ -3659,6 +3689,350 @@ function renderAnalisis(){
   const rows=[];Object.entries(RT.data.eqHist||{}).forEach(([cod,arr])=>{arr.forEach(h=>{rows.push({cod,...h});});});
   document.getElementById('anTblHist').innerHTML='<thead><tr><th>Equipo</th><th>Inicio</th><th>Fin</th><th class="num">Horas</th><th class="num">Cant</th><th>Productos</th><th>Guía(s)</th></tr></thead><tbody>'+(rows.length?rows.map(r=>`<tr><td>${esc(r.cod)}</td><td>${esc(r.horaInicio||'—')}</td><td>${esc(r.horaDescarga||'—')}</td><td class="num">${(r.horasTotal||0).toFixed(1)}</td><td class="num">${r.cant||0}</td><td>${esc(r.productos||'')}</td><td style="font-size:11px;">${esc(_tunHistGuiasFromItems(r))}</td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-3);">Sin histórico</td></tr>')+'</tbody>';
 }
+
+/* ═══ ADMIN — RESUMEN x HORA · MOLDES (pivot operario × hora, SIN columna PRODUCTO) ════
+   Paridad con index.html renderMResumen, pero adaptado a admin (RT.data, sin armado-gating). */
+function _admResMolEspecieDe(r){
+  const e=String(r&&r.especie||'').trim();
+  if(e)return e;
+  const pid=r&&(r.presetId!=null?r.presetId:r.preset_id);
+  const p=pid!=null?(DB.data.presets||[]).find(x=>String(x.id)===String(pid)):null;
+  return(p&&String(p.especie||'').trim())||'—';
+}
+function _admResTurnoNorm(r){
+  const d=String((r&&r.turno)||'').trim().toLowerCase();
+  if(d)return d;
+  const hm=_adminParseHMToMinutes(r&&r.hora);
+  if(hm==null)return'dia';
+  const turnos=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  for(const t of turnos){
+    const a=_adminParseHMToMinutes(t.inicio),b=_adminParseHMToMinutes(t.fin);
+    if(a==null||b==null)continue;
+    if(b>a){if(hm>=a&&hm<b)return String(t.codigo||'').trim().toLowerCase();}
+    else{if(hm>=a||hm<b)return String(t.codigo||'').trim().toLowerCase();}
+  }
+  return(hm>=7*60&&hm<19*60)?'dia':'noche';
+}
+function _admResFechaDefault(filtro){
+  const tc=filtro==='actual'||!filtro||filtro==='todos'?_adminInferTurnoCodigoPorHorario():String(filtro);
+  return _dashTurnoOperativeYmd(tc);
+}
+function _admResTurnoLabel(t){
+  const a=String(t.inicio||'').trim(),b=String(t.fin||'').trim();
+  const ai=_adminParseHMToMinutes(a),bi=_adminParseHMToMinutes(b);
+  const cross=ai!=null&&bi!=null&&bi<=ai;
+  return String(t.nombre||t.codigo||'Turno')+' ('+a+' → '+b+(cross?' día sig.':'')+')';
+}
+function _admResTurnoSelectHtml(id,onChange,selectedVal){
+  const opts=['<option value="todos" '+(selectedVal==='todos'?'selected':'')+'>Todos los turnos</option>'];
+  opts.push('<option value="actual" '+(selectedVal==='actual'?'selected':'')+'>Según hora actual</option>');
+  const activos=(DB&&DB.data&&DB.data.turnos||[]).filter(t=>t.activo!==false);
+  const seen=new Set();
+  activos.forEach(t=>{
+    const cod=String(t.codigo||'').trim();
+    if(!cod||seen.has(cod))return;seen.add(cod);
+    opts.push('<option value="'+esc(cod)+'" '+(cod===selectedVal?'selected':'')+'>'+esc(_admResTurnoLabel(t))+'</option>');
+  });
+  return '<select class="select" id="'+id+'" style="max-width:280px;" onchange="'+onChange+'()">'+opts.join('')+'</select>';
+}
+function _admResLineaOptions(selected){
+  const set=new Set();
+  try{(DB.data.equipos||[]).forEach(e=>{if(e&&e.activo!==false&&e.codigo)set.add(String(e.codigo).trim().toUpperCase());});}catch(_){}
+  try{
+    (RT.data.moldes||[]).forEach(r=>{if(r&&r.linea)set.add(String(r.linea).trim().toUpperCase());});
+    (RT.data.pesajes||[]).forEach(r=>{if(r&&r.linea)set.add(String(r.linea).trim().toUpperCase());});
+  }catch(_){}
+  const sel=String(selected||'').trim().toUpperCase();
+  return['<option value="">Todas</option>'].concat([...set].sort().map(l=>'<option value="'+esc(l)+'" '+(l===sel?'selected':'')+'>'+esc(l)+'</option>')).join('');
+}
+function _admResVentanaTurno(fechaRef,cod){
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===String(cod||'').toLowerCase());
+  if(!t)return null;
+  const a=_adminParseHMToMinutes(t.inicio),b=_adminParseHMToMinutes(t.fin);
+  if(a==null||b==null)return null;
+  const m=String(fechaRef||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return null;
+  const start=new Date(+m[1],+m[2]-1,+m[3],Math.floor(a/60),a%60,0,0).getTime();
+  let end;
+  if(b>a)end=new Date(+m[1],+m[2]-1,+m[3],Math.floor(b/60),b%60,0,0).getTime();
+  else end=new Date(+m[1],+m[2]-1,+m[3]+1,Math.floor(b/60),b%60,0,0).getTime();
+  return{start,end};
+}
+function _admResRecordTs(r){
+  if(!r)return null;
+  const fe=String(r.fecha||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!fe)return null;
+  const hm=_adminParseHMToMinutes(r.hora);
+  const h=hm!=null?Math.floor(hm/60):12;
+  const mi=hm!=null?hm%60:0;
+  return new Date(+fe[1],+fe[2]-1,+fe[3],h,mi,0,0).getTime();
+}
+function _admResHourCols(rows,filtro){
+  const obs=new Set();
+  (rows||[]).forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
+  let arr=[...obs];
+  if(!arr.length)return[];
+  if(filtro==='todos'||!filtro||filtro==='actual')return arr.sort((a,b)=>a-b);
+  const t=(DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===String(filtro).toLowerCase());
+  if(!t)return arr.sort((a,b)=>a-b);
+  const a=_adminParseHMToMinutes(t.inicio),b=_adminParseHMToMinutes(t.fin);
+  if(a==null||b==null)return arr.sort((x,y)=>x-y);
+  if(b>a)return arr.sort((x,y)=>x-y);
+  const norm=h=>{const m=h*60+30;return m>=a?m:m+24*60;};
+  return arr.sort((x,y)=>norm(x)-norm(y));
+}
+function _admResRowsForFiltro(src,fecha,filtro,lineaVal){
+  const codActual=_adminInferTurnoCodigoPorHorario();
+  const matchTurno=filtro==='todos'||!filtro?null:(filtro==='actual'?String(codActual):String(filtro));
+  return(src||[]).filter(r=>{
+    if(lineaVal&&String((r.linea||'')).trim().toUpperCase()!==String(lineaVal).toUpperCase())return false;
+    if(matchTurno==null){
+      // todos: incluir si la fecha del registro coincide con la fecha base, o si cae en alguna ventana de turno
+      const activos=(DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim().toLowerCase()).filter(Boolean);
+      const ts=_admResRecordTs(r);
+      if(ts==null)return String(r.fecha||'')===String(fecha);
+      for(const cod of(activos.length?activos:['dia','noche'])){
+        if(_admResTurnoNorm(r)!==cod)continue;
+        const w=_admResVentanaTurno(fecha,cod);
+        if(w&&ts>=w.start&&ts<w.end)return true;
+      }
+      return false;
+    }
+    if(_admResTurnoNorm(r)!==matchTurno)return false;
+    const w=_admResVentanaTurno(fecha,matchTurno);
+    if(!w)return String(r.fecha||'')===String(fecha);
+    const ts=_admResRecordTs(r);
+    return ts!=null&&ts>=w.start&&ts<w.end;
+  });
+}
+function _readAdmMResumenState(){
+  const f=document.getElementById('adminMResumenFecha');
+  const t=document.getElementById('adminMResumenTurno');
+  const l=document.getElementById('adminMResumenLinea');
+  const filtro=t?String(t.value||'todos'):'todos';
+  const fechaRaw=f&&String(f.value||'').trim();
+  return{fecha:fechaRaw||_admResFechaDefault(filtro),filtro,lineaVal:l?String(l.value||'').trim():''};
+}
+function _readAdmPResumenState(){
+  const f=document.getElementById('adminPResumenFecha');
+  const t=document.getElementById('adminPResumenTurno');
+  const l=document.getElementById('adminPResumenLinea');
+  const filtro=t?String(t.value||'todos'):'todos';
+  const fechaRaw=f&&String(f.value||'').trim();
+  return{fecha:fechaRaw||_admResFechaDefault(filtro),filtro,lineaVal:l?String(l.value||'').trim():''};
+}
+function _admResFmtMol(v){if(v==null||v===''||Number.isNaN(+v))return'—';return(+v).toLocaleString('es-CL',{maximumFractionDigits:0});}
+function _admResFmtKg(v){if(v==null||v===''||Number.isNaN(+v))return'—';return(+v).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});}
+function renderAdminMResumenHora(){
+  const wrap=document.getElementById('adminMResumenWrap');if(!wrap)return;
+  const sub=document.getElementById('adminMResumenSub');
+  const state=_readAdmMResumenState();
+  const{fecha,filtro,lineaVal}=state;
+  const hoyStr=fecha.split('-').reverse().join('/');
+  // Combinar moldes + generales (registro general también suma moldes/placas)
+  const src=[].concat(Array.isArray(RT.data.moldes)?RT.data.moldes:[],(Array.isArray(RT.data.generales)?RT.data.generales:[]).filter(g=>{
+    const pid=g&&(g.presetId!=null?g.presetId:g.preset_id);
+    const p=pid!=null?(DB.data.presets||[]).find(x=>String(x.id)===String(pid)):null;
+    if(!p)return false;
+    return String(p.tipo||'').toLowerCase()==='molde';
+  }));
+  const mol=_admResRowsForFiltro(src,fecha,filtro,lineaVal||null);
+  const toolbar='<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">'+
+    '<label class="form-label" style="margin:0;">Fecha (turno)</label>'+
+    '<input type="date" class="input" id="adminMResumenFecha" value="'+esc(fecha)+'" style="max-width:168px;" onchange="renderAdminMResumenHora()">'+
+    '<label class="form-label" style="margin:0;">Turno de línea</label>'+
+    _admResTurnoSelectHtml('adminMResumenTurno','renderAdminMResumenHora',filtro)+
+    '<label class="form-label" style="margin:0;">Línea</label>'+
+    '<select class="select" id="adminMResumenLinea" style="max-width:120px;" onchange="renderAdminMResumenHora()">'+_admResLineaOptions(lineaVal)+'</select>'+
+    '<span style="font-size:11px;color:var(--text-3);">Pivot operario × hora · kg por celda · horario según turno seleccionado.</span>'+
+    '</div>';
+  if(!mol.length){
+    wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin moldes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+'.</div>';
+    if(sub)sub.textContent='0 moldes · 0 kg · '+hoyStr;
+    return;
+  }
+  const hours=_admResHourCols(mol,filtro);
+  if(!hours.length){
+    wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin horas en los datos para este filtro.</div>';
+    if(sub)sub.textContent='0 h · '+hoyStr;
+    return;
+  }
+  // Agrupar por operario × especie (SIN PRODUCTO en columnas, según pedido del usuario)
+  const map={};
+  mol.forEach(row=>{
+    const esp=_admResMolEspecieDe(row);
+    const key=(row.trabId||row.nombre||'—')+'||'+esp;
+    if(!map[key])map[key]={nombre:row.nombre||'—',especie:esp,byHourKg:{},tot:0,totKg:0};
+    const hh=(row.hora||'').match(/^(\d{1,2}):/);
+    const h=hh?parseInt(hh[1]):null;
+    const cant=+row.cant||0;
+    const kgRow=+row.kg||0;
+    if(h!=null)map[key].byHourKg[h]=(map[key].byHourKg[h]||0)+kgRow;
+    map[key].tot+=cant;
+    map[key].totKg+=kgRow;
+  });
+  const rows=Object.values(map).sort((a,b)=>{
+    const c=a.nombre.localeCompare(b.nombre);
+    if(c)return c;
+    return String(a.especie||'').localeCompare(String(b.especie||''));
+  });
+  const totColKg={};let totGrandKg=0,totGrand=0;
+  rows.forEach(r=>{
+    hours.forEach(h=>{totColKg[h]=(totColKg[h]||0)+(r.byHourKg[h]||0);});
+    totGrandKg+=r.totKg;totGrand+=r.tot;
+  });
+  const hoy=new Date().toLocaleDateString('es-CL');
+  const cellKg=kg=>{const n=+kg||0;if(!n)return'<span style="color:var(--text-3);">—</span>';return'<span style="font-weight:700;">'+_admResFmtKg(n)+'</span>';};
+  const fs='background:#0f172a;color:#fff;font-weight:700;padding:10px 12px;';
+  // SIN columna PRODUCTO (per pedido del usuario)
+  const hdr='<thead><tr><th style="min-width:200px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th>'+
+    hours.map(h=>'<th class="num" style="min-width:72px;">'+esc(h+':00')+'</th>').join('')+
+    '<th class="num" style="min-width:88px;">MOLDES</th><th class="num" style="min-width:100px;">KG</th></tr></thead>';
+  const body='<tbody>'+rows.map(r=>'<tr>'+
+    '<td style="font-weight:700;">'+esc(r.nombre)+'</td>'+
+    '<td style="color:var(--text-2);font-size:12px;">'+esc(r.especie)+'</td>'+
+    hours.map(h=>'<td class="num">'+cellKg(r.byHourKg[h])+'</td>').join('')+
+    '<td class="num" style="font-weight:700;">'+_admResFmtMol(r.tot)+'</td>'+
+    '<td class="num" style="font-weight:700;">'+_admResFmtKg(r.totKg)+'</td>'+
+    '</tr>').join('')+'</tbody>';
+  const footKg=h=>{const n=+(totColKg[h]||0);if(!n)return'<span style="opacity:.85">—</span>';return _admResFmtKg(n);};
+  const foot='<tfoot><tr>'+
+    '<td colspan="2" style="'+fs+'">Total '+esc(hoy)+'</td>'+
+    hours.map(h=>'<td class="num" style="'+fs+'">'+footKg(h)+'</td>').join('')+
+    '<td class="num" style="'+fs+'">'+_admResFmtMol(totGrand)+'</td>'+
+    '<td class="num" style="'+fs+'">'+_admResFmtKg(totGrandKg)+'</td>'+
+    '</tr></tfoot>';
+  wrap.innerHTML=toolbar+'<div class="tbl-wrap"><table>'+hdr+body+foot+'</table></div>';
+  if(sub)sub.textContent=rows.length+' operarios · '+mol.length+' registros · '+_admResFmtMol(totGrand)+' moldes · '+_admResFmtKg(totGrandKg)+' kg · '+hoyStr+(lineaVal?' · Línea '+lineaVal:'');
+}
+function renderAdminPResumenHora(){
+  const wrap=document.getElementById('adminPResumenWrap');if(!wrap)return;
+  const sub=document.getElementById('adminPResumenSub');
+  const state=_readAdmPResumenState();
+  const{fecha,filtro,lineaVal}=state;
+  const hoyStr=fecha.split('-').reverse().join('/');
+  const src=Array.isArray(RT.data.pesajes)?RT.data.pesajes:[];
+  const pes=_admResRowsForFiltro(src,fecha,filtro,lineaVal||null);
+  const toolbar='<div class="m-resumen-filtros" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--surface-alt);">'+
+    '<label class="form-label" style="margin:0;">Fecha (turno)</label>'+
+    '<input type="date" class="input" id="adminPResumenFecha" value="'+esc(fecha)+'" style="max-width:168px;" onchange="renderAdminPResumenHora()">'+
+    '<label class="form-label" style="margin:0;">Turno de línea</label>'+
+    _admResTurnoSelectHtml('adminPResumenTurno','renderAdminPResumenHora',filtro)+
+    '<label class="form-label" style="margin:0;">Línea</label>'+
+    '<select class="select" id="adminPResumenLinea" style="max-width:120px;" onchange="renderAdminPResumenHora()">'+_admResLineaOptions(lineaVal)+'</select>'+
+    '<span style="font-size:11px;color:var(--text-3);">Pivot operario × hora · kg por celda.</span>'+
+    '</div>';
+  if(!pes.length){
+    wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(lineaVal?' · línea '+esc(lineaVal):'')+'.</div>';
+    if(sub)sub.textContent='0 pesajes · 0 kg · '+hoyStr;
+    return;
+  }
+  const hours=_admResHourCols(pes,filtro);
+  if(!hours.length){
+    wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin horas en los datos para este filtro.</div>';
+    if(sub)sub.textContent='0 h · '+hoyStr;
+    return;
+  }
+  // Agrupar por operario × especie × tipo
+  const map={};
+  pes.forEach(row=>{
+    const esp=_admResMolEspecieDe(row);
+    const tipo=String(row.tipo||'—').trim()||'—';
+    const key=(row.trabId||row.nombre||'—')+'||'+esp+'||'+tipo;
+    if(!map[key])map[key]={nombre:row.nombre||'—',especie:esp,tipo,byHourKg:{},tot:0,totKg:0};
+    const hh=(row.hora||'').match(/^(\d{1,2}):/);
+    const h=hh?parseInt(hh[1]):null;
+    const kgRow=+row.kg||0;
+    if(h!=null)map[key].byHourKg[h]=(map[key].byHourKg[h]||0)+kgRow;
+    map[key].tot+=1;
+    map[key].totKg+=kgRow;
+  });
+  const rows=Object.values(map).sort((a,b)=>{
+    const c=a.nombre.localeCompare(b.nombre);
+    if(c)return c;
+    const c2=String(a.especie||'').localeCompare(String(b.especie||''));
+    if(c2)return c2;
+    return String(a.tipo||'').localeCompare(String(b.tipo||''));
+  });
+  const totColKg={};let totGrandKg=0,totGrand=0;
+  rows.forEach(r=>{
+    hours.forEach(h=>{totColKg[h]=(totColKg[h]||0)+(r.byHourKg[h]||0);});
+    totGrandKg+=r.totKg;totGrand+=r.tot;
+  });
+  const hoy=new Date().toLocaleDateString('es-CL');
+  const cellKg=kg=>{const n=+kg||0;if(!n)return'<span style="color:var(--text-3);">—</span>';return'<span style="font-weight:700;">'+_admResFmtKg(n)+'</span>';};
+  const fs='background:#0f172a;color:#fff;font-weight:700;padding:10px 12px;';
+  const hdr='<thead><tr><th style="min-width:200px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th><th style="min-width:120px;">TIPO</th>'+
+    hours.map(h=>'<th class="num" style="min-width:72px;">'+esc(h+':00')+'</th>').join('')+
+    '<th class="num" style="min-width:88px;">PESAJES</th><th class="num" style="min-width:100px;">KG</th></tr></thead>';
+  const body='<tbody>'+rows.map(r=>'<tr>'+
+    '<td style="font-weight:700;">'+esc(r.nombre)+'</td>'+
+    '<td style="color:var(--text-2);font-size:12px;">'+esc(r.especie)+'</td>'+
+    '<td style="color:var(--text-2);">'+esc(r.tipo)+'</td>'+
+    hours.map(h=>'<td class="num">'+cellKg(r.byHourKg[h])+'</td>').join('')+
+    '<td class="num" style="font-weight:700;">'+_admResFmtMol(r.tot)+'</td>'+
+    '<td class="num" style="font-weight:700;">'+_admResFmtKg(r.totKg)+'</td>'+
+    '</tr>').join('')+'</tbody>';
+  const footKg=h=>{const n=+(totColKg[h]||0);if(!n)return'<span style="opacity:.85">—</span>';return _admResFmtKg(n);};
+  const foot='<tfoot><tr>'+
+    '<td colspan="3" style="'+fs+'">Total '+esc(hoy)+'</td>'+
+    hours.map(h=>'<td class="num" style="'+fs+'">'+footKg(h)+'</td>').join('')+
+    '<td class="num" style="'+fs+'">'+_admResFmtMol(totGrand)+'</td>'+
+    '<td class="num" style="'+fs+'">'+_admResFmtKg(totGrandKg)+'</td>'+
+    '</tr></tfoot>';
+  wrap.innerHTML=toolbar+'<div class="tbl-wrap"><table>'+hdr+body+foot+'</table></div>';
+  if(sub)sub.textContent=rows.length+' operarios · '+pes.length+' registros · '+_admResFmtMol(totGrand)+' pesajes · '+_admResFmtKg(totGrandKg)+' kg · '+hoyStr+(lineaVal?' · Línea '+lineaVal:'');
+}
+function exportAdminMResumenHoraExcel(){
+  if(typeof XLSX==='undefined'){toast('XLSX no cargado','err');return;}
+  const state=_readAdmMResumenState();
+  const{fecha,filtro,lineaVal}=state;
+  const src=[].concat(Array.isArray(RT.data.moldes)?RT.data.moldes:[]);
+  const mol=_admResRowsForFiltro(src,fecha,filtro,lineaVal||null);
+  if(!mol.length){toast('Sin moldes para exportar','warn');return;}
+  const rows=mol.map(r=>({
+    Fecha:String(r.fecha||'').split('-').reverse().join('/'),
+    Hora:String(r.hora||''),
+    Linea:String(r.linea||''),
+    Trabajador:String(r.nombre||''),
+    Ficha:String(r.ficha||''),
+    Especie:_admResMolEspecieDe(r),
+    Cantidad:+r.cant||0,
+    Kg:+r.kg||0,
+    Guia:String(r.guia||'')
+  }));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'moldes_hora');
+  XLSX.writeFile(wb,'resumen_moldes_hora_'+fecha+'.xlsx');
+  toast(rows.length+' registros exportados','success');
+}
+function exportAdminPResumenHoraExcel(){
+  if(typeof XLSX==='undefined'){toast('XLSX no cargado','err');return;}
+  const state=_readAdmPResumenState();
+  const{fecha,filtro,lineaVal}=state;
+  const src=Array.isArray(RT.data.pesajes)?RT.data.pesajes:[];
+  const pes=_admResRowsForFiltro(src,fecha,filtro,lineaVal||null);
+  if(!pes.length){toast('Sin pesajes para exportar','warn');return;}
+  const rows=pes.map(r=>({
+    Fecha:String(r.fecha||'').split('-').reverse().join('/'),
+    Hora:String(r.hora||''),
+    Linea:String(r.linea||''),
+    Trabajador:String(r.nombre||''),
+    Ficha:String(r.ficha||''),
+    Especie:_admResMolEspecieDe(r),
+    Tipo:String(r.tipo||''),
+    Kg:+r.kg||0,
+    Guia:String(r.guia||'')
+  }));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'pesajes_hora');
+  XLSX.writeFile(wb,'resumen_pesajes_hora_'+fecha+'.xlsx');
+  toast(rows.length+' registros exportados','success');
+}
+window.renderAdminMResumenHora=renderAdminMResumenHora;
+window.renderAdminPResumenHora=renderAdminPResumenHora;
+window.exportAdminMResumenHoraExcel=exportAdminMResumenHoraExcel;
+window.exportAdminPResumenHoraExcel=exportAdminPResumenHoraExcel;
 
 /* ════════════ PRESETS CRUD ════════════ */
 function renderPresets(){
