@@ -855,10 +855,10 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   content:'';position:absolute;left:0;top:0;right:0;height:4px;
   background:var(--accent,var(--border-strong));
 }
-.eq-tile.libre{--accent:var(--safety-green);}
+.eq-tile.libre{--accent:#94a3b8;}
 .eq-tile.cargando{--accent:var(--safety-amber);}
 .eq-tile.congelando{--accent:var(--safety-blue);}
-.eq-tile.listo{--accent:var(--brand);}
+.eq-tile.listo{--accent:#10b981;}
 .eq-tile.deshielando{--accent:#0ea5e9;}
 
 @keyframes eq-tile-frio-pulse{
@@ -869,6 +869,10 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   0%,100%{box-shadow:0 2px 10px rgba(14,165,233,.1),inset 0 0 0 1px rgba(125,211,252,.2);}
   50%{box-shadow:0 4px 18px rgba(56,189,248,.28),inset 0 0 0 2px rgba(125,211,252,.35);}
 }
+@keyframes eq-tile-listo-pulse{
+  0%,100%{box-shadow:0 2px 12px rgba(16,185,129,.18),inset 0 0 0 1px rgba(16,185,129,.18);}
+  50%{box-shadow:0 6px 26px rgba(16,185,129,.42),0 0 18px rgba(34,197,94,.18),inset 0 0 0 1.5px rgba(16,185,129,.32);}
+}
 @keyframes eq-tile-top-glow{
   0%,100%{opacity:1;filter:brightness(1);}
   50%{opacity:.88;filter:brightness(1.15);}
@@ -876,6 +880,10 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
 @keyframes eq-tile-bar-pulse{
   0%,100%{filter:brightness(1) saturate(1);}
   50%{filter:brightness(1.14) saturate(1.08);}
+}
+@keyframes eq-listo-dot{
+  0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(16,185,129,.6);}
+  50%{transform:scale(1.2);opacity:1;box-shadow:0 0 0 10px rgba(16,185,129,0);}
 }
 .eq-tile.congelando{
   border-color:#0284c7;
@@ -910,6 +918,45 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
 .eq-tile.congelando .badge.blue .badge-dot{
   animation:eq-freeze-dot 2s ease-in-out infinite;
 }
+.eq-tile.listo{
+  border-color:#059669;
+  color:#064e3b;
+  background:linear-gradient(110deg,#ecfdf5 0%,#d1fae5 16%,#a7f3d0 32%,#6ee7b7 48%,#34d399 52%,#6ee7b7 68%,#a7f3d0 84%,#ecfdf5 100%);
+  background-size:240% 100%;
+  animation:eq-tile-listo-pulse 3.6s ease-in-out infinite,eq-freeze-shimmer 10s ease-in-out infinite;
+}
+.eq-tile.listo::before{
+  height:4px;
+  background:linear-gradient(90deg,#047857,#059669,#10b981,#34d399,#10b981,#059669,#047857);
+  background-size:200% 100%;
+  animation:eq-tile-top-glow 2.8s ease-in-out infinite,eq-freeze-shimmer 8s ease-in-out infinite;
+}
+.eq-tile.listo .eq-id,
+.eq-tile.listo .eq-type,
+.eq-tile.listo .eq-stats .lbl,
+.eq-tile.listo .eq-time{color:#065f46;}
+.eq-tile.listo .eq-name,
+.eq-tile.listo .eq-stats .val{color:#064e3b;}
+.eq-tile.listo .eq-name[style]{color:#064e3b!important;}
+.eq-tile.listo .eq-progress{background:rgba(255,255,255,.5);}
+.eq-tile.listo .eq-progress-bar{
+  background:linear-gradient(90deg,#047857,#059669);
+  animation:eq-tile-bar-pulse 3.2s ease-in-out infinite;
+}
+.eq-tile.listo .badge.green{
+  background:rgba(255,255,255,.92);
+  color:#047857;
+  border:1px solid rgba(4,120,87,.3);
+}
+.eq-tile.listo .badge.green .badge-dot{
+  animation:eq-listo-dot 1.6s ease-in-out infinite;
+}
+.eq-tile.listo .eq-time.warn{
+  background:rgba(255,255,255,.55);
+  color:#065f46;
+  border-color:rgba(4,120,87,.35);
+  font-weight:700;
+}
 .eq-tile.deshielando{
   animation:eq-tile-desh-pulse 2.2s ease-in-out infinite;
 }
@@ -925,14 +972,14 @@ body[data-theme="dark"] .badge.ice{background:linear-gradient(180deg,rgba(8,145,
   animation:eq-freeze-dot 1.25s ease-in-out infinite;
 }
 @media (prefers-reduced-motion:reduce){
-  .eq-tile.congelando,.eq-tile.deshielando,
-  .eq-tile.congelando::before,.eq-tile.deshielando::before,
-  .eq-tile.congelando .eq-progress-bar,.eq-tile.deshielando .eq-progress-bar,
-  .eq-tile.congelando .badge.blue .badge-dot,.eq-tile.deshielando .badge.ice .badge-dot{
+  .eq-tile.congelando,.eq-tile.deshielando,.eq-tile.listo,
+  .eq-tile.congelando::before,.eq-tile.deshielando::before,.eq-tile.listo::before,
+  .eq-tile.congelando .eq-progress-bar,.eq-tile.deshielando .eq-progress-bar,.eq-tile.listo .eq-progress-bar,
+  .eq-tile.congelando .badge.blue .badge-dot,.eq-tile.deshielando .badge.ice .badge-dot,.eq-tile.listo .badge.green .badge-dot{
     animation:none!important;
   }
-  .eq-tile.congelando{background-size:100% 100%;}
-  .eq-tile.congelando::before,.eq-tile.deshielando::before{background:var(--accent);background-size:100% 100%;}
+  .eq-tile.congelando,.eq-tile.listo{background-size:100% 100%;}
+  .eq-tile.congelando::before,.eq-tile.deshielando::before,.eq-tile.listo::before{background:var(--accent);background-size:100% 100%;}
 }
 
 /* Tema oscuro: pulso y borde superior más visibles sobre surface oscuro */
@@ -987,6 +1034,46 @@ body[data-theme="dark"] .eq-tile.congelando .badge.blue{
 }
 body[data-theme="dark"] .eq-tile.congelando .badge.blue .badge-dot{
   animation:eq-freeze-dot-dark 2s ease-in-out infinite;
+}
+@keyframes eq-tile-listo-pulse-dark{
+  0%,100%{box-shadow:0 2px 14px rgba(16,185,129,.18),inset 0 0 0 1px rgba(52,211,153,.14);}
+  50%{box-shadow:0 6px 32px rgba(34,197,94,.42),0 0 22px rgba(16,185,129,.18),inset 0 0 0 1.5px rgba(52,211,153,.32);}
+}
+@keyframes eq-listo-dot-dark{
+  0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(52,211,153,.7);}
+  50%{transform:scale(1.2);opacity:1;box-shadow:0 0 0 12px rgba(52,211,153,0);}
+}
+body[data-theme="dark"] .eq-tile.listo{
+  border-color:#34d399;
+  color:#d1fae5;
+  background:linear-gradient(110deg,rgba(6,78,59,.95) 0%,rgba(4,120,87,.88) 20%,rgba(16,185,129,.82) 42%,rgba(5,150,105,.9) 50%,rgba(16,185,129,.82) 58%,rgba(4,120,87,.88) 80%,rgba(6,78,59,.95) 100%);
+  background-size:240% 100%;
+  animation:eq-tile-listo-pulse-dark 3.6s ease-in-out infinite,eq-freeze-shimmer 10s ease-in-out infinite;
+}
+body[data-theme="dark"] .eq-tile.listo::before{
+  background:linear-gradient(90deg,#064e3b,#047857,#10b981,#34d399,#10b981,#047857,#064e3b);
+  background-size:200% 100%;
+  animation:eq-tile-top-glow-dark 2.8s ease-in-out infinite,eq-freeze-shimmer 8s ease-in-out infinite;
+}
+body[data-theme="dark"] .eq-tile.listo .eq-id,
+body[data-theme="dark"] .eq-tile.listo .eq-type,
+body[data-theme="dark"] .eq-tile.listo .eq-stats .lbl,
+body[data-theme="dark"] .eq-tile.listo .eq-time{color:#a7f3d0;}
+body[data-theme="dark"] .eq-tile.listo .eq-name,
+body[data-theme="dark"] .eq-tile.listo .eq-stats .val{color:#ecfdf5;}
+body[data-theme="dark"] .eq-tile.listo .eq-name[style]{color:#ecfdf5!important;}
+body[data-theme="dark"] .eq-tile.listo .eq-progress{background:rgba(15,23,42,.35);}
+body[data-theme="dark"] .eq-tile.listo .eq-progress-bar{
+  background:linear-gradient(90deg,#34d399,#6ee7b7);
+  animation:eq-tile-bar-pulse-dark 3.2s ease-in-out infinite;
+}
+body[data-theme="dark"] .eq-tile.listo .badge.green{
+  background:rgba(15,23,42,.55);
+  color:#d1fae5;
+  border-color:rgba(110,231,183,.4);
+}
+body[data-theme="dark"] .eq-tile.listo .badge.green .badge-dot{
+  animation:eq-listo-dot-dark 1.6s ease-in-out infinite;
 }
 body[data-theme="dark"] .eq-tile.deshielando{
   animation:eq-tile-desh-pulse-dark 2.2s ease-in-out infinite;
@@ -6291,7 +6378,7 @@ window.regGeneral=regGeneral;window.clearGReg=clearGReg;window.selectPresetG=sel
 window.renderGResumen=renderGResumen;window.onGRegTurnoChange=onGRegTurnoChange;window.onGRegEspecieChange=onGRegEspecieChange;window.renderGRegPresets=renderGRegPresets;window._clearGRegEspecieFilter=_clearGRegEspecieFilter;
 
 /* ═══ TÚNELES / PLACAS — render + state machine ════════════════ */
-const estadoBadgeTP={libre:{c:'green',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'navy',t:'Listo'},deshielando:{c:'ice',t:'Deshielando'}};
+const estadoBadgeTP={libre:{c:'slate',t:'Libre'},cargando:{c:'amber',t:'Cargando'},congelando:{c:'blue',t:'Congelando'},listo:{c:'green',t:'Listo'},deshielando:{c:'ice',t:'Deshielando'}};
 
 function getEqRT(cod){return RT.eqState[cod]||(RT.eqState[cod]={estado:'libre',items:[],congelando:false});}
 /** Unidades (moldes) ya en la placa / equipo — suma de cant por línea. */
@@ -6387,7 +6474,7 @@ function renderEqTile(eq){
       <div><div class="lbl">Producto</div><div class="val" style="font-family:var(--font);font-size:12px;font-weight:600;">${esc(prod)}</div></div>
       <div><div class="lbl">Cantidad</div><div class="val" style="font-family:var(--font);font-size:12px;font-weight:600;">${totCant?totCant+' u':'—'}</div></div>
     </div>
-    <div class="eq-time ${warn?'warn':''}">${warn?'\u26a0 ':''}${tiempo}</div>
+    <div class="eq-time ${warn?'warn':''}">${rt.estado==='listo'?'\u2713 ':(warn?'\u26a0 ':'')}${tiempo}</div>
   </button>`;
 }
 function renderEquipos(){
