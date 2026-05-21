@@ -5897,9 +5897,18 @@ function _presetCardDetailHtml(p){
 }
 function renderMRegPresets(){
   const grid=document.getElementById('mRegPresetGrid');if(!grid)return;
-  // En Moldes › Registrar solo aparecen presets de tipo MOLDE (no pallet/carro/castillo/general).
-  // Los pallets se registran desde "General"; los moldes desde acá.
-  const allPresets=DB.data.presets.filter(p=>p.activo&&String(p.tipo||'').toLowerCase()==='molde'&&!_presetSoloRegistroGeneral(p));
+  // En Moldes › Registrar solo aparecen presets:
+  //   - tipo='molde' (físicamente moldes; pallets/carros/castillos quedan fuera)
+  //   - uso NO incluye 'general' ni 'placa_general' (esos se registran desde General)
+  // Resultado: moldes con uso=ambos/tunel/placa aparecen acá; los marcados como
+  // 'Placa y registro general' o 'Solo registro general' van solo a General Registrar.
+  const allPresets=DB.data.presets.filter(p=>{
+    if(!p.activo)return false;
+    if(String(p.tipo||'').toLowerCase()!=='molde')return false;
+    const u=String(p.usoEquipo||p.uso_equipo||'').toLowerCase();
+    if(u==='general'||u==='placa_general')return false;
+    return true;
+  });
   // Auto-clear si el preset previamente seleccionado ya no califica (e.g. era pallet
   // antes de aplicar el filtro tipo=molde). Evita que "Conteo" muestre un preset
   // fantasma que no está visible en el grid.
