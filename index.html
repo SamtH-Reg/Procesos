@@ -4597,17 +4597,32 @@ function _idxPermOfflineModule(key){
 async function tbFlushPendingCloudSync(opts){
   opts=opts||{};
   const silent=!!opts.silent;
+  const force=!!opts.force; // si true, intenta alinear firmas con local aunque push falle
   if(!_tbSb||!_tbUser||!tbNavigatorOnline())return{ok:false,reason:'no_network_or_session'};
   let pushOk=false;
+  let pushErr=null;
   try{
     if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function'){
       const pr=await TBSync.pushAll();
       pushOk=!!(pr&&pr.ok);
+      if(!pushOk&&pr&&pr.err)pushErr=pr.err;
     }
     if(typeof tbPullCloudMultiDevice==='function')await tbPullCloudMultiDevice({silent:true,skipPostPush:true});
-    if(pushOk)_tbMarkPendingPush(_tbHasLocalDataPendingPush());
+    if(pushOk){
+      // Tras push exitoso, re-alinear todas las firmas para que pending=false consistentemente
+      try{if(TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(_){}
+      _tbMarkPendingPush(_tbHasLocalDataPendingPush());
+    }else if(force){
+      // Force-clear: el usuario insistió. Alinear firmas con local (asume cloud está OK).
+      try{if(TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(_){}
+      _tbMarkPendingPush(_tbHasLocalDataPendingPush());
+    }
     if(!silent&&pushOk&&typeof showToast==='function')showToast('Datos subidos a la nube','success');
-    return{ok:pushOk};
+    if(!silent&&!pushOk&&typeof showToast==='function'){
+      const msg=pushErr?'Sync incompleto: '+pushErr+'. Pulsa el badge otra vez si quedan pendientes.':'Sync incompleto: revisa conexión y permisos.';
+      showToast(msg,'warning');
+    }
+    return{ok:pushOk,err:pushErr};
   }catch(e){
     console.warn('[tbFlushPendingCloudSync]',e);
     return{ok:false,err:e&&e.message?e.message:String(e)};
@@ -9154,6 +9169,12 @@ async function removePLinea(ln){
         if(pr&&pr.ok===false)pushErr=pr.err||'Error al subir cambios';
       }
     }catch(e){pushErr=e&&e.message?String(e.message):String(e);console.warn('[removePLinea] pushImmediate',e);}
+    // Fix anti-"Por subir" pegado: alinear firma armado con local si cloud delete OK
+    if(rem.ok&&typeof TBSync!=='undefined'){
+      try{TBSync.refreshArmadoSigFromLocal&&TBSync.refreshArmadoSigFromLocal();}catch(_){}
+      try{_tbMarkPendingPush(_tbHasLocalDataPendingPush&&_tbHasLocalDataPendingPush());}catch(_){}
+      try{TBSync._applySyncBadge&&TBSync._applySyncBadge();}catch(_){}
+    }
     const pushTail=pushErr?' · '+pushErr:'';
     if(rem.ok){
       if(pushErr)showToast('Línea '+ln+' eliminada; aviso al sincronizar: '+pushErr,'warning');
@@ -9888,6 +9909,14 @@ async function removeMLinea(ln){
         if(pr&&pr.ok===false)pushErr=pr.err||'Error al subir cambios';
       }
     }catch(e){pushErr=e&&e.message?String(e.message):String(e);console.warn('[removeMLinea] pushImmediate',e);}
+    // Fix anti-"Por subir" pegado: si el cloud delete tuvo éxito, alinear la firma
+    // del armado con el estado local actual. Así el badge no queda naranja porque
+    // lastSig.armado tenía la línea borrada pero el cloud ya no la tiene.
+    if(rem.ok&&typeof TBSync!=='undefined'){
+      try{TBSync.refreshArmadoSigFromLocal&&TBSync.refreshArmadoSigFromLocal();}catch(_){}
+      try{_tbMarkPendingPush(_tbHasLocalDataPendingPush&&_tbHasLocalDataPendingPush());}catch(_){}
+      try{TBSync._applySyncBadge&&TBSync._applySyncBadge();}catch(_){}
+    }
     const pushTail=pushErr?' · '+pushErr:'';
     if(rem.ok){
       if(pushErr)showToast('Línea '+ln+' eliminada; aviso al sincronizar: '+pushErr,'warning');
@@ -11754,9 +11783,14 @@ const TBSync={
       b.title='Click para sincronizar con la nube';
     }
     b.style.cursor='pointer';
+    b.title=(b.title||'')+' · Doble-click para forzar limpieza si el badge quedó pegado.';
     b.onclick=()=>{
       if(!tbNavigatorOnline()){showToast&&showToast('Sin red — los datos siguen guardados en la tablet','info');return;}
       void tbFlushPendingCloudSync({silent:false});
+    };
+    b.ondblclick=()=>{
+      if(!confirm('¿Forzar limpieza del badge "Por subir"?\n\nÚsalo solo si sabes que los datos YA están en la nube (Supabase) pero el badge no se quita. Alinea las firmas locales con el estado actual.'))return;
+      void tbFlushPendingCloudSync({silent:false,force:true});
     };
   },
   onlineBadge(){
