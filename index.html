@@ -3715,27 +3715,28 @@ function _presetUsoEquipo(p){
 }
 function _presetUsoEquipoPersist(p){
   const u=_presetUsoEquipo(p);
-  if(u==='tunel'||u==='placa'||u==='ambos'||u==='general')return u;
+  if(u==='tunel'||u==='placa'||u==='ambos'||u==='general'||u==='placa_general')return u;
   const ht=+p.horasTunel||0;
   const hp=+p.horasPlaca||0;
   if(ht>0&&hp<=0)return'tunel';
   if(hp>0&&ht<=0)return'placa';
   return'ambos';
 }
-/** Lista manual al cargar túnel (excluye solo placa; general con horas túnel sí). */
+/** Lista manual al cargar túnel (excluye solo placa y placa+general; general con horas túnel sí). */
 function _presetParaCargaTunelManual(p){
   if(!p||p.activo===false)return false;
   const u=_presetUsoEquipo(p);
-  if(u==='placa')return false;
+  if(u==='placa'||u==='placa_general')return false;
   if(u==='general')return(+p.horasTunel||0)>0;
   return true;
 }
-/** Presets visibles en pestaña Registro general (tablet). */
+/** Presets visibles en pestaña Registro general (tablet).
+ *  Incluye 'placa_general' (Placa + registro general) — aparece en ambos sitios. */
 function _presetParaRegistroGeneral(p){
   if(!p||p.activo===false)return false;
   const t=String(p.tipo||'').toLowerCase();
   const u=_presetUsoEquipo(p);
-  if(u==='general')return true;
+  if(u==='general'||u==='placa_general')return true;
   return t==='general'||t==='pallet'||t==='carro'||t==='castillo';
 }
 /** Solo registro general — no en moldes ni túneles/placas. */
@@ -3744,13 +3745,15 @@ function _presetSoloRegistroGeneral(p){
   const t=String(p&&p.tipo||'').toLowerCase();
   return u==='general'||t==='general';
 }
-/** Preset molde/placa contado en General pero con flujo de carga (túnel/placa). */
+/** Preset molde/placa contado en General pero con flujo de carga (túnel/placa).
+ *  Incluye 'placa_general' — se carga en placa Y aparece en registro general. */
 function _presetEsConteoMoldePlaca(p){
   if(!p||p.activo===false)return false;
   const t=String(p.tipo||'').toLowerCase();
   const u=_presetUsoEquipo(p);
   if(t==='molde')return true;
   if(u==='general'&&((+p.horasTunel||0)>0||(+p.horasPlaca||0)>0))return true;
+  if(u==='placa_general')return true;
   return false;
 }
 /** Fila RT.generales vista como molde (resumen, ver registros, por cargar). */
@@ -7113,13 +7116,13 @@ function openEqModal(codigo){
   const eq=DB.data.equipos.find(e=>e.codigo===codigo);if(!eq)return;
   const rt=getEqRT(codigo);
   // Filtrar presets según tipo de equipo:
-  // - Placa: sólo preset.tipo=='molde'
-  // - Túnel: todos (molde + pallet + carro + castillo)
+  // - Placa: preset es conteo molde/placa (tipo molde, o placa_general)
+  // - Túnel: todos menos solo-placa, placa_general y solo-general
   const presets=DB.data.presets.filter(p=>{
     if(!p.activo)return false;
     const uso=_presetUsoEquipo(p)||'ambos';
     if(eq.tipo==='placa'&&!_presetEsConteoMoldePlaca(p))return false;
-    if(eq.tipo==='tunel'&&uso==='placa')return false;
+    if(eq.tipo==='tunel'&&(uso==='placa'||uso==='placa_general'))return false;
     if(eq.tipo==='placa'&&uso==='tunel')return false;
     return true;
   });
