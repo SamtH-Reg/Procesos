@@ -2247,7 +2247,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
         </div>
         <div class="card-sub" id="porCargarTotal">0 moldes pendientes</div>
       </div>
-      <div class="card-body" style="padding:0;">
+      <div class="card-body" style="padding:10px 12px;">
         <div id="porCargarList"></div>
       </div>
     </div>
@@ -6874,42 +6874,42 @@ function renderPorCargar(){
   const grupoMoldes=items.filter(it=>String(it.preset.tipo||'').toLowerCase()==='molde');
   const grupoTunel=items.filter(it=>['pallet','carro','castillo'].includes(String(it.preset.tipo||'').toLowerCase()));
   const otros=items.filter(it=>!grupoMoldes.includes(it)&&!grupoTunel.includes(it));
-  const renderItem=(it,last)=>{
-    const tipoLabel=_PRESET_TIPO_LABELS[it.preset.tipo]||it.preset.tipo;
+  // Item compacto: 1 sola línea con todo lo esencial
+  const renderItem=(it,last,accentColor)=>{
     const cons=it.consumido||0;
     const totR=it.totalRegistrado||it.cant;
     const pctCarg=totR>0?Math.round(cons/totR*100):0;
-    return `<div style="padding:14px 18px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:12px;background:var(--surface);" title="Pendientes: ${it.cant} · Cargados: ${cons} · Registrados: ${totR}">
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;">${esc(it.preset.nombre)}</div>
-        <div style="font-size:11px;color:var(--text-3);"><span class="badge slate">${esc(tipoLabel)}</span> ${esc(it.preset.destino||'—')} · <strong>Esp.</strong> ${esc(_idxEspeciePendiente(it))} · ${esc(it.preset.calibre||'—')} · ${it.preset.kgRef} kg/u</div>
-        ${cons>0?`<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${cons}/${totR} ya cargados (${pctCarg}%)</div>`:''}
+    const especie=_idxEspeciePendiente(it);
+    const cal=it.preset.calibre&&it.preset.calibre!=='—'?' · '+esc(it.preset.calibre):'';
+    const consBadge=cons>0?`<span style="font-size:10px;color:var(--text-muted);font-family:var(--mono);margin-left:6px;">(${cons}/${totR})</span>`:'';
+    return `<div style="padding:7px 12px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:10px;background:var(--surface);font-size:13px;" title="Pendientes: ${it.cant} · Cargados: ${cons} · Registrados: ${totR}${cons>0?' ('+pctCarg+'%)':''}">
+      <div style="flex:1;min-width:0;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <span style="font-weight:600;">${esc(it.preset.nombre)}</span>
+        <span style="font-size:11px;color:var(--text-3);margin-left:6px;">${esc(especie)}${cal} · ${it.preset.kgRef}kg</span>
+        ${consBadge}
       </div>
-      <div style="text-align:right;">
-        <div style="font-size:22px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);line-height:1;">${it.cant}</div>
-        <div style="font-size:10px;color:var(--text-3);">pendientes</div>
-      </div>
+      <div style="font-size:16px;font-weight:800;color:${accentColor};font-family:var(--mono);line-height:1;min-width:32px;text-align:right;">${it.cant}</div>
     </div>`;
   };
-  const groupBlock=(titulo,subt,icono,color,colorBg,grupo)=>{
+  // Header compacto del grupo
+  const groupBlock=(titulo,destino,icono,color,colorBg,grupo)=>{
     if(!grupo.length)return'';
     const tot=grupo.reduce((s,i)=>s+i.cant,0);
-    return `<div style="border:1px solid ${color}55;border-radius:10px;overflow:hidden;margin-bottom:12px;">
-      <div style="padding:10px 16px;background:${colorBg};display:flex;align-items:center;gap:10px;border-bottom:1px solid ${color}33;">
-        <span style="font-size:18px;">${icono}</span>
-        <div style="flex:1;">
-          <div style="font-weight:700;font-size:13px;color:${color};">${esc(titulo)}</div>
-          <div style="font-size:11px;color:${color};opacity:.8;">${esc(subt)}</div>
-        </div>
-        <div style="font-weight:800;color:${color};font-family:var(--mono);">${tot} pendientes</div>
+    return `<div style="border:1px solid ${color}44;border-radius:8px;overflow:hidden;margin-bottom:8px;">
+      <div style="padding:6px 12px;background:${colorBg};display:flex;align-items:center;gap:8px;border-bottom:1px solid ${color}22;font-size:12px;">
+        <span style="font-size:14px;">${icono}</span>
+        <strong style="color:${color};">${esc(titulo)}</strong>
+        <span style="color:${color};opacity:.65;font-size:11px;">→ ${esc(destino)}</span>
+        <span style="flex:1;"></span>
+        <span style="font-weight:800;color:${color};font-family:var(--mono);font-size:13px;">${tot}</span>
       </div>
-      ${grupo.map((it,i)=>renderItem(it,i===grupo.length-1)).join('')}
+      ${grupo.map((it,i)=>renderItem(it,i===grupo.length-1,color)).join('')}
     </div>`;
   };
   list.innerHTML=
-    groupBlock('Moldes','Para cargar en placas','🧊','#0369a1','#dbeafe',grupoMoldes)+
-    groupBlock('Pallets / Carros / Castillos','Para cargar en túneles','📦','#b45309','#fef3c7',grupoTunel)+
-    (otros.length?groupBlock('Otros','Presets sin tipo específico','📋','#475569','#f1f5f9',otros):'');
+    groupBlock('Moldes','placas','🧊','#0369a1','#dbeafe',grupoMoldes)+
+    groupBlock('Pallets · Carros · Castillos','túneles','📦','#b45309','#fef3c7',grupoTunel)+
+    (otros.length?groupBlock('Otros','—','📋','#475569','#f1f5f9',otros):'');
 }
 window.renderPorCargar=renderPorCargar;
 
