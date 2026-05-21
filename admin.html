@@ -426,6 +426,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
 
   <div class="nav-sec">Catálogos</div>
   <div class="nav-item" data-page="presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Productos / Presets</div>
+  <div class="nav-item" data-page="especies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5c0 3-2.5 5.5-5.5 5.5"/><path d="M6.5 12l-3 .5L6.5 14"/><circle cx="14" cy="11" r="1"/></svg>Especies</div>
   <div class="nav-item" data-page="trabajadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Trabajadores</div>
   <div class="nav-item" data-page="planilleros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>Planilleros</div>
   <div class="nav-item" data-page="turnos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Turnos y horarios</div>
@@ -734,6 +735,34 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th>Uso</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
     <tbody id="tbPresets"></tbody>
   </table></div>
+</div>
+
+<!-- ═══ ESPECIES (catálogo independiente, usado por armado de líneas y presets) ═══ -->
+<div class="page" id="page-especies">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Especies</h1><div class="page-sub">Catálogo único de especies — aparece en el dropdown del armado de líneas (Moldes / Pesaje) en index</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ghost sm" type="button" onclick="void adminPullEspeciesFromCloud(true)" title="Trae desde Supabase (app_kv)">↻ Traer de nube</button>
+      <button class="btn ghost sm" type="button" onclick="void adminPushEspeciesToCloud({silent:false})" title="Sube el catálogo actual a Supabase">☁ Subir a nube</button>
+      <button class="btn sm" type="button" onclick="openEspecieModal()">+ Nueva especie</button>
+    </div>
+  </div>
+  <div class="slicer-bar">
+    <div class="slicer" style="min-width:280px;">
+      <label class="form-label">Buscar</label>
+      <input class="input" id="especieSearch" placeholder="Nombre de la especie…" oninput="renderEspecies()">
+    </div>
+    <div class="slicer" style="align-self:flex-end;">
+      <button class="btn ghost sm" type="button" onclick="adminImportEspeciesDesdePresets()" title="Lee especies de presets activos y las agrega al catálogo">Importar desde Presets</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">Especies registradas</div><div class="card-sub" id="especiesSub">—</div></div>
+    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
+      <thead><tr><th style="text-align:left;">Nombre</th><th style="text-align:left;width:200px;">Color (opcional)</th><th style="width:180px;text-align:right;">Acciones</th></tr></thead>
+      <tbody id="tbEspecies"></tbody>
+    </table></div>
+  </div>
 </div>
 
 <!-- ═══ TRABAJADORES ═══ -->
@@ -1082,7 +1111,20 @@ const DB={data:null,
   save(){localStorage.setItem(STORE_KEY,JSON.stringify(this.data));},
   _heal(){
     const d=this.data;
-    d.presets=d.presets||[];d.trabajadores=d.trabajadores||[];d.turnos=d.turnos||[];d.equipos=d.equipos||[];d.planilleros=d.planilleros||[];
+    d.presets=d.presets||[];d.trabajadores=d.trabajadores||[];d.turnos=d.turnos||[];d.equipos=d.equipos||[];d.planilleros=d.planilleros||[];d.especies=d.especies||[];
+    // Healing especies: normalizar a {nombre, color} y dedupe insensible a case+espacios
+    if(Array.isArray(d.especies)){
+      const seen=new Map();
+      d.especies.forEach(e=>{
+        if(!e)return;
+        const obj=typeof e==='string'?{nombre:e,color:''}:{nombre:String(e.nombre||'').trim(),color:String(e.color||'').trim()};
+        const norm=obj.nombre.trim().toUpperCase();
+        if(!norm)return;
+        obj.nombre=norm;
+        if(!seen.has(norm))seen.set(norm,obj);
+      });
+      d.especies=[...seen.values()].sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    }
     d.presets.forEach(p=>{p.usoEquipo=inferUsoEquipo(p);});
     d.roles=d.roles||[{id:1,nombre:'Admin',codigo:'admin',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,turnos:true,equipos:true,roles:true,import:true,supabase:true,ajustes:true,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
                      {id:2,nombre:'Supervisor',codigo:'supervisor',permisos:{dashboard:true,reportes:true,presets:true,trabajadores:true,planilleros:true,turnos:false,equipos:true,roles:false,import:false,supabase:false,ajustes:false,moldes:true,tuneles:true,pesaje:true,general:true,eliminar:true}},
@@ -1281,6 +1323,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='resumen-hora-pes'&&typeof renderAdminPResumenHora==='function')renderAdminPResumenHora();
     if(id==='resumen'){_resumenInitOnPageOpen();renderResumen();}
     if(id==='presets')renderPresets();
+    if(id==='especies'&&typeof renderEspecies==='function')renderEspecies();
     if(id==='trabajadores')renderTrabs();
     if(id==='planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
     if(id==='turnos')renderTurnos();
@@ -4237,6 +4280,140 @@ async function delPreset(id){
   });
 }
 
+/* ════════════ ESPECIES — catálogo independiente ════════════ */
+const ESPECIES_CLOUD_KEY='friosur_especies_catalog';
+let _espKvPushTimer=null;
+/** Renderiza la tabla de especies en admin. */
+function renderEspecies(){
+  const tb=document.getElementById('tbEspecies');if(!tb)return;
+  const list=Array.isArray(DB.data.especies)?DB.data.especies:[];
+  const sub=document.getElementById('especiesSub');
+  const q=String((document.getElementById('especieSearch')||{}).value||'').trim().toLowerCase();
+  const filtered=q?list.filter(e=>String(e.nombre||'').toLowerCase().includes(q)):list;
+  if(sub)sub.textContent=filtered.length+' especie'+(filtered.length===1?'':'s')+(q?' · filtro: "'+q+'"':'');
+  if(!filtered.length){
+    tb.innerHTML='<tr><td colspan="3" style="text-align:center;padding:30px;color:var(--text-3);">'+(list.length?'Sin coincidencias para "'+esc(q)+'".':'Sin especies. Pulsa "+ Nueva especie" o "Importar desde Presets".')+'</td></tr>';
+    return;
+  }
+  tb.innerHTML=filtered.map(e=>{
+    const swatch=e.color?`<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${esc(e.color)};border:1px solid var(--border);vertical-align:-2px;margin-right:6px;"></span>`:'';
+    return '<tr>'+
+      '<td style="font-weight:700;padding:10px 12px;">'+esc(e.nombre)+'</td>'+
+      '<td style="padding:10px 12px;color:var(--text-2);font-size:12px;">'+swatch+(e.color?esc(e.color):'<span style="color:var(--text-muted);">—</span>')+'</td>'+
+      '<td style="padding:10px 12px;text-align:right;white-space:nowrap;">'+
+        '<button class="btn ghost sm" type="button" onclick="openEspecieModal(\''+esc(e.nombre).replace(/'/g,"\\'")+'\')">Editar</button> '+
+        '<button class="btn sm" style="background:#dc2626;color:#fff;border:none;" type="button" onclick="delEspecie(\''+esc(e.nombre).replace(/'/g,"\\'")+'\')">Eliminar</button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+}
+function openEspecieModal(nombre){
+  const editing=nombre!=null&&nombre!=='';
+  const list=Array.isArray(DB.data.especies)?DB.data.especies:[];
+  const src=editing?list.find(e=>String(e.nombre).toUpperCase()===String(nombre).toUpperCase()):null;
+  const e=src?{...src}:{nombre:'',color:''};
+  openModal(editing?'Editar especie':'Nueva especie',`
+    <div class="form-field"><label class="form-label">Nombre <span class="required">*</span></label><input class="input" id="esp_nombre" value="${esc(e.nombre)}" placeholder="MERLUZA AUSTRAL" ${editing?'readonly':''}></div>
+    <div class="form-field"><label class="form-label">Color (opcional)</label><input class="input" id="esp_color" type="color" value="${esc(e.color||'#0f172a')}" style="height:42px;padding:4px;"></div>
+    <div class="alert info" style="margin-top:12px;font-size:12px;">El nombre se normalizará a MAYÚSCULAS. Si ya existe la especie, no se duplica.</div>
+  `,()=>{
+    const nuevoNom=String(document.getElementById('esp_nombre').value||'').trim().toUpperCase();
+    const nuevoCol=String(document.getElementById('esp_color').value||'').trim();
+    if(!nuevoNom){toast('Nombre obligatorio','err');return false;}
+    if(!Array.isArray(DB.data.especies))DB.data.especies=[];
+    // Modo crear: no duplicar
+    if(!editing&&DB.data.especies.some(x=>String(x.nombre).toUpperCase()===nuevoNom)){
+      toast('Esa especie ya existe','warn');return false;
+    }
+    if(editing){
+      const idx=DB.data.especies.findIndex(x=>String(x.nombre).toUpperCase()===String(e.nombre).toUpperCase());
+      if(idx>=0)DB.data.especies[idx]={nombre:nuevoNom,color:nuevoCol};
+    }else{
+      DB.data.especies.push({nombre:nuevoNom,color:nuevoCol});
+    }
+    DB.data.especies.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    DB.save();renderEspecies();
+    toast('Especie guardada localmente. Sincronizando…','success');
+    scheduleEspeciesCloudPush();
+    return true;
+  });
+}
+function delEspecie(nombre){
+  if(!confirm('¿Eliminar especie "'+nombre+'"?\n\nNota: los registros existentes con esta especie no se borran, solo desaparece del catálogo.'))return;
+  if(!Array.isArray(DB.data.especies))return;
+  DB.data.especies=DB.data.especies.filter(e=>String(e.nombre).toUpperCase()!==String(nombre).toUpperCase());
+  DB.save();renderEspecies();
+  toast('Especie eliminada localmente. Sincronizando…','success');
+  scheduleEspeciesCloudPush();
+}
+function adminImportEspeciesDesdePresets(){
+  if(!Array.isArray(DB.data.especies))DB.data.especies=[];
+  const before=DB.data.especies.length;
+  const seen=new Set(DB.data.especies.map(e=>String(e.nombre).toUpperCase()));
+  (DB.data.presets||[]).forEach(p=>{
+    const n=String(p&&p.especie||'').trim().toUpperCase();
+    if(n&&!seen.has(n)){DB.data.especies.push({nombre:n,color:''});seen.add(n);}
+  });
+  DB.data.especies.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const added=DB.data.especies.length-before;
+  DB.save();renderEspecies();
+  toast(added>0?(added+' especie(s) importadas desde presets'):'Sin especies nuevas para importar','success');
+  if(added>0)scheduleEspeciesCloudPush();
+}
+async function adminPullEspeciesFromCloud(showToast){
+  if(!_sb)return false;
+  try{
+    const{data,error}=await Promise.race([
+      _sb.from('app_kv').select('value').eq('key',ESPECIES_CLOUD_KEY).maybeSingle(),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 15s')),15000))
+    ]);
+    if(error||!data||!data.value)return false;
+    const list=Array.isArray(data.value.especies)?data.value.especies:[];
+    DB.data.especies=list.map(x=>typeof x==='string'?{nombre:String(x).toUpperCase(),color:''}:{nombre:String(x.nombre||'').toUpperCase(),color:String(x.color||'')}).filter(x=>x.nombre);
+    if(typeof DB._heal==='function')DB._heal();
+    DB.save();
+    if(document.getElementById('page-especies').classList.contains('active'))renderEspecies();
+    if(showToast)toast(DB.data.especies.length+' especie(s) traídas de Supabase','success');
+    return true;
+  }catch(e){
+    if(showToast)toast('No se pudo traer especies: '+(e.message||e),'warn');
+    return false;
+  }
+}
+async function adminPushEspeciesToCloud(opts){
+  const silent=opts&&opts.silent;
+  if(!_sb||!_currentUser||!isSbAdmin()){
+    if(!silent)toast('Iniciá sesión como admin en Supabase para subir especies','warn');
+    return false;
+  }
+  try{
+    const list=(DB.data.especies||[]).map(e=>({nombre:String(e.nombre||'').trim().toUpperCase(),color:String(e.color||'').trim()})).filter(x=>x.nombre);
+    const{error}=await Promise.race([
+      _sb.from('app_kv').upsert({key:ESPECIES_CLOUD_KEY,value:{especies:list,source:'admin',at:Date.now()}},{onConflict:'key'}),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 20s')),20000))
+    ]);
+    if(error)throw error;
+    if(!silent)toast('Especies sincronizadas en Supabase ('+list.length+').','success');
+    sbLog('push especies app_kv OK ('+list.length+')',true);
+    return true;
+  }catch(e){
+    if(!silent)toast('Especies: no se pudo subir. '+(e.message||e),'warn');
+    sbLog('push especies app_kv: '+(e&&e.message?e.message:String(e)),false);
+    return false;
+  }
+}
+function scheduleEspeciesCloudPush(){
+  if(!_sb||!_currentUser||!isSbAdmin())return;
+  if(_espKvPushTimer)clearTimeout(_espKvPushTimer);
+  _espKvPushTimer=setTimeout(()=>{_espKvPushTimer=null;void adminPushEspeciesToCloud({silent:true});},1200);
+}
+window.renderEspecies=renderEspecies;
+window.openEspecieModal=openEspecieModal;
+window.delEspecie=delEspecie;
+window.adminImportEspeciesDesdePresets=adminImportEspeciesDesdePresets;
+window.adminPullEspeciesFromCloud=adminPullEspeciesFromCloud;
+window.adminPushEspeciesToCloud=adminPushEspeciesToCloud;
+
 /* ════════════ SYNC DESDE ASISTENCIA ════════════ */
 const SYNC_KEY='friosur_sync_cfg_v1';
 /** Proyecto Supabase **Asistencia** (tabla `empleados`). No usar URL de Procesos (`trabajadores` → HTTP 404). */
@@ -5693,6 +5870,7 @@ function _doRender(dirty){
     if(id==='page-analisis'&&dataChanged&&typeof renderAnalisis==='function')renderAnalisis();
     if(id==='page-resumen'&&dataChanged&&typeof renderResumen==='function')renderResumen();
     if(id==='page-presets'&&(!dirty||dirty.has('presets'))&&typeof renderPresets==='function')renderPresets();
+    if(id==='page-especies'&&typeof renderEspecies==='function')renderEspecies();
     if(id==='page-trabajadores'&&(!dirty||dirty.has('trabajadores'))&&typeof renderTrabs==='function')renderTrabs();
     if(id==='page-planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
     if(id==='page-turnos'&&(!dirty||dirty.has('turnos'))&&typeof renderTurnos==='function')renderTurnos();
@@ -5999,7 +6177,9 @@ async function sbPullDbCatalogOnly(){
     }
     DB.save();
     try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros ↓ app_kv',true);}catch(_e){}
+    try{if(await adminPullEspeciesFromCloud(false))sbLog('especies ↓ app_kv',true);}catch(_e){}
     renderPresets&&renderPresets();renderTrabs&&renderTrabs();renderTurnos&&renderTurnos();renderEquipos&&renderEquipos();renderRoles&&renderRoles();
+    if(typeof renderEspecies==='function')renderEspecies();
     renderPlanillerosLista&&renderPlanillerosLista();
   }catch(e){sbLog('pull catálogo silencioso: '+(e&&e.message?e.message:String(e)),false);}
 }
@@ -6023,6 +6203,7 @@ async function pullAll(){
     if(await _adminPullArmadoLineasFromCloud())sbLog('armado_lineas ↓',true);
     try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) desde app_kv ↓',true);}catch(_e){}
     try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros catálogo ↓ app_kv',true);}catch(_e){}
+    try{if(await adminPullEspeciesFromCloud(false))sbLog('especies catálogo ↓ app_kv',true);}catch(_e){}
     RT._ensureShape();
     DB.save();if(RT.save)RT.save();
     await sbPullDashboardCloud({silent:true});

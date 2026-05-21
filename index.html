@@ -3760,6 +3760,7 @@ const SEED={
     {id:12,codigo:'N-04',nombre:'RICARDO MORENO',ficha:'N04',area:'empaque',turno:'noche',rol:'operario',activo:true},
   ],
   planilleros:[],
+  especies:[],
   turnos:[
     {id:1,nombre:'Día',codigo:'dia',inicio:'07:00',fin:'19:00',color:'amber',activo:true},
     {id:2,nombre:'Noche',codigo:'noche',inicio:'19:00',fin:'07:00',color:'blue',activo:true},
@@ -4353,6 +4354,8 @@ const RT_KEY='friosur_rt_v1';
 const TB_EQ_CLOUD_KEY='friosur_eq_runtime';
 /** `app_kv.key`: catálogo `{ planilleros: [{id,nombre}] }` editado en admin; la tablet lo aplica en pull/realtime. */
 const TB_PLANILLEROS_CLOUD_KEY='friosur_planilleros_catalog';
+/** `app_kv.key`: catálogo `{ especies: [{nombre,color}] }` editado en admin. */
+const TB_ESPECIES_CLOUD_KEY='friosur_especies_catalog';
 /** Aplica valor remoto de `app_kv` planilleros (misma forma que sube admin). */
 function _tbApplyPlanillerosFromCloudValue(val){
   if(!val||typeof val!=='object'||!Array.isArray(val.planilleros))return false;
@@ -4365,6 +4368,21 @@ function _tbApplyPlanillerosFromCloudValue(val){
     if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
     return true;
   }catch(e){console.warn('[tb planilleros app_kv]',e);return false;}
+}
+/** Aplica valor remoto de `app_kv` especies. */
+function _tbApplyEspeciesFromCloudValue(val){
+  if(!val||typeof val!=='object'||!Array.isArray(val.especies))return false;
+  try{
+    if(!DB||!DB.data)return false;
+    const list=val.especies.map(x=>{
+      if(typeof x==='string')return{nombre:String(x).trim().toUpperCase(),color:''};
+      return{nombre:String((x&&x.nombre)||'').trim().toUpperCase(),color:String((x&&x.color)||'').trim()};
+    }).filter(x=>x.nombre);
+    DB.data.especies=list;
+    DB.save();
+    if(typeof refreshOperateUiAfterCatalogChange==='function')refreshOperateUiAfterCatalogChange();
+    return true;
+  }catch(e){console.warn('[tb especies app_kv]',e);return false;}
 }
 /** Firmas de último push (moldes/pesajes/generales/armado) por usuario — sobreviven al F5 para detectar borrados en Supabase. */
 const TB_PUSH_SIG_PREFIX='friosur_tb_push_sig_v1';
@@ -9926,9 +9944,23 @@ window._ensureArmadoMolde=_ensureArmadoMolde;
 
 /* ── Helper: unique especie values from active presets ─────────── */
 function _getEspecies(){
-  const s=new Set();
-  DB.data.presets.filter(p=>p.activo&&p.especie).forEach(p=>s.add(p.especie));
-  return [...s].sort();
+  // 1) Catálogo dedicado DB.data.especies (gestionado en admin) — fuente primaria
+  const out=new Map(); // key: NOMBRE_UPPER → display
+  const catalogo=Array.isArray(DB.data.especies)?DB.data.especies:[];
+  catalogo.forEach(e=>{
+    const raw=typeof e==='string'?e:(e&&e.nombre);
+    const nom=String(raw||'').trim();
+    if(!nom)return;
+    out.set(nom.toUpperCase(),nom.toUpperCase());
+  });
+  // 2) Fallback: derivar de presets activos (compat con datos legacy sin catálogo)
+  DB.data.presets.filter(p=>p.activo&&p.especie).forEach(p=>{
+    const nom=String(p.especie||'').trim();
+    if(!nom)return;
+    const key=nom.toUpperCase();
+    if(!out.has(key))out.set(key,key);
+  });
+  return [...out.values()].sort();
 }
 
 /* ── iOS Picker open/close ─────────────────────────────────────── */
@@ -11617,6 +11649,10 @@ const TBSync={
         const{data:plKv,error:plKvErr}=await _tbSb.from('app_kv').select('value,updated_at').eq('key',TB_PLANILLEROS_CLOUD_KEY).maybeSingle();
         if(!plKvErr&&plKv&&plKv.value)_tbApplyPlanillerosFromCloudValue(plKv.value);
       }catch(pe){console.warn('[sb pull planilleros app_kv]',pe);}
+      try{
+        const{data:espKv,error:espErr}=await _tbSb.from('app_kv').select('value,updated_at').eq('key',TB_ESPECIES_CLOUD_KEY).maybeSingle();
+        if(!espErr&&espKv&&espKv.value)_tbApplyEspeciesFromCloudValue(espKv.value);
+      }catch(ee){console.warn('[sb pull especies app_kv]',ee);}
       try{if(_tbUser&&typeof _tbPullEqRuntimeFromCloud==='function')await _tbPullEqRuntimeFromCloud({silent:true});}catch(qe){console.warn('[sb pull eq_runtime]',qe);}
       this.setStatus('☁ Sync','#16a34a');
     }catch(e){console.warn('[sb pullCatalogs]',e);this.setStatus('⚠ Offline','#dc2626');}
@@ -12019,6 +12055,12 @@ const TBSync={
         if(String(row.key||'')!==TB_PLANILLEROS_CLOUD_KEY)return;
         if(p.eventType==='DELETE')return;
         _tbApplyPlanillerosFromCloudValue(row.value);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+TB_ESPECIES_CLOUD_KEY},(p)=>{
+        const row=p.new||p.old;if(!row)return;
+        if(String(row.key||'')!==TB_ESPECIES_CLOUD_KEY)return;
+        if(p.eventType==='DELETE')return;
+        _tbApplyEspeciesFromCloudValue(row.value);
       }).subscribe();
   }
 };
