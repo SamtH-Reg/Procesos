@@ -5775,7 +5775,6 @@ async function adminSyncRoleRowToSupabase(rid){
 
 async function sbUpsertPresets(rows){
   if(!_sb)return{error:new Error('Sin Supabase')};
-  // No usar await getSession() aquí: en algunos navegadores puede bloquearse y dejar el modal en «Guardando…» sin resolver.
   let mapped;
   try{
     mapped=(_sbRows('presets',rows||[])).map(r=>{
@@ -5787,26 +5786,62 @@ async function sbUpsertPresets(rows){
     console.error('[sbUpsertPresets map]',e);
     return{error:new Error('Error preparando datos del preset: '+(e.message||String(e)))};
   }
-  // Carrera contra timeout local (12s) — si la promesa de Supabase nunca resuelve, este timeout sí lo hace.
-  try{
-    const upsertP=_sb.from('presets').upsert(mapped,{onConflict:'id'});
-    const timeoutP=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 12s en upsert presets (red lenta o sesión caducada)')),12000));
-    const{error}=await Promise.race([upsertP,timeoutP]);
-    return{data:null,error};
-  }catch(e){
-    return{error:e instanceof Error?e:new Error(String(e))};
+  // Helper local: una tentativa con timeout configurable
+  const intentar=async(timeoutMs,intentoLbl)=>{
+    try{
+      const upsertP=_sb.from('presets').upsert(mapped,{onConflict:'id'});
+      const timeoutP=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout '+(timeoutMs/1000)+'s ('+intentoLbl+')')),timeoutMs));
+      const{error}=await Promise.race([upsertP,timeoutP]);
+      return{ok:!error,error};
+    }catch(e){return{ok:false,error:e instanceof Error?e:new Error(String(e))};}
+  };
+  // Intento 1: timeout 20s (más generoso que los 12s anteriores)
+  let r=await intentar(20000,'intento 1/2');
+  if(r.ok)return{data:null,error:null};
+  // Si falló por timeout o auth, refrescar sesión y reintentar
+  const msg1=String(r.error&&r.error.message||'');
+  const fuesTimeout=/Timeout/i.test(msg1);
+  const fueAuth=/JWT|auth|session|401|403/i.test(msg1);
+  if(fuesTimeout||fueAuth){
+    sbLog('Upsert preset falló ('+msg1+') — refrescando sesión y reintentando…',false);
+    try{
+      // Refresh session token explícitamente — soluciona "sesión caducada"
+      if(_sb.auth&&_sb.auth.refreshSession){
+        const refreshP=_sb.auth.refreshSession();
+        const refreshTO=new Promise((_,rej)=>setTimeout(()=>rej(new Error('refresh timeout')),5000));
+        await Promise.race([refreshP,refreshTO]);
+      }
+    }catch(refErr){console.warn('[sbUpsertPresets refresh]',refErr);}
+    // Intento 2: timeout 25s tras refresh
+    r=await intentar(25000,'intento 2/2 tras refresh');
+    if(r.ok)return{data:null,error:null};
   }
+  // Ambos fallaron — devolver el último error con más contexto
+  return{error:r.error||new Error('No se pudo guardar tras 2 intentos')};
 }
 async function sbDeletePresetRemote(id){
   if(!_sb||id==null)return{error:null};
-  try{
-    const delP=_sb.from('presets').delete().eq('id',id);
-    const timeoutP=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout 12s al borrar preset')),12000));
-    const{error}=await Promise.race([delP,timeoutP]);
-    return{error};
-  }catch(e){
-    return{error:e instanceof Error?e:new Error(String(e))};
+  const intentar=async(timeoutMs,intentoLbl)=>{
+    try{
+      const delP=_sb.from('presets').delete().eq('id',id);
+      const timeoutP=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout '+(timeoutMs/1000)+'s ('+intentoLbl+')')),timeoutMs));
+      const{error}=await Promise.race([delP,timeoutP]);
+      return{ok:!error,error};
+    }catch(e){return{ok:false,error:e instanceof Error?e:new Error(String(e))};}
+  };
+  let r=await intentar(20000,'intento 1/2');
+  if(r.ok)return{error:null};
+  const msg1=String(r.error&&r.error.message||'');
+  if(/Timeout|JWT|auth|session|401|403/i.test(msg1)){
+    try{if(_sb.auth&&_sb.auth.refreshSession){
+      const refreshP=_sb.auth.refreshSession();
+      const refreshTO=new Promise((_,rej)=>setTimeout(()=>rej(new Error('refresh timeout')),5000));
+      await Promise.race([refreshP,refreshTO]);
+    }}catch(_){}
+    r=await intentar(25000,'intento 2/2 tras refresh');
+    if(r.ok)return{error:null};
   }
+  return{error:r.error};
 }
 
 /** Upsert de una fila de catálogo (presets / equipos / turnos) — paridad tablet `pullCatalogs`. */
@@ -5912,9 +5947,10 @@ function setTheme(t){document.body.setAttribute('data-theme',t);localStorage.set
 })();
 
 /* ════════════ MODAL helper ════════════ */
-/** Evita UI colgada si una promesa (p. ej. red/Supabase) no termina nunca. */
+/** Evita UI colgada si una promesa (p. ej. red/Supabase) no termina nunca.
+ *  Default 55s para acomodar 2 intentos de upsert con refresh entre medio. */
 function _modalAsyncWithTimeout(p,ms){
-  const m=ms||15000;
+  const m=ms||55000;
   let tid;
   const timeout=new Promise((_,rej)=>{
     tid=setTimeout(()=>rej(new Error('Tiempo de espera ('+Math.round(m/1000)+' s). Revisa conexión a Supabase o vuelve a entrar en Cuenta.')),m);
@@ -5957,14 +5993,15 @@ function confirmModal(){
   if(ret&&typeof ret.then==='function'){
     _modalSaving=true;
     if(btn){btn.disabled=true;btn.textContent='Guardando…';}
-    // Fallback duro: si pasados 18s la UI sigue trabada, fuerza reset (cinturón y tirantes).
+    // Fallback duro: si pasados 60s la UI sigue trabada, fuerza reset (cinturón y tirantes).
+    // 60s deja margen para 2 intentos de upsert (20s + 25s + refresh).
     const hardFallback=setTimeout(()=>{
       if(!_modalSaving)return;
       _modalSaving=false;
       if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
-      toast('La operación tardó demasiado. Inténtalo de nuevo.','err');
-    },18000);
-    _modalAsyncWithTimeout(ret,15000).then(ok=>{
+      toast('La operación tardó demasiado (>60s). Revisa conexión a Supabase.','err');
+    },60000);
+    _modalAsyncWithTimeout(ret,55000).then(ok=>{
       clearTimeout(hardFallback);
       _modalSaving=false;
       if(btn){btn.disabled=false;btn.textContent=lab||'Guardar';}
