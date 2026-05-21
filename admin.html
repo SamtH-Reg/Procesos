@@ -1105,6 +1105,17 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div id="migracionesSQLList"></div>
   </div>
   <div class="card" style="margin-top:16px;">
+    <div class="card-hdr">
+      <div class="card-title">🩺 Diagnóstico de flujos de datos</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sm" type="button" onclick="runDiagnosticoFlujos()">▶ Auditar flujos</button>
+        <button class="btn sm" type="button" style="background:#dc2626;color:#fff;" onclick="repararFlujosCompleto()" title="Ejecuta: push de catálogos, re-pull, sincronizar firmas">🔧 Reparar todo</button>
+      </div>
+    </div>
+    <p style="margin:0 0 10px;font-size:12px;color:var(--text-3);">Compara local vs nube en todos los catálogos y tablas operativas. Detecta desincronizaciones, presets pendientes, sesión caducada, errores de constraint.</p>
+    <div id="diagFlujosOut" style="font-size:12px;line-height:1.6;"></div>
+  </div>
+  <div class="card" style="margin-top:16px;">
     <div class="card-hdr"><div class="card-title">🧪 Log de sincronización</div><button class="btn sm ghost" onclick="document.getElementById('sbLog').innerHTML='';">Limpiar</button></div>
     <div id="sbLog" style="font-family:var(--mono);font-size:11px;background:var(--surface-alt);padding:12px;border-radius:8px;max-height:260px;overflow:auto;"></div>
   </div>
@@ -2160,6 +2171,179 @@ async function renderMigracionesSQL(){
 window.renderMigracionesSQL=renderMigracionesSQL;
 window.abrirSQLEditor=abrirSQLEditor;
 window.copiarSQLAlPortapapeles=copiarSQLAlPortapapeles;
+
+/* ════════════ DIAGNÓSTICO FLUJOS DE DATOS ════════════ */
+async function _diagTablaCount(table){
+  try{
+    const{data,error,count}=await _sb.from(table).select('*',{count:'exact',head:true});
+    if(error)return{ok:false,err:error.message};
+    return{ok:true,count:count!=null?count:(data?data.length:0)};
+  }catch(e){return{ok:false,err:e.message||String(e)};}
+}
+async function _diagAppKv(key){
+  try{
+    const{data,error}=await _sb.from('app_kv').select('value,updated_at').eq('key',key).maybeSingle();
+    if(error)return{ok:false,err:error.message};
+    return{ok:true,exists:!!data,updated_at:data?data.updated_at:null};
+  }catch(e){return{ok:false,err:e.message||String(e)};}
+}
+async function runDiagnosticoFlujos(){
+  const out=document.getElementById('diagFlujosOut');if(!out)return;
+  out.innerHTML='<div style="padding:14px;color:var(--text-3);">⏳ Ejecutando auditoría completa…</div>';
+  const rows=[];
+  const addRow=(label,status,info)=>rows.push({label,status,info});
+  // 1) Conexión & sesión
+  if(!_sb){
+    addRow('Cliente Supabase','❌','No inicializado — no hay conexión');
+    out.innerHTML=_diagRender(rows);return;
+  }
+  addRow('Cliente Supabase','✓','Inicializado · '+(navigator.onLine?'online':'offline'));
+  let session=null;
+  try{
+    const{data}=await Promise.race([
+      _sb.auth.getSession(),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout 5s')),5000))
+    ]);
+    session=data&&data.session;
+    if(session){
+      const expMs=session.expires_at*1000;
+      const restMin=Math.round((expMs-Date.now())/60000);
+      addRow('Sesión Auth','✓','expira en '+restMin+' min · '+(session.user&&session.user.email||'?'));
+    }else{
+      addRow('Sesión Auth','⚠','Sin sesión activa');
+    }
+  }catch(e){addRow('Sesión Auth','❌',e.message||String(e));}
+  // 2) Catálogos: count local vs cloud
+  const catalogos=[
+    {tbl:'presets',label:'Presets',localPath:()=>DB.data.presets},
+    {tbl:'trabajadores',label:'Trabajadores',localPath:()=>DB.data.trabajadores},
+    {tbl:'turnos',label:'Turnos',localPath:()=>DB.data.turnos},
+    {tbl:'equipos',label:'Equipos',localPath:()=>DB.data.equipos},
+    {tbl:'roles',label:'Roles',localPath:()=>DB.data.roles}
+  ];
+  for(const c of catalogos){
+    const local=Array.isArray(c.localPath())?c.localPath().length:0;
+    const r=await _diagTablaCount(c.tbl);
+    if(!r.ok){addRow(c.label,'❌','Local '+local+' · Cloud ERROR: '+r.err);continue;}
+    const diff=local-r.count;
+    const status=diff===0?'✓':(Math.abs(diff)>0?'⚠':'✓');
+    addRow(c.label,status,'Local '+local+' · Cloud '+r.count+(diff!==0?(' · diff '+(diff>0?'+':'')+diff):''));
+  }
+  // 3) Tablas operativas
+  const operativas=[
+    {tbl:'moldes',label:'Moldes'},
+    {tbl:'pesajes',label:'Pesajes'},
+    {tbl:'generales',label:'Generales'},
+    {tbl:'armado_lineas',label:'Armado líneas'}
+  ];
+  for(const o of operativas){
+    const r=await _diagTablaCount(o.tbl);
+    if(!r.ok){addRow(o.label,'❌','Cloud ERROR: '+r.err);continue;}
+    addRow(o.label,'✓','Cloud '+r.count+' filas');
+  }
+  // 4) app_kv blobs
+  const blobs=[
+    {key:'friosur_eq_runtime',label:'eq_runtime (túneles/placas)'},
+    {key:'friosur_planilleros_catalog',label:'planilleros'},
+    {key:'friosur_especies_catalog',label:'especies'},
+    {key:'friosur_admin_dashboard',label:'dashboard widgets'}
+  ];
+  for(const b of blobs){
+    const r=await _diagAppKv(b.key);
+    if(!r.ok){addRow(b.label,'❌',r.err);continue;}
+    addRow(b.label,r.exists?'✓':'⚠',r.exists?('Cloud OK · '+(r.updated_at||'?')):'No existe en app_kv todavía');
+  }
+  // 5) Pendientes locales
+  const pendingPresets=_adminGetPresetsPending?_adminGetPresetsPending():[];
+  addRow('Cola presets pendientes',pendingPresets.length?'⚠':'✓',pendingPresets.length+' en cola local'+(pendingPresets.length?' (ids: '+pendingPresets.slice(0,5).join(', ')+')':''));
+  // 6) Constraint check (placa_general)
+  try{
+    const testId=999999998;
+    const{error:cErr}=await _sb.from('presets').upsert([{id:testId,nombre:'__diag_'+Date.now(),tipo:'molde',uso_equipo:'placa_general',activo:false}],{onConflict:'id'});
+    if(cErr&&/constraint|check/i.test(cErr.message||'')){
+      addRow('Constraint placa_general','❌','RECHAZADO — falta migración. Ve a "Migraciones SQL pendientes"');
+    }else{
+      addRow('Constraint placa_general','✓','Acepta placa_general · migración aplicada');
+      await _sb.from('presets').delete().eq('id',testId);
+    }
+  }catch(e){addRow('Constraint placa_general','⚠',e.message||String(e));}
+  // 7) UCO sync (último timestamp)
+  const ucoLast=localStorage.getItem('friosur_uco_last_sync');
+  if(ucoLast){
+    const minAgo=Math.round((Date.now()-parseInt(ucoLast,10))/60000);
+    addRow('UCO Asistencia (último sync)',minAgo<1440?'✓':'⚠','Hace '+minAgo+' min');
+  }else{
+    addRow('UCO Asistencia','⚠','Nunca sincronizado · ve a Turnos (Asistencia) → Re-sync');
+  }
+  out.innerHTML=_diagRender(rows);
+}
+function _diagRender(rows){
+  const colorMap={'✓':'#16a34a','⚠':'#d97706','❌':'#dc2626'};
+  const bgMap={'✓':'#f0fdf4','⚠':'#fffbeb','❌':'#fef2f2'};
+  const okCount=rows.filter(r=>r.status==='✓').length;
+  const warnCount=rows.filter(r=>r.status==='⚠').length;
+  const errCount=rows.filter(r=>r.status==='❌').length;
+  const totalCount=rows.length;
+  const overall=errCount>0?'❌':(warnCount>0?'⚠':'✓');
+  let html='<div style="display:flex;gap:8px;margin-bottom:10px;font-size:12px;">'+
+    '<span style="padding:4px 10px;background:#f0fdf4;color:#16a34a;border-radius:8px;font-weight:600;">✓ '+okCount+'</span>'+
+    '<span style="padding:4px 10px;background:#fffbeb;color:#d97706;border-radius:8px;font-weight:600;">⚠ '+warnCount+'</span>'+
+    '<span style="padding:4px 10px;background:#fef2f2;color:#dc2626;border-radius:8px;font-weight:600;">❌ '+errCount+'</span>'+
+    '<span style="padding:4px 10px;background:#f1f5f9;color:#475569;border-radius:8px;">Total: '+totalCount+'</span>'+
+    '</div>';
+  html+='<table style="width:100%;border-collapse:collapse;">';
+  rows.forEach(r=>{
+    html+='<tr style="border-bottom:1px solid var(--border);">'+
+      '<td style="padding:7px 10px;background:'+bgMap[r.status]+';color:'+colorMap[r.status]+';font-weight:700;width:36px;text-align:center;">'+r.status+'</td>'+
+      '<td style="padding:7px 10px;font-weight:600;min-width:200px;">'+esc(r.label)+'</td>'+
+      '<td style="padding:7px 10px;color:var(--text-2);">'+esc(r.info)+'</td>'+
+    '</tr>';
+  });
+  html+='</table>';
+  html+='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:'+bgMap[overall]+';color:'+colorMap[overall]+';font-weight:700;font-size:13px;">Estado general: '+overall+' '+(overall==='✓'?'Todos los flujos OK':(overall==='⚠'?'Hay desincronizaciones — usa "Reparar todo"':'Errores críticos — revisa migraciones y conexión'))+'</div>';
+  return html;
+}
+async function repararFlujosCompleto(){
+  if(!confirm('Repara todos los flujos:\n• Push de catálogos (presets, trabajadores, planilleros, especies)\n• Refresh de sesión Supabase\n• Push de cola de pendientes\n• Re-pull desde la nube\n\n¿Continuar?'))return;
+  const out=document.getElementById('diagFlujosOut');
+  if(out)out.innerHTML='<div style="padding:14px;color:var(--text-3);">⏳ Reparando flujos…</div>';
+  const log=[];
+  const logAdd=(msg,ok)=>{log.push({msg,ok:ok!==false});};
+  try{
+    // 1) Refresh sesión
+    try{
+      if(_sb&&_sb.auth&&_sb.auth.refreshSession){
+        await Promise.race([_sb.auth.refreshSession(),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000))]);
+        logAdd('Sesión refrescada',true);
+      }
+    }catch(e){logAdd('Refresh sesión falló: '+(e.message||e),false);}
+    // 2) Push presets pendientes
+    try{
+      if(typeof _adminRetryPendingPresets==='function'){
+        await _adminRetryPendingPresets();
+        logAdd('Cola presets procesada',true);
+      }
+    }catch(e){logAdd('Retry presets falló: '+(e.message||e),false);}
+    // 3) Push de cada catálogo
+    if(typeof pushAll==='function'){
+      try{await pushAll();logAdd('Push de catálogos completado',true);}
+      catch(e){logAdd('Push catálogos error: '+(e.message||e),false);}
+    }
+    // 4) Push de planilleros y especies (no en pushAll)
+    try{await adminPushPlanillerosToCloud({silent:true});logAdd('Push planilleros app_kv',true);}catch(e){logAdd('Push planilleros falló',false);}
+    try{await adminPushEspeciesToCloud({silent:true});logAdd('Push especies app_kv',true);}catch(e){logAdd('Push especies falló',false);}
+    // 5) Re-pull desde nube
+    try{await sbPullDbCatalogOnly();logAdd('Re-pull de catálogos',true);}catch(e){logAdd('Re-pull catálogos falló',false);}
+    toast('Reparación completada — '+log.filter(l=>l.ok).length+'/'+log.length+' pasos OK','success');
+  }catch(e){
+    toast('Reparación abortada: '+(e.message||e),'err');
+  }
+  // 6) Re-auditar para mostrar resultado
+  if(out)out.innerHTML='<div style="padding:14px;color:var(--text-3);">⏳ Re-auditando tras reparar…</div>';
+  setTimeout(()=>{runDiagnosticoFlujos();},500);
+}
+window.runDiagnosticoFlujos=runDiagnosticoFlujos;
+window.repararFlujosCompleto=repararFlujosCompleto;
 
 async function adminPushTrabajadoresToCloud(opts){
   const silent=opts&&opts.silent;
