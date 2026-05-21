@@ -2614,7 +2614,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
         <div class="card-body">
           <div class="form-grid cols-3">
             <div class="form-field">
-              <label class="form-label">Cantidad <span class="required">*</span></label>
+              <label class="form-label"><span id="gRegCantLabel">Cantidad</span> <span class="required">*</span></label>
               <div class="stepper">
                 <button class="stepper-btn" type="button" onclick="gRegStep(-1)">−</button>
                 <input type="number" id="gRegCant" placeholder="0" min="1" inputmode="numeric" oninput="gRegCalcKg()">
@@ -6318,12 +6318,36 @@ function gRegCalcKg(){
   const p=DB.data.presets.find(x=>x.id===RT.selPresetG);
   const kgEl=document.getElementById('gRegKg');
   const meta=document.getElementById('gRegCalcMeta');
+  const cantLabel=document.getElementById('gRegCantLabel');
   if(!kgEl||!meta)return;
+  // Etiqueta dinámica de "Cantidad" según tipo (pallets / carros / castillos / unidades)
+  if(cantLabel){
+    if(p&&p.tipo==='pallet')cantLabel.textContent='Pallets';
+    else if(p&&p.tipo==='carro')cantLabel.textContent='Carros';
+    else if(p&&p.tipo==='castillo')cantLabel.textContent='Castillos';
+    else cantLabel.textContent='Cantidad';
+  }
+  // Si es contenedor con sub-unidades definidas, mostrar breakdown
+  const hasSub=p&&['pallet','carro','castillo'].includes(p.tipo)&&p.subCantidad>0&&p.subPeso>0;
   if(!p){kgEl.value='';kgEl.placeholder='— selecciona preset';meta.textContent='Ingresa la cantidad';return;}
-  if(!cant){kgEl.value='';kgEl.placeholder=p.kgRef+' kg/unidad';meta.textContent='Preset: '+p.nombre+' ('+p.kgRef+' kg/u)';return;}
+  if(!cant){
+    kgEl.value='';
+    kgEl.placeholder=p.kgRef+' kg/unidad';
+    if(hasSub){
+      meta.innerHTML='Preset: <strong>'+esc(p.nombre)+'</strong> · 1 '+esc(p.tipo)+' = '+p.subCantidad+' '+esc(p.subUnidad||'sub-unidad')+'(s) × '+p.subPeso+' kg = <strong>'+p.kgRef+' kg/'+esc(p.tipo)+'</strong>';
+    }else{
+      meta.textContent='Preset: '+p.nombre+' ('+p.kgRef+' kg/u)';
+    }
+    return;
+  }
   const total=Math.round(cant*p.kgRef*10)/10;
   kgEl.value=total.toString().replace('.',',');
-  meta.textContent='= '+cant+' × '+p.kgRef+' kg = '+total+' kg';
+  if(hasSub){
+    const totalSubs=cant*p.subCantidad;
+    meta.innerHTML='= '+cant+' '+esc(p.tipo)+'(s) × '+p.subCantidad+' '+esc(p.subUnidad||'sub-u')+'(s) × '+p.subPeso+' kg = <strong>'+total+' kg</strong> ('+totalSubs+' '+esc(p.subUnidad||'sub-u')+'(s) en total)';
+  }else{
+    meta.textContent='= '+cant+' × '+p.kgRef+' kg = '+total+' kg';
+  }
 }
 function _healGeneralRow(r){
   if(!r||typeof r!=='object')return;
@@ -6354,6 +6378,11 @@ function regGeneral(){
     producto:p.nombre,presetId:p.id,tipo:p.tipo,
     destino:p.destino,calibre:p.calibre,especie:p.especie,
     cant,pendiente:cant,kg,guia,
+    // Snapshot del breakdown sub-unidad (visible en reportes para auditoría)
+    subUnidad:p.subUnidad||'',
+    subCantidad:p.subCantidad||0,
+    subPeso:p.subPeso||0,
+    subTotalSubs:(p.subCantidad>0?cant*p.subCantidad:0),
   };
   RT.generales.unshift(rec);rtSave({skipCloudSchedule:true});
   renderGeneralesTable();
@@ -7009,9 +7038,18 @@ function openEqModal(codigo){
         <span><span style="color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.05em;margin-right:4px;">Frío</span><span style="font-family:var(--mono,monospace);font-weight:700;color:var(--text-2);">${it.horasTotal}h</span></span>
       </div>`;
     }
+    // Detalle de sub-unidades si el item tiene breakdown (pallet/carro/castillo)
+    let subBreakdownHtml='';
+    if(it.subCantidad>0&&it.subPeso>0){
+      const totalKg=it.kgTotal||(it.cant*it.subCantidad*it.subPeso);
+      const totalSubs=it.cant*it.subCantidad;
+      subBreakdownHtml=`<div style="margin-top:4px;font-size:10px;color:var(--text-3);font-family:var(--mono,monospace);">
+        📦 ${it.cant} × ${it.subCantidad} ${esc(it.subUnidad||'sub-u')}(s) × ${it.subPeso} kg = <strong style="color:var(--text-2);">${(+totalKg).toFixed(1)} kg</strong> (${totalSubs} ${esc(it.subUnidad||'sub-u')}s)
+      </div>`;
+    }
     return`<div class="${rowCls}" style="${rowBase}">
       ${badge}
-      <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--text);">${esc(it.producto)}</div>${metaSubHtml}</div>
+      <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--text);">${esc(it.producto)}</div>${metaSubHtml}${subBreakdownHtml}</div>
       ${rt.estado==='libre'||rt.estado==='cargando'?`<button class="btn btn-danger-outline" type="button" onclick="removeEqItem(${i})">Quitar</button>`:''}
     </div>`;
   }).join('')+'</div>'):'<div style="padding:14px;text-align:center;color:var(--text-3);font-size:12px;">—</div>';
@@ -7169,7 +7207,15 @@ function addEqItem(){
     if(cant>rest){showToast('Solo caben '+rest+' molde(s) más (capacidad '+eq.capacidad+')','error');return;}
   }
   rt.items=rt.items||[];
-  rt.items.push({producto:p.nombre,presetId:p.id,cant,guia,horasTotal,fuente:'manual'});
+  // Snapshot del breakdown si preset tiene sub-unidades (pallet=24 canastillos × 18kg → 432kg/pallet)
+  const itemPush={producto:p.nombre,presetId:p.id,cant,guia,horasTotal,fuente:'manual'};
+  if(p.subCantidad>0&&p.subPeso>0&&['pallet','carro','castillo'].includes(p.tipo)){
+    itemPush.subUnidad=p.subUnidad||'';
+    itemPush.subCantidad=p.subCantidad;
+    itemPush.subPeso=p.subPeso;
+    itemPush.kgTotal=Math.round(cant*p.subCantidad*p.subPeso*10)/10;
+  }
+  rt.items.push(itemPush);
   if(rt.estado==='congelando'&&eq.tipo==='placa'){
     /* No tocar horaInicio, horasTotal ni progreso del ciclo en curso. */
   }else{
@@ -7177,7 +7223,8 @@ function addEqItem(){
   }
   rtSave({skipCloudSchedule:true});openEqModal(_eqModalCode);renderEquipos();
   try{if(typeof TBSync!=='undefined'&&TBSync.pushEqKvOnly)void TBSync.pushEqKvOnly();}catch(_){}
-  showToast('Producto cargado','success');
+  const toastMsg=itemPush.kgTotal?'Producto cargado: '+cant+' '+p.tipo+'(s) × '+p.subCantidad+' '+(p.subUnidad||'sub-u')+' × '+p.subPeso+' kg = '+itemPush.kgTotal+' kg':'Producto cargado';
+  showToast(toastMsg,'success');
 }
 /* Consumir pendientes FIFO (moldes + generales) por preset. */
 function consumirPendientes(presetId,cant){

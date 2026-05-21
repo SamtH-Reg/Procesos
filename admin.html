@@ -4185,26 +4185,46 @@ function openPresetModal(id){
   const editing=id!=null&&id!=='';
   const src=editing?DB.data.presets.find(x=>String(x.id)===String(id)):null;
   if(editing&&!src){toast('Preset no encontrado','err');return;}
-  const p=src?{...src}:{id:null,nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true};
+  const p=src?{...src}:{id:null,nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true,subUnidad:'',subCantidad:0,subPeso:0};
   const uso=inferUsoEquipo(p);
+  const subUni=p.subUnidad||(p.tipo==='pallet'?'canastillo':(p.tipo==='carro'||p.tipo==='castillo'?'caja':''));
+  const isContainer=['pallet','carro','castillo'].includes(p.tipo);
   openModal('Preset',`
     <div class="form-field"><label class="form-label">Nombre</label><input class="input" id="f_nombre" value="${esc(p.nombre)}"></div>
     <div class="grid-2">
-      <div class="form-field"><label class="form-label">Tipo</label><select class="select" id="f_tipo"><option value="molde" ${p.tipo==='molde'?'selected':''}>Molde</option><option value="pallet" ${p.tipo==='pallet'?'selected':''}>Pallet</option><option value="carro" ${p.tipo==='carro'?'selected':''}>Carro</option><option value="castillo" ${p.tipo==='castillo'?'selected':''}>Castillo</option><option value="general" ${p.tipo==='general'?'selected':''}>General (registro)</option></select></div>
+      <div class="form-field"><label class="form-label">Tipo</label><select class="select" id="f_tipo" onchange="_presetToggleSubUnidad()"><option value="molde" ${p.tipo==='molde'?'selected':''}>Molde</option><option value="pallet" ${p.tipo==='pallet'?'selected':''}>Pallet</option><option value="carro" ${p.tipo==='carro'?'selected':''}>Carro</option><option value="castillo" ${p.tipo==='castillo'?'selected':''}>Castillo</option><option value="general" ${p.tipo==='general'?'selected':''}>General (registro)</option></select></div>
       <div class="form-field"><label class="form-label">Formato</label><input class="input" id="f_formato" value="${esc(p.formato||'')}"></div>
       <div class="form-field"><label class="form-label">Destino</label><input class="input" id="f_destino" value="${esc(p.destino||'')}"></div>
       <div class="form-field"><label class="form-label">Especie</label><input class="input" id="f_especie" value="${esc(p.especie||'')}"></div>
       <div class="form-field"><label class="form-label">Calibre</label><input class="input" id="f_calibre" value="${esc(p.calibre||'')}"></div>
-      <div class="form-field"><label class="form-label">Kg/unidad</label><input class="input" id="f_kgRef" type="number" step="0.1" value="${p.kgRef||0}"></div>
+      <div class="form-field"><label class="form-label">Kg/unidad <span class="hint" id="hintKgRef" style="font-size:10px;color:var(--text-3);"></span></label><input class="input" id="f_kgRef" type="number" step="0.1" value="${p.kgRef||0}"></div>
       <div class="form-field"><label class="form-label">Horas Túnel</label><input class="input" id="f_horasTunel" type="number" step="0.5" value="${p.horasTunel||0}"></div>
       <div class="form-field"><label class="form-label">Horas Placa</label><input class="input" id="f_horasPlaca" type="number" step="0.5" value="${p.horasPlaca||0}"></div>
       <div class="form-field"><label class="form-label">Uso del preset</label><select class="select" id="f_usoEquipo"><option value="ambos" ${uso==='ambos'?'selected':''}>Ambos (Túnel y Placa)</option><option value="tunel" ${uso==='tunel'?'selected':''}>Solo Túnel</option><option value="placa" ${uso==='placa'?'selected':''}>Solo Placa</option><option value="general" ${uso==='general'?'selected':''}>Solo registro general</option></select></div>
       <div class="form-field"><label class="form-label">Tº objetivo</label><input class="input" id="f_tempObj" type="number" value="${p.tempObj||0}"></div>
       <div class="form-field"><label class="form-label">Estado</label><select class="select" id="f_activo"><option value="1" ${p.activo?'selected':''}>Activo</option><option value="0" ${!p.activo?'selected':''}>Inactivo</option></select></div>
+    </div>
+    <div id="presetSubUnidadBlock" style="margin-top:14px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt);display:${isContainer?'block':'none'};">
+      <div style="font:700 11px var(--font);color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">📦 Estructura de unidad (sub-unidades)</div>
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;line-height:1.45;">Para Pallet, Carro o Castillo: define cuántos canastillos/cajas trae 1 unidad y el peso promedio de cada uno. Esto auto-calcula los Kg/unidad. Ejemplo: 1 pallet = 24 canastillos × 18 kg = <strong>432 kg/pallet</strong>.</div>
+      <div class="grid-2">
+        <div class="form-field"><label class="form-label">Sub-unidad (nombre)</label><input class="input" id="f_subUnidad" placeholder="canastillo / caja" value="${esc(subUni)}" oninput="_presetRecalcKgFromSub()"></div>
+        <div class="form-field"><label class="form-label">Cantidad por unidad</label><input class="input" id="f_subCantidad" type="number" min="0" step="1" placeholder="ej. 24" value="${p.subCantidad||0}" oninput="_presetRecalcKgFromSub()"></div>
+        <div class="form-field" style="grid-column:span 2;"><label class="form-label">Peso promedio por sub-unidad (kg)</label><input class="input" id="f_subPeso" type="number" min="0" step="0.1" placeholder="ej. 18" value="${p.subPeso||0}" oninput="_presetRecalcKgFromSub()"></div>
+      </div>
+      <div id="presetSubUnidadCalc" style="margin-top:8px;font-size:12px;color:var(--text-2);font-weight:600;"></div>
     </div>`,async ()=>{
     const newId=!editing?_adminNextPresetId():p.id;
-    const n={id:newId,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
+    const tipoVal=document.getElementById('f_tipo').value;
+    const subUnidadVal=String(document.getElementById('f_subUnidad')?document.getElementById('f_subUnidad').value:'').trim();
+    const subCantidadVal=parseInt(document.getElementById('f_subCantidad')?document.getElementById('f_subCantidad').value:0,10)||0;
+    const subPesoVal=parseFloat(document.getElementById('f_subPeso')?document.getElementById('f_subPeso').value:0)||0;
+    const n={id:newId,nombre:document.getElementById('f_nombre').value.trim(),tipo:tipoVal,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1',subUnidad:subUnidadVal,subCantidad:subCantidadVal,subPeso:subPesoVal};
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
+    // Si es contenedor (pallet/carro/castillo) y se definió sub-unidad, validar y recalcular kgRef
+    if(['pallet','carro','castillo'].includes(tipoVal)&&subCantidadVal>0&&subPesoVal>0){
+      n.kgRef=Math.round(subCantidadVal*subPesoVal*10)/10;
+    }
     // 1) SIEMPRE guardar localmente primero — no perder cambios por red lenta
     const i=DB.data.presets.findIndex(x=>String(x.id)===String(n.id));
     if(i>=0)DB.data.presets[i]=n;else DB.data.presets.push(n);
@@ -4237,6 +4257,8 @@ function openPresetModal(id){
     }
     return true;
   });
+  // Renderizar el preview de sub-unidades tras abrir el modal
+  setTimeout(()=>{try{_presetRecalcKgFromSub();}catch(_){}},60);
 }
 /** Cola local de presets pendientes de sync (sobrevive recarga). */
 const PRESETS_PENDING_KEY='friosur_admin_presets_pending_v1';
@@ -4309,6 +4331,47 @@ window.friosurTestSupabase=async function(){
   }catch(e){console.warn('getSession falló:',e.message);}
   console.log('Presets pendientes de sync:',_adminGetPresetsPending());
 };
+/** Muestra/oculta bloque sub-unidades según tipo del preset (pallet/carro/castillo). */
+function _presetToggleSubUnidad(){
+  const tipo=String((document.getElementById('f_tipo')||{}).value||'');
+  const block=document.getElementById('presetSubUnidadBlock');
+  if(!block)return;
+  const isContainer=['pallet','carro','castillo'].includes(tipo);
+  block.style.display=isContainer?'block':'none';
+  // Pre-fill sub-unidad por defecto al cambiar tipo
+  const subEl=document.getElementById('f_subUnidad');
+  if(subEl&&!subEl.value){
+    if(tipo==='pallet')subEl.value='canastillo';
+    else if(tipo==='carro'||tipo==='castillo')subEl.value='caja';
+  }
+  _presetRecalcKgFromSub();
+}
+/** Auto-calcula Kg/unidad = subCantidad × subPeso si ambos están seteados. */
+function _presetRecalcKgFromSub(){
+  const tipo=String((document.getElementById('f_tipo')||{}).value||'');
+  const calcEl=document.getElementById('presetSubUnidadCalc');
+  const hintEl=document.getElementById('hintKgRef');
+  if(!['pallet','carro','castillo'].includes(tipo)){
+    if(calcEl)calcEl.textContent='';
+    if(hintEl)hintEl.textContent='';
+    return;
+  }
+  const sub=String((document.getElementById('f_subUnidad')||{}).value||'').trim()||'sub-unidad';
+  const cant=parseInt((document.getElementById('f_subCantidad')||{}).value||0,10)||0;
+  const peso=parseFloat((document.getElementById('f_subPeso')||{}).value||0)||0;
+  if(cant>0&&peso>0){
+    const kg=Math.round(cant*peso*10)/10;
+    const kgEl=document.getElementById('f_kgRef');
+    if(kgEl)kgEl.value=kg;
+    if(calcEl)calcEl.innerHTML='✓ 1 '+tipo+' = '+cant+' '+sub+'(s) × '+peso+' kg = <strong>'+kg+' kg / '+tipo+'</strong>';
+    if(hintEl)hintEl.textContent='(auto del bloque ↓)';
+  }else{
+    if(calcEl)calcEl.textContent='Completa cantidad y peso promedio para auto-calcular Kg/unidad';
+    if(hintEl)hintEl.textContent='';
+  }
+}
+window._presetToggleSubUnidad=_presetToggleSubUnidad;
+window._presetRecalcKgFromSub=_presetRecalcKgFromSub;
 async function delPreset(id){
   if(!confirm('¿Eliminar preset?'))return;
   // Borrar localmente SIEMPRE (no perder la acción por red lenta)
