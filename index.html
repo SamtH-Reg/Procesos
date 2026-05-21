@@ -5900,6 +5900,17 @@ function renderMRegPresets(){
   // En Moldes › Registrar solo aparecen presets de tipo MOLDE (no pallet/carro/castillo/general).
   // Los pallets se registran desde "General"; los moldes desde acá.
   const allPresets=DB.data.presets.filter(p=>p.activo&&String(p.tipo||'').toLowerCase()==='molde'&&!_presetSoloRegistroGeneral(p));
+  // Auto-clear si el preset previamente seleccionado ya no califica (e.g. era pallet
+  // antes de aplicar el filtro tipo=molde). Evita que "Conteo" muestre un preset
+  // fantasma que no está visible en el grid.
+  if(RT.selPresetM!=null){
+    const sel=DB.data.presets.find(p=>String(p.id)===String(RT.selPresetM));
+    if(!sel||String(sel.tipo||'').toLowerCase()!=='molde'||sel.activo===false){
+      RT.selPresetM=null;
+      try{rtSave();}catch(_){}
+      try{if(typeof mRegCalcKg==='function')mRegCalcKg();}catch(_){}
+    }
+  }
   const especie=_getMRegEspecie();
   const presets=especie?allPresets.filter(p=>p.especie===especie):allPresets;
   const cntEl=document.getElementById('mRegPresetCount');
@@ -6311,6 +6322,15 @@ function renderGRegPresets(){
   renderGRegEspecieSelect();
   const grid=document.getElementById('gRegPresetGrid');if(!grid)return;
   const allPresets=DB.data.presets.filter(_presetParaRegistroGeneral);
+  // Auto-clear si el preset seleccionado ya no califica para Registro general
+  if(RT.selPresetG!=null){
+    const sel=DB.data.presets.find(p=>String(p.id)===String(RT.selPresetG));
+    if(!sel||!_presetParaRegistroGeneral(sel)){
+      RT.selPresetG=null;
+      try{rtSave();}catch(_){}
+      try{if(typeof gRegCalcKg==='function')gRegCalcKg();}catch(_){}
+    }
+  }
   const especie=_getGRegEspecieFilter();
   const presets=especie?allPresets.filter(p=>String(p.especie||'').trim()===especie):allPresets;
   const cntEl=document.getElementById('gRegPresetCount');
