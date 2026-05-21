@@ -1467,7 +1467,11 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='turnos-asistencia'&&typeof renderTurnosAsistencia==='function')renderTurnosAsistencia();
     if(id==='equipos')renderEquipos();
     if(id==='roles'){renderRoles();void resyncAuthThenRefreshRoles();}
-    if(id==='supabase'&&typeof renderMigracionesSQL==='function')renderMigracionesSQL();
+    if(id==='supabase'){
+      if(typeof renderMigracionesSQL==='function')renderMigracionesSQL();
+      // Auto-ejecutar diagnóstico tras un pequeño delay (deja que el render termine)
+      setTimeout(()=>{try{if(typeof runDiagnosticoFlujos==='function')runDiagnosticoFlujos();}catch(_){}},800);
+    }
   });
 });
 /** Si el cliente se recreó antes de aplicar sesión, re-lee getSession al abrir Permisos y roles. */

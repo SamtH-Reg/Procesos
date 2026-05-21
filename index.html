@@ -6986,6 +6986,66 @@ window.friosurAuditPendientes=function(){
   console.table(items.map(i=>({preset:i.preset.nombre,pendientes:i.cant,consumido:i.consumido,totalRegistrado:i.totalRegistrado})));
   return breakdown;
 };
+
+/** Diagnóstico completo de flujos de datos (tablet/index).
+ *  Uso desde F12 Console: await friosurDiagnostico() */
+window.friosurDiagnostico=async function(){
+  console.log('%c━━━ DIAGNÓSTICO TABLET ━━━','color:#0369a1;font-weight:bold;font-size:14px');
+  const rows=[];
+  // 1) Cliente y red
+  rows.push({Categoría:'Cliente Supabase',Estado:typeof _tbSb!=='undefined'&&_tbSb?'✓':'❌',Detalle:typeof _tbSb!=='undefined'&&_tbSb?'Inicializado':'No inicializado'});
+  rows.push({Categoría:'Navegador online',Estado:navigator.onLine?'✓':'❌',Detalle:navigator.onLine?'Conectado':'Sin red'});
+  rows.push({Categoría:'Usuario tablet',Estado:typeof _tbUser!=='undefined'&&_tbUser?'✓':'⚠',Detalle:typeof _tbUser!=='undefined'&&_tbUser?(_tbUser.nombre||_tbUser.email):'Sin sesión'});
+  // 2) Catálogos locales
+  rows.push({Categoría:'Presets (local)',Estado:'ℹ',Detalle:(DB.data.presets||[]).length+' filas'});
+  rows.push({Categoría:'Trabajadores (local)',Estado:'ℹ',Detalle:(DB.data.trabajadores||[]).length+' filas'});
+  rows.push({Categoría:'Turnos (local)',Estado:'ℹ',Detalle:(DB.data.turnos||[]).length+' filas'});
+  rows.push({Categoría:'Equipos (local)',Estado:'ℹ',Detalle:(DB.data.equipos||[]).length+' filas'});
+  rows.push({Categoría:'Especies (local)',Estado:'ℹ',Detalle:(DB.data.especies||[]).length+' filas'});
+  rows.push({Categoría:'Roles (local)',Estado:'ℹ',Detalle:(DB.data.roles||[]).length+' filas'});
+  // 3) RT operativo
+  rows.push({Categoría:'Moldes (RT)',Estado:'ℹ',Detalle:(RT.moldes||[]).length+' filas'});
+  rows.push({Categoría:'Pesajes (RT)',Estado:'ℹ',Detalle:(RT.pesajes||[]).length+' filas'});
+  rows.push({Categoría:'Generales (RT)',Estado:'ℹ',Detalle:(RT.generales||[]).length+' filas'});
+  rows.push({Categoría:'Armado moldes',Estado:'ℹ',Detalle:Object.keys(RT.armadoMolde||{}).length+' líneas'});
+  rows.push({Categoría:'Armado pesaje',Estado:'ℹ',Detalle:Object.keys(RT.armadoPesaje||{}).length+' líneas'});
+  // 4) Sync state
+  const pending=typeof _tbIsPendingPush==='function'?_tbIsPendingPush():false;
+  rows.push({Categoría:'Push pendiente',Estado:pending?'⚠':'✓',Detalle:pending?'Datos por subir — toca el badge':'Todo subido'});
+  // 5) Cloud check si hay conexión
+  if(typeof _tbSb!=='undefined'&&_tbSb&&navigator.onLine){
+    try{
+      const t0=Date.now();
+      const{data,error}=await Promise.race([
+        _tbSb.from('presets').select('id',{count:'exact',head:true}),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout 8s')),8000))
+      ]);
+      const dt=Date.now()-t0;
+      rows.push({Categoría:'Ping Supabase (presets)',Estado:error?'❌':'✓',Detalle:error?error.message:'OK '+dt+'ms'});
+    }catch(e){rows.push({Categoría:'Ping Supabase',Estado:'❌',Detalle:e.message});}
+    try{
+      const{data:s,error:sErr}=await Promise.race([
+        _tbSb.auth.getSession(),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000))
+      ]);
+      if(s&&s.session){
+        const min=Math.round((s.session.expires_at*1000-Date.now())/60000);
+        rows.push({Categoría:'Token JWT',Estado:min>5?'✓':'⚠',Detalle:'expira en '+min+' min'});
+      }else{rows.push({Categoría:'Token JWT',Estado:'❌',Detalle:'Sin sesión'});}
+    }catch(e){rows.push({Categoría:'Token JWT',Estado:'⚠',Detalle:e.message});}
+  }
+  console.table(rows);
+  const errs=rows.filter(r=>r.Estado==='❌').length;
+  const warns=rows.filter(r=>r.Estado==='⚠').length;
+  console.log('%c'+(errs?'❌ '+errs+' errores · ':'')+(warns?'⚠ '+warns+' avisos · ':'')+(errs+warns===0?'✓ Todo OK':''),'font-weight:bold;font-size:13px');
+  if(errs||warns){
+    console.log('Comandos útiles:');
+    console.log('  await TBSync.pullCatalogs()              ← Forzar pull desde la nube');
+    console.log('  await TBSync.pushImmediate()             ← Forzar push de lo local');
+    console.log('  await tbFlushPendingCloudSync({force:true}) ← Limpiar badge "Por subir"');
+  }
+  return rows;
+};
 function updateEqStats(){
   const panel=document.getElementById('panelTuneles');if(!panel)return;
   const stats=panel.querySelectorAll('.stat-value');if(stats.length<4)return;
