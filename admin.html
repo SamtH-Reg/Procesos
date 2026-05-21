@@ -4109,37 +4109,132 @@ function openPresetModal(id){
     const newId=!editing?_adminNextPresetId():p.id;
     const n={id:newId,nombre:document.getElementById('f_nombre').value.trim(),tipo:document.getElementById('f_tipo').value,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1'};
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
-    if(!_sb){
-      toast('Sin Supabase: guardando solo en este equipo.','warn');
-      sbLog('Preset sin nube (_sb null) — Conectar en pestaña Supabase',false);
-    }else{
-      sbLog('→ Enviando preset id='+n.id+' a Supabase…');
-      const{error}=await sbUpsertPresets([n]);
-      if(error){
-        const detail=[error.message,error.details,error.hint].filter(Boolean).join(' — ');
-        toast('Supabase no guardó el preset: '+detail,'err');
-        sbLog('Upsert preset falló: '+detail,false);
-        console.error('[presets upsert]',error,n);
-        return false;
-      }
-      sbLog('← Preset id='+n.id+' guardado en Supabase OK');
-    }
+    // 1) SIEMPRE guardar localmente primero — no perder cambios por red lenta
     const i=DB.data.presets.findIndex(x=>String(x.id)===String(n.id));
     if(i>=0)DB.data.presets[i]=n;else DB.data.presets.push(n);
     DB.save();renderPresets();
-    if(_sb)toast('Preset guardado en Supabase (la tablet lo verá al sincronizar)','success');
+    // 2) Push a Supabase en BACKGROUND — no bloquea el modal
+    if(!_sb){
+      toast('Preset guardado localmente. Sin Supabase: conecta en la pestaña Supabase para subir.','warn');
+      sbLog('Preset sin nube (_sb null) — guardado solo localmente',false);
+    }else{
+      toast('Preset guardado localmente. Subiendo a Supabase…','success');
+      sbLog('→ Enviando preset id='+n.id+' a Supabase…');
+      // Marcar como pendiente de sync (se reintenta automáticamente)
+      _adminMarkPresetPending(n.id);
+      void sbUpsertPresets([n]).then(({error})=>{
+        if(error){
+          const detail=[error.message,error.details,error.hint].filter(Boolean).join(' — ');
+          toast('Supabase no guardó el preset (queda pendiente): '+detail,'warn');
+          sbLog('Upsert preset falló: '+detail,false);
+          console.error('[presets upsert]',error,n);
+          _adminMarkPresetPending(n.id); // keep pending
+        }else{
+          sbLog('← Preset id='+n.id+' guardado en Supabase OK',true);
+          _adminClearPresetPending(n.id);
+          toast('Preset sincronizado en Supabase','success');
+        }
+      }).catch(e=>{
+        toast('Supabase falló inesperadamente: '+(e&&e.message?e.message:e)+' — preset queda pendiente','warn');
+        console.error('[presets upsert catch]',e);
+      });
+    }
     return true;
   });
 }
+/** Cola local de presets pendientes de sync (sobrevive recarga). */
+const PRESETS_PENDING_KEY='friosur_admin_presets_pending_v1';
+function _adminGetPresetsPending(){
+  try{return JSON.parse(localStorage.getItem(PRESETS_PENDING_KEY)||'[]');}catch(_){return[];}
+}
+function _adminSavePresetsPending(arr){
+  try{localStorage.setItem(PRESETS_PENDING_KEY,JSON.stringify(Array.isArray(arr)?arr:[]));}catch(_){}
+}
+function _adminMarkPresetPending(id){
+  const list=_adminGetPresetsPending();
+  const s=String(id);
+  if(!list.some(x=>String(x)===s))list.push(id);
+  _adminSavePresetsPending(list);
+}
+function _adminClearPresetPending(id){
+  const s=String(id);
+  _adminSavePresetsPending(_adminGetPresetsPending().filter(x=>String(x)!==s));
+}
+/** Reintenta subir presets pendientes (al volver online o periódicamente). */
+async function _adminRetryPendingPresets(){
+  if(!_sb)return;
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
+  const pending=_adminGetPresetsPending();
+  if(!pending.length)return;
+  const toUpsert=pending.map(id=>(DB.data.presets||[]).find(p=>String(p.id)===String(id))).filter(Boolean);
+  if(!toUpsert.length){_adminSavePresetsPending([]);return;}
+  try{
+    const{error}=await sbUpsertPresets(toUpsert);
+    if(!error){
+      _adminSavePresetsPending([]);
+      sbLog('Presets pendientes ('+toUpsert.length+') subidos OK',true);
+      toast(toUpsert.length+' preset(s) pendientes subidos a Supabase','success');
+    }
+  }catch(e){console.warn('[retry pending presets]',e);}
+}
+// Reintentar al volver la conexión
+window.addEventListener('online',()=>{setTimeout(_adminRetryPendingPresets,1500);});
+// Reintentar cada 2 minutos si quedan pendientes
+setInterval(_adminRetryPendingPresets,120000);
+/** Diagnóstico de conectividad Supabase desde F12: friosurTestSupabase() */
+window.friosurTestSupabase=async function(){
+  console.log('━━━ TEST CONECTIVIDAD SUPABASE ━━━');
+  console.log('navigator.onLine:',typeof navigator!=='undefined'&&navigator.onLine);
+  console.log('_sb existe:',!!_sb);
+  console.log('_currentUser:',_currentUser);
+  if(!_sb){console.warn('Cliente Supabase no inicializado');return;}
+  try{
+    const t0=Date.now();
+    const{data,error}=await Promise.race([
+      _sb.from('presets').select('id').limit(1),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout 10s')),10000))
+    ]);
+    const dt=Date.now()-t0;
+    console.log('Ping presets:',error?'❌ '+error.message:'✅ OK',`(${dt}ms)`,data);
+  }catch(e){console.warn('Ping presets falló:',e.message);}
+  try{
+    const t0=Date.now();
+    const{data:s,error:sErr}=await Promise.race([
+      _sb.auth.getSession(),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout 8s')),8000))
+    ]);
+    const dt=Date.now()-t0;
+    console.log('getSession:',sErr?'❌ '+sErr.message:'✅ OK',`(${dt}ms)`);
+    if(s&&s.session){
+      const exp=s.session.expires_at*1000;
+      const restMin=Math.round((exp-Date.now())/60000);
+      console.log('  Token expira en:',restMin,'min · expires_at:',new Date(exp).toISOString());
+    }
+  }catch(e){console.warn('getSession falló:',e.message);}
+  console.log('Presets pendientes de sync:',_adminGetPresetsPending());
+};
 async function delPreset(id){
   if(!confirm('¿Eliminar preset?'))return;
-  if(_sb){
-    const{error}=await sbDeletePresetRemote(id);
-    if(error){toast('Supabase no permitió borrar: '+error.message+' (preset no eliminado)','err');return;}
-  }else if(!confirm('Sin Supabase conectado: el borrado será solo local. ¿Continuar?'))return;
+  // Borrar localmente SIEMPRE (no perder la acción por red lenta)
   DB.data.presets=DB.data.presets.filter(p=>String(p.id)!==String(id));
   DB.save();renderPresets();
-  toast(_sb?'Preset eliminado (Supabase y local)':'Preset eliminado (solo local)','success');
+  toast('Preset eliminado localmente. Sincronizando…','success');
+  if(!_sb){
+    toast('Sin Supabase: el borrado quedó solo local. Conecta para sincronizar.','warn');
+    return;
+  }
+  // Intentar borrar en Supabase en background
+  void sbDeletePresetRemote(id).then(({error})=>{
+    if(error){
+      toast('Supabase no permitió borrar (queda pendiente): '+(error.message||error),'warn');
+      sbLog('delPreset cloud fallo: '+(error.message||error),false);
+    }else{
+      sbLog('Preset id='+id+' eliminado en Supabase OK',true);
+    }
+  }).catch(e=>{
+    console.warn('[delPreset cloud catch]',e);
+    toast('Supabase falló al borrar: '+(e&&e.message?e.message:e),'warn');
+  });
 }
 
 /* ════════════ SYNC DESDE ASISTENCIA ════════════ */
