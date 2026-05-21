@@ -6823,10 +6823,14 @@ function renderEquipos(){
   renderPorCargar();
 }
 function aggregatePendientes(filterTipo){
-  // Suma pendiente por presetId. filterTipo null = todos (túneles). 'molde' = sólo molde (placas).
-  // Incluye RT.moldes y RT.generales (molde/placa con horas túnel o placa en preset general).
+  // Suma pendiente por presetId.
+  //   filterTipo === null    → todos (vista global "Por cargar")
+  //   filterTipo === 'molde' → solo moldes/placas (modal de PLACAS)
+  //   filterTipo === 'tunel' → solo pallet/carro/castillo (modal de TÚNELES)
+  // Incluye RT.moldes y RT.generales.
   // Devuelve también totalRegistrado y consumido para diagnóstico.
   const map={};
+  const tunelTipos=new Set(['pallet','carro','castillo']);
   const push=(r)=>{
     const cantR=+r.cant||0;
     const pendR=r.pendiente!=null?(+r.pendiente||0):cantR;
@@ -6834,6 +6838,7 @@ function aggregatePendientes(filterTipo){
     if(cantR<=0&&pendR<=0)return;
     const p=DB.data.presets.find(x=>String(x.id)===String(r.presetId));if(!p)return;
     if(filterTipo==='molde'&&!_presetEsConteoMoldePlaca(p))return;
+    if(filterTipo==='tunel'&&!tunelTipos.has(String(p.tipo||'').toLowerCase()))return;
     if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,totalRegistrado:0,consumido:0,especieRow:''};
     map[r.presetId].cant+=Math.max(0,pendR);
     map[r.presetId].totalRegistrado+=cantR;
@@ -7171,8 +7176,10 @@ function openEqModal(codigo){
   }).join('')+'</div>'):'<div style="padding:14px;text-align:center;color:var(--text-3);font-size:12px;">—</div>';
 
   const actions=[];
-  // Por cargar desde conteo (pending moldes filtered by tipo)
-  const pendFilter=eq.tipo==='placa'?'molde':null;
+  // Por cargar desde conteo: filtrado por destino del equipo
+  //   Placa → solo moldes
+  //   Túnel → solo pallet/carro/castillo (no moldes individuales)
+  const pendFilter=eq.tipo==='placa'?'molde':(eq.tipo==='tunel'?'tunel':null);
   const pendientes=aggregatePendientes(pendFilter);
   const cargarMasSub='';
   if(canLoadUi&&pendientes.length){
@@ -7366,7 +7373,8 @@ function cargarDesdeConteo(presetId){
   const p=DB.data.presets.find(x=>x.id===presetId);if(!p)return;
   const rt=getEqRT(_eqModalCode);
   if(rt.estado==='deshielando'){showToast('Finaliza el deshielo antes de cargar desde conteo','error');return;}
-  const pend=aggregatePendientes(eq.tipo==='placa'?'molde':null).find(x=>x.preset.id===presetId);
+  const pendFilter=eq.tipo==='placa'?'molde':(eq.tipo==='tunel'?'tunel':null);
+  const pend=aggregatePendientes(pendFilter).find(x=>x.preset.id===presetId);
   if(!pend||pend.cant<=0){showToast('Sin pendientes','error');return;}
   const capLeft=eq.tipo==='placa'?_eqPlacaCapRestante(eq,rt):pend.cant;
   if(eq.tipo==='placa'&&capLeft<=0){showToast('Placa sin capacidad restante','error');return;}
