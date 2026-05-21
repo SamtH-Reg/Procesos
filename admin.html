@@ -6639,6 +6639,20 @@ async function sbUpsertPresets(rows){
   const msg1=String(r.error&&r.error.message||'');
   const fuesTimeout=/Timeout/i.test(msg1);
   const fueAuth=/JWT|auth|session|401|403/i.test(msg1);
+  const fueConstraint=/check constraint|presets_uso_equipo_check|violates check/i.test(msg1);
+  // Fallback constraint: si el schema viejo no acepta 'placa_general',
+  // mapear a 'placa' (lossy pero funcional) y reintentar.
+  if(fueConstraint&&mapped.some(r=>r.uso_equipo==='placa_general')){
+    sbLog('Constraint check rechazó "placa_general" — fallback a "placa". Ejecuta supabase_migrate_presets_uso_placa_general.sql para resolver.',false);
+    mapped=mapped.map(r=>r.uso_equipo==='placa_general'?{...r,uso_equipo:'placa'}:r);
+    const r2=await intentar(20000,'fallback placa_general → placa');
+    if(r2.ok){
+      // Aviso al usuario: el cloud no preserva la distinción
+      if(typeof toast==='function')toast('Preset guardado, pero la nube no soporta "Placa + General" todavía. Ejecuta el SQL de migración en Supabase para que otros equipos lo vean.','warn');
+      return{data:null,error:null,partial:true};
+    }
+    return{error:r2.error||new Error('Constraint rechaza incluso fallback')};
+  }
   if(fuesTimeout||fueAuth){
     sbLog('Upsert preset falló ('+msg1+') — refrescando sesión y reintentando…',false);
     try{
