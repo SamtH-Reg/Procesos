@@ -10306,6 +10306,29 @@ function openFsCombo(cfg){
   document.addEventListener('mousedown',_fsCombo._docClick,true);
   setTimeout(()=>{try{searchInp.focus();}catch(e){}},40);
 }
+/** Normaliza el valor de turno UCO (Día/Tarde/Noche/sin) a key estándar.
+ *  Paridad con admin.html _turnoKey() — usado para filtrar el picker. */
+function _idxTurnoKey(rawTurno){
+  const s=String(rawTurno||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  if(!s)return'__sin__';
+  if(s.includes('dia')||s==='d')return'dia';
+  if(s.includes('tarde')||s==='t')return'tarde';
+  if(s.includes('noche')||s==='n')return'noche';
+  return'__sin__';
+}
+/** Devuelve el turno KEY (dia/noche/tarde) de la línea que se está editando en armado.
+ *  null si no estamos en armado o no hay modal abierto. */
+function _idxArmadoLineaTurnoKey(){
+  // Pesaje armado modal abierto
+  if(document.getElementById('pArmadoModal')&&typeof _editPArmado!=='undefined'&&_editPArmado){
+    return _idxTurnoKey(_editPArmado.turno);
+  }
+  // Moldes armado modal abierto
+  if(document.getElementById('mArmadoModal')&&typeof _editMArmado!=='undefined'&&_editMArmado){
+    return _idxTurnoKey(_editMArmado.turno);
+  }
+  return null;
+}
 function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
   let anchorEl=null,mode,cb,list;
   if(evOrMode&&evOrMode.currentTarget){
@@ -10317,18 +10340,39 @@ function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
   }
   const pool=Array.isArray(DB&&DB.data&&DB.data.trabajadores)?DB.data.trabajadores:[];
   const isArmadoPlanillero=(mode==='planillero'&&!Array.isArray(list));
-  const defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  let defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
+  // Filtro por turno cuando el picker se abre desde armado de línea (Moldes / Pesaje).
+  // El trabajador.turno viene de UCO Asistencia (Día/Tarde/Noche). Filtramos para que solo
+  // aparezcan los del turno seleccionado en el modal. Incluye también los "Sin turno" como
+  // fallback (no excluir gente sin clasificar).
+  const lineaTurnoKey=_idxArmadoLineaTurnoKey();
+  const filtrarPorTurno=!Array.isArray(list)&&lineaTurnoKey&&(mode==='trab'||mode==='planillero');
+  if(filtrarPorTurno){
+    const filtered=defaultPool.filter(t=>{
+      const k=_idxTurnoKey(t&&t.turno);
+      return k===lineaTurnoKey||k==='__sin__'; // sin turno se mantiene como fallback
+    });
+    // Solo aplicar el filtro si hay al menos algún match — caso límite cuando los
+    // trabajadores no tienen turno todavía sincronizado de UCO.
+    if(filtered.length)defaultPool=filtered;
+  }
   const allTrabs=Array.isArray(list)?list:defaultPool;
   const isRegistro=Array.isArray(list);
   const isArmadoPicker=!isRegistro;
   const hideManual=isArmadoPicker||!!(isRegistro&&list&&list._enArmadoLinea&&allTrabs.length>0);
+  // Construir mensaje vacío con contexto del turno
+  let emptyMsg=isRegistro?'Sin trabajadores asignados en esta línea':'Sin resultados';
+  if(filtrarPorTurno&&!allTrabs.length){
+    const lblMap={dia:'Día',tarde:'Tarde',noche:'Noche'};
+    emptyMsg='Sin trabajadores del turno '+(lblMap[lineaTurnoKey]||lineaTurnoKey)+' en Asistencia. Re-sync UCO o cambia el turno de la línea.';
+  }
   openFsCombo({
     anchorEl,
     mode,
     workers:allTrabs,
     allowManual:!hideManual,
     hideManual,
-    emptyMsg:isRegistro?'Sin trabajadores asignados en esta línea':'Sin resultados',
+    emptyMsg,
     onSelect:function(id,nombre,codigo){
       if(id==='__manual__')return;
       if(cb)cb(id,nombre,codigo);
