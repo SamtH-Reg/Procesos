@@ -2633,6 +2633,28 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
               <input class="input" id="gRegGuia" placeholder="G-2026-000">
             </div>
           </div>
+          <!-- Bloque sub-unidades (canastillos/cajas + peso promedio) — solo visible para pallet/carro/castillo -->
+          <div id="gRegSubBlock" class="form-grid cols-2" style="display:none;margin-top:12px;padding:12px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:10px;">
+            <div class="form-field" style="grid-column:span 2;">
+              <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">📦 <span id="gRegSubTitle">Composición del pallet</span></div>
+              <div style="font-size:11px;color:#78350f;line-height:1.45;">Ingresa el detalle real de este registro. Los kilos se recalcularán automáticamente.</div>
+            </div>
+            <div class="form-field">
+              <label class="form-label"><span id="gRegSubCantLabel">Cantidad de canastillos</span> <span class="required">*</span></label>
+              <div class="stepper">
+                <button class="stepper-btn" type="button" onclick="gRegStepSub(-1)">−</button>
+                <input type="number" id="gRegSubCant" placeholder="0" min="0" step="1" inputmode="numeric" oninput="gRegCalcKg()">
+                <button class="stepper-btn" type="button" onclick="gRegStepSub(1)">+</button>
+              </div>
+            </div>
+            <div class="form-field">
+              <label class="form-label"><span id="gRegSubPesoLabel">Peso promedio por canastillo</span> <span class="required">*</span></label>
+              <div class="input-suffix">
+                <input class="input" id="gRegSubPeso" type="number" min="0" step="0.1" placeholder="0" inputmode="decimal" oninput="gRegCalcKg()">
+                <span class="suffix">kg</span>
+              </div>
+            </div>
+          </div>
           <div style="margin-top:18px;display:flex;gap:12px;">
             <button class="btn success lg" type="button" style="flex:1;" onclick="regGeneral()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
@@ -6311,6 +6333,17 @@ function selectPresetG(id){
   if(grid){grid.querySelectorAll('.preset-card').forEach(c=>{
     c.classList.toggle('selected',String(c.dataset.preset)===String(id));
   });}
+  // Prellenar sub-unidades con sugeridos del preset
+  const p=DB.data.presets.find(x=>x.id===id);
+  if(p&&['pallet','carro','castillo'].includes(p.tipo)){
+    const subCantEl=document.getElementById('gRegSubCant');
+    const subPesoEl=document.getElementById('gRegSubPeso');
+    if(subCantEl&&p.subCantidad>0)subCantEl.value=p.subCantidad;
+    if(subPesoEl&&p.subPeso>0)subPesoEl.value=p.subPeso;
+    // Pre-llenar cantidad=1 (típico: registras 1 pallet a la vez)
+    const cantEl=document.getElementById('gRegCant');
+    if(cantEl&&!cantEl.value)cantEl.value=1;
+  }
   gRegCalcKg();
 }
 function gRegCalcKg(){
@@ -6327,28 +6360,67 @@ function gRegCalcKg(){
     else if(p&&p.tipo==='castillo')cantLabel.textContent='Castillos';
     else cantLabel.textContent='Cantidad';
   }
-  // Si es contenedor con sub-unidades definidas, mostrar breakdown
-  const hasSub=p&&['pallet','carro','castillo'].includes(p.tipo)&&p.subCantidad>0&&p.subPeso>0;
-  if(!p){kgEl.value='';kgEl.placeholder='— selecciona preset';meta.textContent='Ingresa la cantidad';return;}
-  if(!cant){
-    kgEl.value='';
-    kgEl.placeholder=p.kgRef+' kg/unidad';
-    if(hasSub){
-      meta.innerHTML='Preset: <strong>'+esc(p.nombre)+'</strong> · 1 '+esc(p.tipo)+' = '+p.subCantidad+' '+esc(p.subUnidad||'sub-unidad')+'(s) × '+p.subPeso+' kg = <strong>'+p.kgRef+' kg/'+esc(p.tipo)+'</strong>';
+  const isContainer=p&&['pallet','carro','castillo'].includes(p.tipo);
+  // Mostrar/ocultar bloque sub-unidades + actualizar labels
+  const subBlock=document.getElementById('gRegSubBlock');
+  const subTitle=document.getElementById('gRegSubTitle');
+  const subCantLbl=document.getElementById('gRegSubCantLabel');
+  const subPesoLbl=document.getElementById('gRegSubPesoLabel');
+  if(subBlock){
+    if(isContainer){
+      subBlock.style.display='';
+      const subName=p.subUnidad||(p.tipo==='pallet'?'canastillo':'caja');
+      const subPlural=subName.endsWith('o')?subName+'s':(subName.endsWith('a')?subName+'s':subName+'s');
+      if(subTitle)subTitle.textContent='Composición del '+p.tipo;
+      if(subCantLbl)subCantLbl.textContent='Cantidad de '+subPlural+' (por '+p.tipo+')';
+      if(subPesoLbl)subPesoLbl.textContent='Peso promedio por '+subName+' (kg)';
     }else{
-      meta.textContent='Preset: '+p.nombre+' ('+p.kgRef+' kg/u)';
+      subBlock.style.display='none';
     }
+  }
+  if(!p){kgEl.value='';kgEl.placeholder='— selecciona preset';meta.textContent='Ingresa la cantidad';return;}
+  // Modo contenedor: calcular usando sub-unidades del FORMULARIO (no del preset)
+  if(isContainer){
+    const subCantInput=document.getElementById('gRegSubCant');
+    const subPesoInput=document.getElementById('gRegSubPeso');
+    const subCant=parseInt(subCantInput?subCantInput.value:0,10)||0;
+    const subPeso=parseFloat(subPesoInput?subPesoInput.value:0)||0;
+    const subName=p.subUnidad||(p.tipo==='pallet'?'canastillo':'caja');
+    if(!cant){
+      kgEl.value='';kgEl.placeholder=p.kgRef+' kg/'+p.tipo;
+      meta.innerHTML='Preset: <strong>'+esc(p.nombre)+'</strong> · '+(p.subCantidad>0?'Sugerido: '+p.subCantidad+' '+esc(subName)+'(s) × '+p.subPeso+' kg = '+p.kgRef+' kg/'+esc(p.tipo):'Ingresa cantidad y composición');
+      return;
+    }
+    if(!subCant||!subPeso){
+      kgEl.value='';kgEl.placeholder='— faltan datos';
+      meta.innerHTML='Falta ingresar <strong>cantidad de '+esc(subName)+'</strong> y <strong>peso promedio</strong>'+(p.subCantidad>0?' (sugerido: '+p.subCantidad+' × '+p.subPeso+' kg)':'');
+      return;
+    }
+    // Total = pallets × canastillos × peso_promedio
+    const total=Math.round(cant*subCant*subPeso*10)/10;
+    kgEl.value=total.toString().replace('.',',');
+    const totalSubs=cant*subCant;
+    meta.innerHTML='= '+cant+' '+esc(p.tipo)+'(s) × '+subCant+' '+esc(subName)+'(s) × '+subPeso+' kg = <strong>'+total+' kg</strong> ('+totalSubs+' '+esc(subName)+'(s) en total)';
+    return;
+  }
+  // Modo simple (molde/general): cantidad × kgRef
+  if(!cant){
+    kgEl.value='';kgEl.placeholder=p.kgRef+' kg/unidad';
+    meta.textContent='Preset: '+p.nombre+' ('+p.kgRef+' kg/u)';
     return;
   }
   const total=Math.round(cant*p.kgRef*10)/10;
   kgEl.value=total.toString().replace('.',',');
-  if(hasSub){
-    const totalSubs=cant*p.subCantidad;
-    meta.innerHTML='= '+cant+' '+esc(p.tipo)+'(s) × '+p.subCantidad+' '+esc(p.subUnidad||'sub-u')+'(s) × '+p.subPeso+' kg = <strong>'+total+' kg</strong> ('+totalSubs+' '+esc(p.subUnidad||'sub-u')+'(s) en total)';
-  }else{
-    meta.textContent='= '+cant+' × '+p.kgRef+' kg = '+total+' kg';
-  }
+  meta.textContent='= '+cant+' × '+p.kgRef+' kg = '+total+' kg';
 }
+/** Stepper para campo cantidad-de-sub-unidad en registro general. */
+function gRegStepSub(delta){
+  const el=document.getElementById('gRegSubCant');if(!el)return;
+  const cur=parseInt(el.value)||0;
+  el.value=Math.max(0,cur+delta);
+  gRegCalcKg();
+}
+window.gRegStepSub=gRegStepSub;
 function _healGeneralRow(r){
   if(!r||typeof r!=='object')return;
   if(!r.fecha)r.fecha=nowDate();
@@ -6370,7 +6442,19 @@ function regGeneral(){
   const turnoCode=String((document.getElementById('gRegTurno')||{}).value||'').trim()||(_inferTurnoCodigoPorHorario&&_inferTurnoCodigoPorHorario())||'dia';
   const fechaArmInput=_tbNormYmd((document.getElementById('gRegFecha')||{}).value)||todayLocalYmd();
   const fechaReg=_fechaRegistroOperativo(turnoCode,fechaArmInput);
-  const kg=Math.round(cant*p.kgRef*10)/10;
+  // Modo contenedor: kg = cant × subCant × subPeso (del formulario, no del preset)
+  const isContainer=['pallet','carro','castillo'].includes(p.tipo);
+  let kg,subCant=0,subPeso=0;
+  const subName=p.subUnidad||(p.tipo==='pallet'?'canastillo':'caja');
+  if(isContainer){
+    subCant=parseInt((document.getElementById('gRegSubCant')||{}).value||0,10)||0;
+    subPeso=parseFloat((document.getElementById('gRegSubPeso')||{}).value||0)||0;
+    if(!subCant){showToast('Ingresa la cantidad de '+subName+'(s) del '+p.tipo,'error');document.getElementById('gRegSubCant').focus();return;}
+    if(!subPeso){showToast('Ingresa el peso promedio por '+subName+' (kg)','error');document.getElementById('gRegSubPeso').focus();return;}
+    kg=Math.round(cant*subCant*subPeso*10)/10;
+  }else{
+    kg=Math.round(cant*p.kgRef*10)/10;
+  }
   const rec={
     id:nextId(RT.generales),hora:nowHM(),fecha:fechaReg,
     turno:_cycleTurnoNorm(turnoCode),
@@ -6378,11 +6462,11 @@ function regGeneral(){
     producto:p.nombre,presetId:p.id,tipo:p.tipo,
     destino:p.destino,calibre:p.calibre,especie:p.especie,
     cant,pendiente:cant,kg,guia,
-    // Snapshot del breakdown sub-unidad (visible en reportes para auditoría)
-    subUnidad:p.subUnidad||'',
-    subCantidad:p.subCantidad||0,
-    subPeso:p.subPeso||0,
-    subTotalSubs:(p.subCantidad>0?cant*p.subCantidad:0),
+    // Snapshot del breakdown real ingresado en este registro (no del preset)
+    subUnidad:isContainer?subName:'',
+    subCantidad:isContainer?subCant:0,
+    subPeso:isContainer?subPeso:0,
+    subTotalSubs:isContainer?cant*subCant:0,
   };
   RT.generales.unshift(rec);rtSave({skipCloudSchedule:true});
   renderGeneralesTable();
@@ -6399,14 +6483,22 @@ function regGeneral(){
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   document.getElementById('gRegCant').value='';
   document.getElementById('gRegKg').value='';
+  // Limpiar sub-unidades para próximo registro (la siguiente carga puede tener distinto peso)
+  const subCAfter=document.getElementById('gRegSubCant');if(subCAfter)subCAfter.value='';
+  const subPAfter=document.getElementById('gRegSubPeso');if(subPAfter)subPAfter.value='';
   gRegCalcKg();
   const enMolde=_presetEsConteoMoldePlaca(p);
-  _tbToastAfterOperativoSave('Registro general guardado · '+cant+' '+p.tipo+' = '+kg+' kg'+(enMolde?' · visible en moldes/túneles':''));
+  const mensajeBase=isContainer
+    ?'Registro guardado · '+cant+' '+p.tipo+'(s) × '+subCant+' '+subName+'(s) × '+subPeso+' kg = '+kg+' kg'
+    :'Registro general guardado · '+cant+' '+p.tipo+' = '+kg+' kg';
+  _tbToastAfterOperativoSave(mensajeBase+(enMolde?' · visible en moldes/túneles':''));
 }
 function clearGReg(){
   document.getElementById('gRegCant').value='';
   document.getElementById('gRegKg').value='';
   document.getElementById('gRegGuia').value='';
+  const subC=document.getElementById('gRegSubCant');if(subC)subC.value='';
+  const subP=document.getElementById('gRegSubPeso');if(subP)subP.value='';
   const fe=document.getElementById('gRegFecha');if(fe)fe.value=todayLocalYmd();
   RT.selPresetG=null;rtSave();
   renderGRegPresets();gRegCalcKg();
