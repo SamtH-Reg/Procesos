@@ -430,6 +430,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="nav-item" data-page="trabajadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Trabajadores</div>
   <div class="nav-item" data-page="planilleros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>Planilleros</div>
   <div class="nav-item" data-page="turnos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Turnos y horarios</div>
+  <div class="nav-item" data-page="turnos-asistencia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Turnos (Asistencia)</div>
   <div class="nav-item" data-page="equipos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Equipos</div>
 
   <div class="nav-sec">Sistema</div>
@@ -863,6 +864,57 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <thead><tr><th>Código</th><th>Nombre</th><th>Inicio</th><th>Fin</th><th>Estado</th><th></th></tr></thead>
     <tbody id="tbTurnos"></tbody>
   </table></div>
+</div>
+
+<!-- ═══ TURNOS · ASISTENCIA (UCO) — Solo lectura, los cambios se hacen en UCO admin ═══ -->
+<div class="page" id="page-turnos-asistencia">
+  <div class="page-hdr">
+    <div>
+      <h1 class="page-title">Turnos · Asistencia
+        <span style="font-size:11px;font-weight:600;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:8px;margin-left:8px;vertical-align:middle;">SOLO LECTURA</span>
+      </h1>
+      <div class="page-sub">Trabajadores agrupados por turno · fuente: <a href="https://samth-reg.github.io/UCO/admin.html" target="_blank" style="color:var(--brand);">UCO Asistencia</a> · para editar turnos abre allí</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ghost sm" type="button" onclick="renderTurnosAsistencia()">↻ Refrescar vista</button>
+      <button class="btn sm" type="button" onclick="adminResyncEmpleadosFromUCO()" id="btnResyncUCO">↓ Re-sync desde UCO</button>
+    </div>
+  </div>
+  <div id="turnosAsistenciaInfo" style="background:#dbeafe;color:#1e3a66;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.5;">
+    <strong>📌 Cómo funciona:</strong> Los turnos se asignan a cada empleado en <strong>UCO Asistencia</strong>. Aquí los ves agrupados, pero <strong>no podés editarlos</strong>. Si un trabajador cambia de turno en UCO, pulsa <strong>Re-sync desde UCO</strong> (o espera al sync automático) para reflejar el cambio aquí y en las tablets.
+  </div>
+  <div class="slicer-bar">
+    <div class="slicer" style="min-width:280px;">
+      <label class="form-label">Buscar trabajador</label>
+      <input class="input" id="tAsisSearch" placeholder="Nombre, código o ficha…" oninput="renderTurnosAsistencia()">
+    </div>
+    <div class="slicer" style="min-width:200px;">
+      <label class="form-label">Turno</label>
+      <select class="select" id="tAsisFiltroTurno" onchange="renderTurnosAsistencia()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="slicer" style="min-width:160px;">
+      <label class="form-label">Estado</label>
+      <select class="select" id="tAsisFiltroEstado" onchange="renderTurnosAsistencia()">
+        <option value="">Todos</option>
+        <option value="activo">Solo activos</option>
+        <option value="inactivo">Solo inactivos</option>
+      </select>
+    </div>
+  </div>
+  <!-- Resumen por turno (KPI cards) -->
+  <div id="turnosAsistenciaKPIs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;"></div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-title">Listado por turno</div>
+      <div class="card-sub" id="turnosAsistenciaSub">—</div>
+    </div>
+    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
+      <thead><tr><th style="text-align:left;">Nombre</th><th style="text-align:left;">Código / Ficha</th><th style="text-align:left;">Centro de costo</th><th style="text-align:left;">Contrato</th><th style="text-align:left;">Turno</th><th style="text-align:left;">Estado</th></tr></thead>
+      <tbody id="tbTurnosAsistencia"></tbody>
+    </table></div>
+  </div>
 </div>
 
 <!-- ═══ EQUIPOS ═══ -->
@@ -1327,6 +1379,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='trabajadores')renderTrabs();
     if(id==='planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
     if(id==='turnos')renderTurnos();
+    if(id==='turnos-asistencia'&&typeof renderTurnosAsistencia==='function')renderTurnosAsistencia();
     if(id==='equipos')renderEquipos();
     if(id==='roles'){renderRoles();void resyncAuthThenRefreshRoles();}
   });
@@ -4542,6 +4595,7 @@ async function runSyncEmpleados(){
     const nextIdRef={n:_adminNextTrabId()};
     const mapped=all.map((e,i)=>_mapEmpleado(e,i,prevByKey,nextIdRef));
     DB.data.trabajadores=mapped;DB.save();
+    try{localStorage.setItem('friosur_uco_last_sync',String(Date.now()));}catch(_){}
     renderTrabs();
     _syncLog(`✓ ${mapped.length} trabajadores en local — subiendo a Supabase…`);
     const pushed=await adminPushTrabajadoresToCloud({silent:true});
@@ -4555,6 +4609,149 @@ async function runSyncEmpleados(){
   }catch(e){_syncLog('Error: '+e.message,false);toast('Error sync: '+e.message,'err');}
   btn.disabled=false;btn.textContent='↓ Sincronizar ahora';
 }
+
+/* ════════════ TURNOS · ASISTENCIA (vista read-only de UCO) ════════════ */
+const TURNOS_ASISTENCIA_META={
+  dia:    {label:'Día',    icon:'☀️', color:'#f59e0b', bg:'#fef3c7', textColor:'#92400e'},
+  tarde:  {label:'Tarde',  icon:'🌅', color:'#f97316', bg:'#ffedd5', textColor:'#9a3412'},
+  noche:  {label:'Noche',  icon:'🌙', color:'#1e3a66', bg:'#dbeafe', textColor:'#1e3a8a'},
+  '__sin__': {label:'Sin turno',icon:'❓',color:'#94a3b8',bg:'#f1f5f9',textColor:'#475569'}
+};
+/** Normaliza el valor de turno del empleado a una key estándar (dia/tarde/noche/__sin__). */
+function _turnoKey(rawTurno){
+  const s=String(rawTurno||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  if(!s)return'__sin__';
+  if(s.includes('dia')||s==='d')return'dia';
+  if(s.includes('tarde')||s==='t')return'tarde';
+  if(s.includes('noche')||s==='n')return'noche';
+  return'__sin__';
+}
+function _turnoMeta(rawTurno){
+  return TURNOS_ASISTENCIA_META[_turnoKey(rawTurno)]||TURNOS_ASISTENCIA_META['__sin__'];
+}
+/** Renderiza la página Turnos · Asistencia (read-only). */
+function renderTurnosAsistencia(){
+  const tb=document.getElementById('tbTurnosAsistencia');
+  const kpisEl=document.getElementById('turnosAsistenciaKPIs');
+  const sub=document.getElementById('turnosAsistenciaSub');
+  const selTurno=document.getElementById('tAsisFiltroTurno');
+  if(!tb||!kpisEl)return;
+  const all=Array.isArray(DB.data.trabajadores)?DB.data.trabajadores:[];
+  // Poblar el filtro de turnos con los turnos efectivamente presentes
+  if(selTurno){
+    const prevVal=selTurno.value;
+    const presentes=new Set();
+    all.forEach(t=>presentes.add(_turnoKey(t.turno)));
+    const opts=['<option value="">Todos los turnos</option>'];
+    ['dia','tarde','noche','__sin__'].forEach(k=>{
+      if(presentes.has(k))opts.push('<option value="'+k+'">'+TURNOS_ASISTENCIA_META[k].icon+' '+TURNOS_ASISTENCIA_META[k].label+'</option>');
+    });
+    selTurno.innerHTML=opts.join('');
+    if(prevVal)selTurno.value=prevVal;
+  }
+  // Filtros
+  const q=String((document.getElementById('tAsisSearch')||{}).value||'').trim().toLowerCase();
+  const fTurno=String((selTurno||{}).value||'').trim();
+  const fEstado=String((document.getElementById('tAsisFiltroEstado')||{}).value||'').trim();
+  const filtered=all.filter(t=>{
+    if(q){
+      const nom=(t.nombre||'').toLowerCase();
+      const cod=(t.codigo||'').toLowerCase();
+      const fic=String(t.ficha||'').toLowerCase();
+      if(!nom.includes(q)&&!cod.includes(q)&&!fic.includes(q))return false;
+    }
+    if(fTurno&&_turnoKey(t.turno)!==fTurno)return false;
+    if(fEstado==='activo'&&t.activo===false)return false;
+    if(fEstado==='inactivo'&&t.activo!==false)return false;
+    return true;
+  });
+  // KPI cards por turno (sobre el universo TOTAL, no el filtrado)
+  const byTurno={dia:0,tarde:0,noche:0,'__sin__':0};
+  all.forEach(t=>{if(t.activo!==false)byTurno[_turnoKey(t.turno)]++;});
+  kpisEl.innerHTML=['dia','tarde','noche','__sin__'].map(k=>{
+    const m=TURNOS_ASISTENCIA_META[k];
+    const n=byTurno[k]||0;
+    return '<div style="background:'+m.bg+';border:1px solid '+m.color+'33;border-radius:12px;padding:14px;">'+
+      '<div style="font-size:24px;line-height:1;margin-bottom:6px;">'+m.icon+'</div>'+
+      '<div style="font-size:11px;font-weight:700;color:'+m.textColor+';text-transform:uppercase;letter-spacing:.04em;">Turno '+m.label+'</div>'+
+      '<div style="font-size:28px;font-weight:800;color:'+m.textColor+';margin-top:2px;font-family:var(--mono,monospace);">'+n+'</div>'+
+      '<div style="font-size:10px;color:'+m.textColor+';opacity:.7;">trabajadores activos</div>'+
+    '</div>';
+  }).join('');
+  // Sub texto
+  if(sub){
+    const lastSync=localStorage.getItem('friosur_uco_last_sync')||'';
+    const lastSyncTxt=lastSync?new Date(parseInt(lastSync,10)).toLocaleString('es-CL'):'nunca';
+    sub.textContent=filtered.length+' de '+all.length+' trabajadores · último sync UCO: '+lastSyncTxt;
+  }
+  // Tabla
+  if(!filtered.length){
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-3);">'+
+      (all.length?'Sin coincidencias con los filtros.':'Sin trabajadores. Pulsa "Re-sync desde UCO" para descargar.')+
+    '</td></tr>';
+    return;
+  }
+  // Ordenar por turno → nombre
+  const sorted=filtered.slice().sort((a,b)=>{
+    const ka=_turnoKey(a.turno),kb=_turnoKey(b.turno);
+    const order={dia:0,tarde:1,noche:2,'__sin__':3};
+    if(order[ka]!==order[kb])return order[ka]-order[kb];
+    return String(a.nombre||'').localeCompare(String(b.nombre||''));
+  });
+  tb.innerHTML=sorted.map(t=>{
+    const m=_turnoMeta(t.turno);
+    const cod=esc(t.codigo||'—');
+    const ficha=esc(t.ficha||'');
+    const codFicha=ficha?cod+' / '+ficha:cod;
+    return '<tr>'+
+      '<td style="font-weight:700;padding:10px 12px;">'+esc(t.nombre||'—')+'</td>'+
+      '<td style="padding:10px 12px;font-family:var(--mono,monospace);font-size:12px;color:var(--text-2);">'+codFicha+'</td>'+
+      '<td style="padding:10px 12px;color:var(--text-2);">'+esc(t.centro_costo||'—')+'</td>'+
+      '<td style="padding:10px 12px;color:var(--text-2);">'+esc(t.contrato||'—')+'</td>'+
+      '<td style="padding:10px 12px;"><span style="font-weight:700;background:'+m.bg+';color:'+m.textColor+';padding:3px 10px;border-radius:8px;font-size:12px;">'+m.icon+' '+m.label+'</span></td>'+
+      '<td style="padding:10px 12px;">'+(t.activo!==false?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>')+'</td>'+
+    '</tr>';
+  }).join('');
+}
+/** Re-sync desde UCO sin abrir la página de Sync. Marca el timestamp. */
+async function adminResyncEmpleadosFromUCO(){
+  const btn=document.getElementById('btnResyncUCO');
+  if(btn){btn.disabled=true;btn.textContent='Sincronizando…';}
+  try{
+    await runSyncEmpleados();
+    localStorage.setItem('friosur_uco_last_sync',String(Date.now()));
+    if(typeof renderTurnosAsistencia==='function')renderTurnosAsistencia();
+  }catch(e){
+    console.warn('[adminResyncEmpleadosFromUCO]',e);
+    toast('Error al re-sync: '+(e.message||e),'err');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='↓ Re-sync desde UCO';}
+  }
+}
+// Auto-sync periódico desde UCO cada 30 min (solo si la página de Turnos · Asistencia está abierta o admin lleva mucho sin sync)
+let _ucoAutoSyncTimer=null;
+function _adminScheduleUCOAutoSync(){
+  if(_ucoAutoSyncTimer)clearInterval(_ucoAutoSyncTimer);
+  _ucoAutoSyncTimer=setInterval(()=>{
+    try{
+      const lastSync=parseInt(localStorage.getItem('friosur_uco_last_sync')||'0',10);
+      const minutosDesde=(Date.now()-lastSync)/60000;
+      // Solo auto-sync si pasaron 30+ min sin sync manual
+      if(minutosDesde<30)return;
+      const tabActiva=document.querySelector('.page.active');
+      const enTurnos=tabActiva&&tabActiva.id==='page-turnos-asistencia';
+      // Sync silencioso si está en la página de turnos o si lleva 2h sin sync (cualquier pestaña)
+      if(enTurnos||minutosDesde>=120){
+        void adminResyncEmpleadosFromUCO();
+      }
+    }catch(_){}
+  },30*60*1000); // chequea cada 30 minutos
+}
+window.renderTurnosAsistencia=renderTurnosAsistencia;
+window.adminResyncEmpleadosFromUCO=adminResyncEmpleadosFromUCO;
+// Arrancar timer al cargar
+if(typeof window!=='undefined')_adminScheduleUCOAutoSync();
+
 /* ════════════ TRABAJADORES CRUD ════════════ */
 function renderTrabs(){
   const tb=document.getElementById('tbTrabajadores');

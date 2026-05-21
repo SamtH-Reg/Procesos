@@ -2922,6 +2922,16 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
             <div style="margin-top:12px;"><span class="badge slate" id="badgeTurnos">0 turnos</span></div>
           </div>
         </button>
+        <button class="card" type="button" onclick="openCfg('turnosAsistencia')" style="text-align:left;cursor:pointer;">
+          <div class="card-body" style="padding:20px;">
+            <div style="width:44px;height:44px;border-radius:10px;background:#fef3c7;color:#92400e;display:grid;place-items:center;margin-bottom:12px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+            </div>
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Turnos · Asistencia <span style="font-size:9px;background:#fde68a;color:#92400e;padding:1px 6px;border-radius:6px;font-weight:700;">UCO</span></div>
+            <div style="font-size:12px;color:var(--slate-500);">Trabajadores por turno · solo lectura</div>
+            <div style="margin-top:12px;"><span class="badge slate" id="badgeTurnosAsistencia">— activos</span></div>
+          </div>
+        </button>
         <button class="card" type="button" onclick="openCfg('equipos')" style="text-align:left;cursor:pointer;">
           <div class="card-body" style="padding:20px;">
             <div style="width:44px;height:44px;border-radius:10px;background:#e0e7ff;color:#3730a3;display:grid;place-items:center;margin-bottom:12px;">
@@ -3035,6 +3045,37 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
         </button>
       </div>
       <div id="listTurnos" class="cfg-list"></div>
+    </div>
+
+    <!-- ═══ Turnos · Asistencia (solo lectura, fuente UCO) ═══ -->
+    <div id="cfgSubTurnosAsistencia" class="cfg-sub hidden">
+      <div class="section-hdr">
+        <button class="cfg-back" onclick="closeCfg()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Volver
+        </button>
+        <div style="flex:1;">
+          <div class="section-title">Turnos · Asistencia <span style="font-size:11px;font-weight:600;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:8px;margin-left:8px;vertical-align:middle;">SOLO LECTURA</span></div>
+          <div class="section-sub">Trabajadores agrupados por turno · fuente: <strong>UCO Asistencia</strong> · los cambios se hacen allá</div>
+        </div>
+        <button type="button" class="btn ghost" onclick="if(typeof TBSync!=='undefined'&&TBSync.pullCatalogs){TBSync.pullCatalogs();showToast('Refrescando trabajadores desde la nube…','info');}">↻ Refrescar</button>
+      </div>
+      <div style="background:#dbeafe;color:#1e3a66;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.5;">
+        <strong>📌 Cómo funciona:</strong> Los turnos se asignan a cada empleado en <strong>UCO Asistencia</strong>. Acá ves los trabajadores agrupados por turno para que el planillero busque rápido. Si un trabajador cambia de turno en UCO, pulsa <strong>Refrescar</strong> para reflejar el cambio.
+      </div>
+      <!-- KPI cards por turno -->
+      <div id="cfgTAsisKPIs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;"></div>
+      <!-- Filtros -->
+      <div class="cfg-toolbar" style="margin-bottom:10px;">
+        <div class="cfg-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" id="cfgTAsisSearch" placeholder="Buscar por nombre, código o ficha…" oninput="renderCfgTurnosAsistencia()">
+        </div>
+        <select class="select" id="cfgTAsisFiltroTurno" onchange="renderCfgTurnosAsistencia()" style="max-width:200px;">
+          <option value="">Todos los turnos</option>
+        </select>
+      </div>
+      <div id="cfgListTurnosAsistencia" class="cfg-list"></div>
     </div>
 
     <div id="cfgSubEquipos" class="cfg-sub hidden">
@@ -3886,8 +3927,8 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
 /* ═══ CONFIG NAVIGATION ══════════════════════════════════════ */
-const CFG_SUBS=['Presets','Trabajadores','Turnos','Equipos','Roles','Temas','IO'];
-const CFG_RENDER={presets:renderPresets,trabajadores:renderTrabajadores,turnos:renderTurnos,equipos:renderEquiposCfg,roles:renderRoles,temas:renderTemas,io:()=>{}};
+const CFG_SUBS=['Presets','Trabajadores','Turnos','TurnosAsistencia','Equipos','Roles','Temas','IO'];
+const CFG_RENDER={presets:renderPresets,trabajadores:renderTrabajadores,turnos:renderTurnos,turnosAsistencia:renderCfgTurnosAsistencia,equipos:renderEquiposCfg,roles:renderRoles,temas:renderTemas,io:()=>{}};
 
 function openCfg(key){
   if(typeof _idxSinAccesoMotivo==='function'&&_idxSinAccesoMotivo()){
@@ -3908,7 +3949,7 @@ function openCfg(key){
   }
   document.getElementById('cfgHome').classList.add('hidden');
   CFG_SUBS.forEach(s=>document.getElementById('cfgSub'+s).classList.add('hidden'));
-  const map={presets:'Presets',trabajadores:'Trabajadores',turnos:'Turnos',equipos:'Equipos',roles:'Roles',temas:'Temas',io:'IO'};
+  const map={presets:'Presets',trabajadores:'Trabajadores',turnos:'Turnos',turnosAsistencia:'TurnosAsistencia',equipos:'Equipos',roles:'Roles',temas:'Temas',io:'IO'};
   document.getElementById('cfgSub'+map[key]).classList.remove('hidden');
   if(CFG_RENDER[key])CFG_RENDER[key]();
   document.getElementById('content').scrollTop=0;
@@ -3932,7 +3973,92 @@ function updateBadges(){
   document.getElementById('badgeTurnos').textContent=tu+' turnos';
   document.getElementById('badgeEquipos').textContent=e+' equipos';
   document.getElementById('badgeRoles').textContent=r+' roles';
+  const bTAs=document.getElementById('badgeTurnosAsistencia');
+  if(bTAs)bTAs.textContent=t+' trabajadores';
 }
+
+/* ════════════ TURNOS · ASISTENCIA (vista cfg en index) — solo lectura ════════════ */
+const _CFG_TASIS_META={
+  dia:    {label:'Día',    icon:'☀️', color:'#f59e0b', bg:'#fef3c7', textColor:'#92400e'},
+  tarde:  {label:'Tarde',  icon:'🌅', color:'#f97316', bg:'#ffedd5', textColor:'#9a3412'},
+  noche:  {label:'Noche',  icon:'🌙', color:'#1e3a66', bg:'#dbeafe', textColor:'#1e3a8a'},
+  '__sin__': {label:'Sin turno',icon:'❓',color:'#94a3b8',bg:'#f1f5f9',textColor:'#475569'}
+};
+function _cfgTAsisTurnoKey(rawTurno){
+  const s=String(rawTurno||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  if(!s)return'__sin__';
+  if(s.includes('dia')||s==='d')return'dia';
+  if(s.includes('tarde')||s==='t')return'tarde';
+  if(s.includes('noche')||s==='n')return'noche';
+  return'__sin__';
+}
+function renderCfgTurnosAsistencia(){
+  const list=Array.isArray(DB.data.trabajadores)?DB.data.trabajadores:[];
+  const selT=document.getElementById('cfgTAsisFiltroTurno');
+  // Poblar filtro turnos
+  if(selT){
+    const prevVal=selT.value;
+    const presentes=new Set(list.map(t=>_cfgTAsisTurnoKey(t.turno)));
+    const opts=['<option value="">Todos los turnos</option>'];
+    ['dia','tarde','noche','__sin__'].forEach(k=>{
+      if(presentes.has(k))opts.push('<option value="'+k+'">'+_CFG_TASIS_META[k].icon+' '+_CFG_TASIS_META[k].label+'</option>');
+    });
+    selT.innerHTML=opts.join('');
+    if(prevVal)selT.value=prevVal;
+  }
+  const q=String((document.getElementById('cfgTAsisSearch')||{}).value||'').trim().toLowerCase();
+  const fT=String((selT||{}).value||'').trim();
+  // KPI cards
+  const kpisEl=document.getElementById('cfgTAsisKPIs');
+  if(kpisEl){
+    const byT={dia:0,tarde:0,noche:0,'__sin__':0};
+    list.forEach(t=>{if(t.activo!==false)byT[_cfgTAsisTurnoKey(t.turno)]++;});
+    kpisEl.innerHTML=['dia','tarde','noche','__sin__'].map(k=>{
+      const m=_CFG_TASIS_META[k],n=byT[k]||0;
+      return '<div style="background:'+m.bg+';border:1px solid '+m.color+'33;border-radius:10px;padding:12px;text-align:center;">'+
+        '<div style="font-size:22px;line-height:1;margin-bottom:4px;">'+m.icon+'</div>'+
+        '<div style="font-size:10px;font-weight:700;color:'+m.textColor+';text-transform:uppercase;letter-spacing:.04em;">'+m.label+'</div>'+
+        '<div style="font-size:22px;font-weight:800;color:'+m.textColor+';margin-top:2px;font-family:var(--mono,monospace);">'+n+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  const filtered=list.filter(t=>{
+    if(q){
+      const nom=String(t.nombre||'').toLowerCase();
+      const cod=String(t.codigo||'').toLowerCase();
+      const fic=String(t.ficha||'').toLowerCase();
+      if(!nom.includes(q)&&!cod.includes(q)&&!fic.includes(q))return false;
+    }
+    if(fT&&_cfgTAsisTurnoKey(t.turno)!==fT)return false;
+    return true;
+  }).sort((a,b)=>{
+    const ka=_cfgTAsisTurnoKey(a.turno),kb=_cfgTAsisTurnoKey(b.turno);
+    const order={dia:0,tarde:1,noche:2,'__sin__':3};
+    if(order[ka]!==order[kb])return order[ka]-order[kb];
+    return String(a.nombre||'').localeCompare(String(b.nombre||''));
+  });
+  const cont=document.getElementById('cfgListTurnosAsistencia');
+  if(!cont)return;
+  if(!filtered.length){
+    cont.innerHTML='<div class="cfg-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg><div class="t">'+(list.length?'Sin coincidencias':'Sin trabajadores')+'</div><div>'+(list.length?'Cambia los filtros para ver resultados':'Los trabajadores se sincronizan desde UCO en Admin')+'</div></div>';
+    return;
+  }
+  cont.innerHTML=filtered.map(t=>{
+    const m=_CFG_TASIS_META[_cfgTAsisTurnoKey(t.turno)];
+    const cod=esc(t.codigo||'—');
+    const ficha=esc(t.ficha||'');
+    const codFicha=ficha?cod+' / Ficha '+ficha:cod;
+    const inactivo=t.activo===false?' opacity:.5;':'';
+    return '<div class="cfg-row" style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;'+inactivo+'">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:700;font-size:14px;">'+esc(t.nombre||'—')+(t.activo===false?' <span style="font-size:10px;color:var(--text-3);">(Inactivo)</span>':'')+'</div>'+
+        '<div style="font-size:11px;color:var(--text-3);font-family:var(--mono,monospace);margin-top:2px;">'+codFicha+(t.centro_costo?' · '+esc(t.centro_costo):'')+(t.contrato?' · '+esc(t.contrato):'')+'</div>'+
+      '</div>'+
+      '<span style="font-weight:700;background:'+m.bg+';color:'+m.textColor+';padding:4px 10px;border-radius:8px;font-size:12px;white-space:nowrap;">'+m.icon+' '+m.label+'</span>'+
+    '</div>';
+  }).join('');
+}
+window.renderCfgTurnosAsistencia=renderCfgTurnosAsistencia;
 
 /* ═══ MODAL ══════════════════════════════════════════════════ */
 let _modalOnSave=null;
