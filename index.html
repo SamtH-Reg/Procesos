@@ -5894,7 +5894,9 @@ function _presetCardDetailHtml(p){
 }
 function renderMRegPresets(){
   const grid=document.getElementById('mRegPresetGrid');if(!grid)return;
-  const allPresets=DB.data.presets.filter(p=>p.activo&&!_presetSoloRegistroGeneral(p));
+  // En Moldes › Registrar solo aparecen presets de tipo MOLDE (no pallet/carro/castillo/general).
+  // Los pallets se registran desde "General"; los moldes desde acá.
+  const allPresets=DB.data.presets.filter(p=>p.activo&&String(p.tipo||'').toLowerCase()==='molde'&&!_presetSoloRegistroGeneral(p));
   const especie=_getMRegEspecie();
   const presets=especie?allPresets.filter(p=>p.especie===especie):allPresets;
   const cntEl=document.getElementById('mRegPresetCount');
@@ -6863,8 +6865,11 @@ function renderPorCargar(){
   const totRegistrado=items.reduce((s,i)=>s+(i.totalRegistrado||0),0);
   // Header con desglose: pendientes / cargados / registrados
   tot.innerHTML=`<strong>${totMoldes}</strong> pendientes <span style="opacity:.7;font-weight:500;">· ${totConsumido} ya cargados de ${totRegistrado} registrados</span>`;
-  list.innerHTML=items.map((it,i)=>{
-    const last=i===items.length-1;
+  // Separar en dos grupos: MOLDES (para placas) y PALLETS/CARROS/CASTILLOS (para túneles)
+  const grupoMoldes=items.filter(it=>String(it.preset.tipo||'').toLowerCase()==='molde');
+  const grupoTunel=items.filter(it=>['pallet','carro','castillo'].includes(String(it.preset.tipo||'').toLowerCase()));
+  const otros=items.filter(it=>!grupoMoldes.includes(it)&&!grupoTunel.includes(it));
+  const renderItem=(it,last)=>{
     const tipoLabel=_PRESET_TIPO_LABELS[it.preset.tipo]||it.preset.tipo;
     const cons=it.consumido||0;
     const totR=it.totalRegistrado||it.cant;
@@ -6880,7 +6885,26 @@ function renderPorCargar(){
         <div style="font-size:10px;color:var(--text-3);">pendientes</div>
       </div>
     </div>`;
-  }).join('');
+  };
+  const groupBlock=(titulo,subt,icono,color,colorBg,grupo)=>{
+    if(!grupo.length)return'';
+    const tot=grupo.reduce((s,i)=>s+i.cant,0);
+    return `<div style="border:1px solid ${color}55;border-radius:10px;overflow:hidden;margin-bottom:12px;">
+      <div style="padding:10px 16px;background:${colorBg};display:flex;align-items:center;gap:10px;border-bottom:1px solid ${color}33;">
+        <span style="font-size:18px;">${icono}</span>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13px;color:${color};">${esc(titulo)}</div>
+          <div style="font-size:11px;color:${color};opacity:.8;">${esc(subt)}</div>
+        </div>
+        <div style="font-weight:800;color:${color};font-family:var(--mono);">${tot} pendientes</div>
+      </div>
+      ${grupo.map((it,i)=>renderItem(it,i===grupo.length-1)).join('')}
+    </div>`;
+  };
+  list.innerHTML=
+    groupBlock('Moldes','Para cargar en placas','🧊','#0369a1','#dbeafe',grupoMoldes)+
+    groupBlock('Pallets / Carros / Castillos','Para cargar en túneles','📦','#b45309','#fef3c7',grupoTunel)+
+    (otros.length?groupBlock('Otros','Presets sin tipo específico','📋','#475569','#f1f5f9',otros):'');
 }
 window.renderPorCargar=renderPorCargar;
 
