@@ -7223,6 +7223,7 @@ function descargarEq(){
   if(!_idxGuardTunelesInteract('descargar equipo'))return;
   const rt=getEqRT(_eqModalCode);
   const eq=DB.data.equipos.find(e=>e.codigo===_eqModalCode);
+  if(!eq){showToast('Equipo no encontrado','error');return;}
   // Log historial por equipo + mover a empacados
   if(!RT.eqHist)RT.eqHist={};
   if(!RT.eqHist[eq.codigo])RT.eqHist[eq.codigo]=[];
@@ -7242,12 +7243,20 @@ function descargarEq(){
     cierreMinRestantes:rt.cierreAnticipado&&rt.cierreMinRestantes!=null?rt.cierreMinRestantes:null
   });
   RT.eqHist[eq.codigo]=RT.eqHist[eq.codigo].slice(0,20); // mantener últimos 20
+  if(!Array.isArray(RT.empacados))RT.empacados=[];
   (rt.items||[]).forEach(it=>{
     RT.empacados.unshift({id:nextId(RT.empacados),hora:nowHM(),equipo:eq.nombre,producto:it.producto,cant:it.cant,guia:it.guia,estado:'Descargado'});
   });
   rt.items=[];rt.estado='libre';rt.congelando=false;rt.horaInicio=null;rt.horasTotal=0;rt.progreso=0;
   delete rt.cierreAnticipado;delete rt.cierreCausal;delete rt.cierreMinRestantes;
-  rtSave();closeEqModal();renderEquipos();renderEmpaqueTable&&renderEmpaqueTable();
+  rtSave({skipCloudSchedule:true}); // local primero, push directo de eqKv abajo
+  closeEqModal();
+  renderEquipos();
+  // Fix anti-rollback: subir el nuevo estado a Supabase YA, antes de que un Realtime echo
+  // del estado anterior llegue y restaure la placa a "LISTO" con sus items.
+  try{if(typeof TBSync!=='undefined'&&TBSync.pushEqKvOnly)void TBSync.pushEqKvOnly();}catch(_){}
+  // renderEmpaqueTable es opcional (no siempre está definida) — guard con typeof
+  try{if(typeof renderEmpaqueTable==='function')renderEmpaqueTable();}catch(_){}
   showToast(eq.nombre+' descargado','success');
 }
 window.openEqModal=openEqModal;window.closeEqModal=closeEqModal;window.addEqItem=addEqItem;window.removeEqItem=removeEqItem;
