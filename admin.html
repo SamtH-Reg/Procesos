@@ -2246,16 +2246,21 @@ async function runDiagnosticoFlujos(){
     addRow(o.label,'✓','Cloud '+r.count+' filas');
   }
   // 4) app_kv blobs
+  // 'optional' = no es desincronización si falta (e.g. dashboard sin personalizar)
   const blobs=[
-    {key:'friosur_eq_runtime',label:'eq_runtime (túneles/placas)'},
-    {key:'friosur_planilleros_catalog',label:'planilleros'},
-    {key:'friosur_especies_catalog',label:'especies'},
-    {key:'friosur_admin_dashboard',label:'dashboard widgets'}
+    {key:'friosur_eq_runtime',label:'eq_runtime (túneles/placas)',optional:false},
+    {key:'friosur_planilleros_catalog',label:'planilleros',optional:false},
+    {key:'friosur_especies_catalog',label:'especies',optional:false},
+    {key:'friosur_admin_dashboard',label:'dashboard widgets',optional:true}
   ];
   for(const b of blobs){
     const r=await _diagAppKv(b.key);
     if(!r.ok){addRow(b.label,'❌',r.err);continue;}
-    addRow(b.label,r.exists?'✓':'⚠',r.exists?('Cloud OK · '+(r.updated_at||'?')):'No existe en app_kv todavía');
+    if(r.exists){addRow(b.label,'✓','Cloud OK · '+(r.updated_at||'?'));}
+    else{
+      // Si es opcional, marcar como informativo (no como warning)
+      addRow(b.label,b.optional?'ℹ':'⚠',b.optional?'Sin guardar todavía (normal si no personalizado)':'No existe en app_kv todavía');
+    }
   }
   // 5) Pendientes locales
   const pendingPresets=_adminGetPresetsPending?_adminGetPresetsPending():[];
@@ -2271,28 +2276,35 @@ async function runDiagnosticoFlujos(){
       await _sb.from('presets').delete().eq('id',testId);
     }
   }catch(e){addRow('Constraint placa_general','⚠',e.message||String(e));}
-  // 7) UCO sync (último timestamp)
+  // 7) UCO sync (último timestamp) — informativo, no afecta veredicto
   const ucoLast=localStorage.getItem('friosur_uco_last_sync');
   if(ucoLast){
     const minAgo=Math.round((Date.now()-parseInt(ucoLast,10))/60000);
-    addRow('UCO Asistencia (último sync)',minAgo<1440?'✓':'⚠','Hace '+minAgo+' min');
+    // <1 día: ✓ ; 1-7 días: ℹ (recomendar resync) ; >7 días: ⚠
+    const status=minAgo<1440?'✓':(minAgo<10080?'ℹ':'⚠');
+    const hrs=Math.floor(minAgo/60),min=minAgo%60;
+    const fmt=minAgo<60?(minAgo+' min'):(hrs+'h '+min+'m');
+    addRow('UCO Asistencia (último sync)',status,'Hace '+fmt+(status==='ℹ'?' · resync si esperas cambios':''));
   }else{
-    addRow('UCO Asistencia','⚠','Nunca sincronizado · ve a Turnos (Asistencia) → Re-sync');
+    addRow('UCO Asistencia','ℹ','Nunca sincronizado · Turnos (Asistencia) → Re-sync');
   }
   out.innerHTML=_diagRender(rows);
 }
 function _diagRender(rows){
-  const colorMap={'✓':'#16a34a','⚠':'#d97706','❌':'#dc2626'};
-  const bgMap={'✓':'#f0fdf4','⚠':'#fffbeb','❌':'#fef2f2'};
+  const colorMap={'✓':'#16a34a','⚠':'#d97706','❌':'#dc2626','ℹ':'#0369a1'};
+  const bgMap={'✓':'#f0fdf4','⚠':'#fffbeb','❌':'#fef2f2','ℹ':'#dbeafe'};
   const okCount=rows.filter(r=>r.status==='✓').length;
   const warnCount=rows.filter(r=>r.status==='⚠').length;
   const errCount=rows.filter(r=>r.status==='❌').length;
+  const infoCount=rows.filter(r=>r.status==='ℹ').length;
   const totalCount=rows.length;
+  // ℹ no cuenta como problema — solo errores y warnings reales afectan el veredicto
   const overall=errCount>0?'❌':(warnCount>0?'⚠':'✓');
-  let html='<div style="display:flex;gap:8px;margin-bottom:10px;font-size:12px;">'+
+  let html='<div style="display:flex;gap:8px;margin-bottom:10px;font-size:12px;flex-wrap:wrap;">'+
     '<span style="padding:4px 10px;background:#f0fdf4;color:#16a34a;border-radius:8px;font-weight:600;">✓ '+okCount+'</span>'+
-    '<span style="padding:4px 10px;background:#fffbeb;color:#d97706;border-radius:8px;font-weight:600;">⚠ '+warnCount+'</span>'+
-    '<span style="padding:4px 10px;background:#fef2f2;color:#dc2626;border-radius:8px;font-weight:600;">❌ '+errCount+'</span>'+
+    (warnCount>0?'<span style="padding:4px 10px;background:#fffbeb;color:#d97706;border-radius:8px;font-weight:600;">⚠ '+warnCount+'</span>':'')+
+    (errCount>0?'<span style="padding:4px 10px;background:#fef2f2;color:#dc2626;border-radius:8px;font-weight:600;">❌ '+errCount+'</span>':'')+
+    (infoCount>0?'<span style="padding:4px 10px;background:#dbeafe;color:#0369a1;border-radius:8px;font-weight:600;">ℹ '+infoCount+'</span>':'')+
     '<span style="padding:4px 10px;background:#f1f5f9;color:#475569;border-radius:8px;">Total: '+totalCount+'</span>'+
     '</div>';
   html+='<table style="width:100%;border-collapse:collapse;">';
@@ -2304,7 +2316,10 @@ function _diagRender(rows){
     '</tr>';
   });
   html+='</table>';
-  html+='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:'+bgMap[overall]+';color:'+colorMap[overall]+';font-weight:700;font-size:13px;">Estado general: '+overall+' '+(overall==='✓'?'Todos los flujos OK':(overall==='⚠'?'Hay desincronizaciones — usa "Reparar todo"':'Errores críticos — revisa migraciones y conexión'))+'</div>';
+  const verdictMsg=overall==='✓'
+    ?'Todos los flujos OK'+(infoCount?' · '+infoCount+' nota'+(infoCount!==1?'s':'')+' informativa'+(infoCount!==1?'s':''):'')
+    :(overall==='⚠'?'Hay desincronizaciones — usa "Reparar todo"':'Errores críticos — revisa migraciones y conexión');
+  html+='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:'+bgMap[overall]+';color:'+colorMap[overall]+';font-weight:700;font-size:13px;">Estado general: '+overall+' '+verdictMsg+'</div>';
   return html;
 }
 async function repararFlujosCompleto(){
