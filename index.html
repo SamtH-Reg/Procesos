@@ -11959,6 +11959,17 @@ function _tbStableEqKvFingerprint(val){
   }catch(e){return'';}
 }
 let _tbLastStableEqKvFp='';
+/** Timestamp (Date.now) de la última modificación LOCAL del estado de equipos.
+ *  Sirve para ignorar Realtime echoes de estados anteriores que llegan tarde
+ *  (race condition: usuario pulsa "Descargar"/"Finalizar frío" → cierre del modal
+ *  → echo del estado VIEJO llega → no debe rollbackearnos). */
+let _tbLastLocalEqKvAt=0;
+/** Marca que el usuario acaba de modificar el estado local del equipo.
+ *  Llamar tras descargarEq, finalizarCongelacion, cargarDesdeConteo, addEqItem,
+ *  iniciarCongelacion, iniciarDeshieloEq, finalizarDeshieloEq, removeEqItem. */
+function _tbMarkLocalEqMutation(){_tbLastLocalEqKvAt=Date.now();}
+/** Ventana de gracia (ms): si un echo es más viejo que (ahora - GRACIA), se ignora. */
+const _TB_EQ_RACE_GRACIA_MS=8000;
 function _tbEnsureEqStateKeysFromEquipos(){
   if(typeof RT==='undefined'||!RT.eqState||typeof RT.eqState!=='object')return;
   if(typeof DB==='undefined'||!DB.data||!Array.isArray(DB.data.equipos))return;
@@ -11980,6 +11991,23 @@ function _tbApplyRemoteEqRuntime(value,_updatedAt,fromPull){
     const fp=_tbStableEqKvFingerprint(value);
     if(!fromPull){
       if(fp&&fp===_tbLastStableEqKvFp)return;
+    }
+    // ANTI-ROLLBACK: si el usuario modificó localmente en los últimos N ms
+    // y el remote es de un valor cuya fingerprint NO es nuestra fingerprint
+    // local actual, asumimos que es un echo VIEJO en camino antes de que
+    // nuestra propia push llegue. Lo ignoramos para evitar rollback.
+    // Pulls explícitos (fromPull) y eventos posteriores a la ventana de
+    // gracia (recovery) sí aplican normalmente.
+    if(!fromPull&&_tbLastLocalEqKvAt>0){
+      const msDesdeCambio=Date.now()-_tbLastLocalEqKvAt;
+      if(msDesdeCambio<_TB_EQ_RACE_GRACIA_MS){
+        const fpLocal=_tbStableEqKvFingerprint({eqState:RT.eqState||{},eqHist:RT.eqHist||{},source:'tablet'});
+        // Si el remoto no coincide con nuestro estado actual, es un echo viejo
+        if(fp&&fpLocal&&fp!==fpLocal){
+          console.info('[eq_runtime] rollback prevenido: echo viejo recibido '+msDesdeCambio+'ms tras cambio local (ignorado)');
+          return;
+        }
+      }
     }
     const es=value.eqState&&typeof value.eqState==='object'?value.eqState:null;
     const eh=value.eqHist&&typeof value.eqHist==='object'?value.eqHist:null;
@@ -12155,11 +12183,20 @@ const TBSync={
     if(!_tbSb||!_tbUser||!tbNavigatorOnline())return Promise.resolve({ok:true,skipped:true});
     const esig=_tbEqRuntimeSig();
     if(esig===this._lastSig.eqKv||esig===this._eqKvLastUploadedSig)return Promise.resolve({ok:true,skipped:true});
+    // Marcar la mutación local ANTES del push: si llega un Realtime echo viejo
+    // mientras este push viaja a la nube, el anti-rollback lo bloqueará.
+    if(typeof _tbMarkLocalEqMutation==='function')_tbMarkLocalEqMutation();
     const{error:kvErr}=await _tbSb.from('app_kv').upsert({key:TB_EQ_CLOUD_KEY,value:{eqState:RT.eqState||{},eqHist:RT.eqHist||{},source:'tablet',at:Date.now()}},{onConflict:'key'});
     if(kvErr){console.warn('[sb push eq_runtime]',kvErr.message||kvErr);return Promise.resolve({ok:false,err:kvErr.message})}
     this._lastSig.eqKv=esig;
     this._eqKvLastUploadedSig=esig;
     this._eqKvPushLastAt=Date.now();
+    // Pre-cargar la fingerprint pushed en _tbLastStableEqKvFp para que el echo de
+    // nuestra propia push no dispare re-renders innecesarios cuando vuelva por Realtime.
+    try{
+      const fpPushed=_tbStableEqKvFingerprint({eqState:RT.eqState||{},eqHist:RT.eqHist||{},source:'tablet'});
+      if(fpPushed)_tbLastStableEqKvFp=fpPushed;
+    }catch(_){}
     _tbPersistLastPushSigsToStorage();
     return Promise.resolve({ok:true});
   },
