@@ -6878,8 +6878,11 @@ function aggregatePendientes(filterTipo){
     map[r.presetId].consumido+=consumido;
     const rowEsp=String(r.especie||'').trim();
     if(rowEsp&&!map[r.presetId].especieRow)map[r.presetId].especieRow=rowEsp;
+    // Solo agregar la guía si esta fila TODAVÍA tiene pendientes (pendR>0).
+    // Antes se sumaban también guías de registros ya cargados — daba la sensación
+    // de "registros anteriores" mezclados con los nuevos.
     const rowGuia=String(r.guia||'').trim();
-    if(rowGuia)map[r.presetId].guias.add(rowGuia);
+    if(rowGuia&&pendR>0)map[r.presetId].guias.add(rowGuia);
   };
   (RT.moldes||[]).forEach(push);
   (RT.generales||[]).forEach(push);
@@ -7318,17 +7321,55 @@ function openEqModal(codigo){
   const pendientes=aggregatePendientes(pendFilter);
   const cargarMasSub='';
   if(canLoadUi&&pendientes.length){
+    // Agrupa los pendientes por (producto global, especie) para mostrarlos compactos.
+    // Cada grupo tiene su cabecera (Porción · MERLUZA AUSTRAL · G·1234) y debajo
+    // los presets concretos (BOMBON 5 · BOCADITO 7) cada uno con su botón Cargar.
+    const gMap=new Map();
+    pendientes.forEach(it=>{
+      const pg=String(it.preset.productoGlobal||it.preset.producto_global||'').trim();
+      const esp=String(it.preset.especie||it.especieRow||'').trim();
+      const k=(pg||'__SIN__')+'||'+(esp||'__SIN__');
+      if(!gMap.has(k))gMap.set(k,{prodGlob:pg,especie:esp,items:[],cant:0,guias:new Set()});
+      const g=gMap.get(k);
+      g.items.push(it);
+      g.cant+=it.cant||0;
+      if(it.guias)it.guias.forEach(x=>g.guias.add(x));
+    });
+    const grupos=[...gMap.values()].sort((a,b)=>b.cant-a.cant);
+    const renderGrupo=(g)=>{
+      const guiasArr=[...g.guias].filter(Boolean);
+      let guiasTxt='';
+      if(guiasArr.length){
+        if(guiasArr.length<=3)guiasTxt=guiasArr.join(', ');
+        else guiasTxt=guiasArr.slice(0,3).join(', ')+' +'+(guiasArr.length-3);
+      }
+      const cabPartes=[];
+      if(g.prodGlob)cabPartes.push(`<span style="font-weight:800;color:var(--safety-amber-dark,#b45309);">${esc(g.prodGlob)}</span>`);
+      else cabPartes.push(`<span style="color:var(--text-3);font-style:italic;">(sin clasificar)</span>`);
+      if(g.especie)cabPartes.push(`<span style="color:var(--text-2);">${esc(g.especie)}</span>`);
+      if(guiasTxt)cabPartes.push(`<span style="color:#0369a1;font-family:var(--mono);font-size:11px;">G·${esc(guiasTxt)}</span>`);
+      const cabecera=cabPartes.join('<span style="color:var(--text-3);margin:0 5px;">·</span>');
+      const presetsSorted=g.items.slice().sort((a,b)=>b.cant-a.cant);
+      const presetsHtml=presetsSorted.map(it=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#fff;border:1px solid var(--safety-amber);border-radius:6px;">
+          <div style="flex:1;min-width:0;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.preset.nombre)}</div>
+          <div style="font-size:17px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);min-width:28px;text-align:right;">${it.cant}</div>
+          <button class="btn sm" type="button" style="background:var(--brand,#0f172a);color:white;padding:6px 12px;font-size:12px;" onclick="cargarDesdeConteo(${it.preset.id})"${placaFull?' disabled':''}>Cargar</button>
+        </div>`).join('');
+      return `<div style="padding:10px 12px;background:#fff8e6;border:1.5px solid var(--safety-amber);border-radius:var(--radius-sm);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;line-height:1.3;">
+          <div style="flex:1;min-width:0;overflow:hidden;">${cabecera}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);min-width:30px;text-align:right;">${g.cant}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">${presetsHtml}</div>
+      </div>`;
+    };
     actions.push(`<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
       <label style="font:700 12px var(--font);color:var(--safety-amber-dark,#b45309);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;display:block;">${rt.estado==='congelando'&&eq.tipo==='placa'?'Desde conteo':'Conteo'}</label>
       ${cargarMasSub}
       ${placaFull?'<div style="font-size:12px;color:var(--err,#b91c1c);margin-bottom:8px;">Placa llena</div>':''}
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${pendientes.map(it=>`
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff8e6;border:1.5px solid var(--safety-amber);border-radius:var(--radius-sm);">
-            <div style="flex:1;min-width:0;font-weight:600;font-size:13px;">${esc(it.preset.nombre)}</div>
-            <div style="font-size:20px;font-weight:800;color:var(--safety-amber-dark,#b45309);font-family:var(--mono);">${it.cant}</div>
-            <button class="btn" type="button" style="background:var(--brand,#0f172a);color:white;padding:8px 14px;" onclick="cargarDesdeConteo(${it.preset.id})"${placaFull?' disabled':''}>Cargar</button>
-          </div>`).join('')}
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${grupos.map(renderGrupo).join('')}
       </div>
     </div>`);
   }
