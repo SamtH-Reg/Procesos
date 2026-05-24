@@ -3691,6 +3691,7 @@ function coercePresetFields(p){
   if((p.horasTunel==null||p.horasTunel==='')&&p.horas_tunel!=null)p.horasTunel=+p.horas_tunel;
   if((p.horasPlaca==null||p.horasPlaca==='')&&p.horas_placa!=null)p.horasPlaca=+p.horas_placa;
   if((p.tempObj==null||p.tempObj==='')&&p.temp_obj!=null)p.tempObj=+p.temp_obj;
+  if((p.productoGlobal==null||p.productoGlobal==='')&&p.producto_global!=null&&p.producto_global!=='')p.productoGlobal=String(p.producto_global);
   const usoRaw=String(p.usoEquipo||p.uso_equipo||'').toLowerCase();
   if(usoRaw==='tunel'||usoRaw==='placa'||usoRaw==='ambos'||usoRaw==='general')p.usoEquipo=usoRaw;
   else{
@@ -12384,10 +12385,17 @@ const TBSync={
       console.warn('[sb pushAll]',e);
       this.setStatus('⚠ Error','#dc2626');
       const m=e&&e.message?String(e.message):String(e);
+      // Detección de errores que NO se resuelven con reintentos automáticos.
+      // RLS / permisos / constraint requieren acción del admin (ejecutar SQL),
+      // así que cortamos el backoff inmediatamente para no esperar 67s en vano.
+      const isRlsErr=/row[- ]level security|violates row-level|policy for table|permission denied|insufficient privilege/i.test(m);
+      const isAuthErr=/jwt|not authenticated|auth(?:entication)? required|invalid api key/i.test(m);
+      const isConstraintErr=/violates check constraint|violates not-null|violates foreign key|duplicate key|unique constraint/i.test(m);
+      const fatalNoRetry=isRlsErr||isConstraintErr;
       // Retry con backoff exponencial: 2s, 5s, 15s, 45s. Tras 4 intentos, queda pendiente para el usuario.
       const RETRY_DELAYS=[2000,5000,15000,45000];
       this._retryAttempt=(this._retryAttempt||0);
-      if(this._retryAttempt<RETRY_DELAYS.length&&tbNavigatorOnline()){
+      if(!fatalNoRetry&&this._retryAttempt<RETRY_DELAYS.length&&tbNavigatorOnline()){
         const delay=RETRY_DELAYS[this._retryAttempt];
         this._retryAttempt++;
         if(this._retryTimer)clearTimeout(this._retryTimer);
@@ -12401,11 +12409,24 @@ const TBSync={
           showToast('Sync con la nube fallido — reintentando en '+(delay/1000)+'s…','warning');
         }
       }else{
-        // Sin retries disponibles o sin red → queda pendiente
+        // Sin retries disponibles, sin red, o error fatal (RLS / constraint) → queda pendiente.
         _tbMarkPendingPush(true);
-        if(typeof showToast==='function')showToast('No se completó la sincronización con la nube: '+m+' · Toca el badge para reintentar manualmente.','error');
+        this._retryAttempt=RETRY_DELAYS.length; // bloquea reintentos posteriores hasta que el usuario fuerce push
+        if(typeof showToast==='function'){
+          if(isRlsErr){
+            this.setStatus('⛔ RLS bloqueado','#dc2626');
+            showToast('Permiso denegado en Supabase (RLS). Pide al admin ejecutar supabase_rls_generales_policies.sql (panel Migraciones SQL).','error');
+          }else if(isAuthErr){
+            showToast('Sesión expirada. Inicia sesión de nuevo para sincronizar.','error');
+          }else if(isConstraintErr){
+            this.setStatus('⛔ Constraint','#dc2626');
+            showToast('La nube rechazó los datos por una restricción: '+m+' · Pide al admin revisar Migraciones SQL.','error');
+          }else{
+            showToast('No se completó la sincronización con la nube: '+m+' · Toca el badge para reintentar manualmente.','error');
+          }
+        }
       }
-      return{ok:false,err:m};
+      return{ok:false,err:m,fatal:fatalNoRetry};
     }
   },
   subscribe(){

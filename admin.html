@@ -798,7 +798,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     </div>
   </div>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th>Uso</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
+    <thead><tr><th>Nombre</th><th>Tipo</th><th>Destino</th><th>Especie</th><th>Calibre</th><th>Prod. global</th><th class="num">kg/u</th><th class="num">h Túnel</th><th class="num">h Placa</th><th>Uso</th><th class="num">Tº</th><th>Estado</th><th></th></tr></thead>
     <tbody id="tbPresets"></tbody>
   </table></div>
 </div>
@@ -2110,6 +2110,43 @@ const MIGRACIONES_SQL=[
         return{needed:false,reason:'Constraint ya acepta "placa_general"'};
       }catch(e){return{needed:true,reason:'No se pudo verificar: '+(e.message||e)};}
     }
+  },
+  {
+    id:'presets_producto_global',
+    titulo:'Agregar columna producto_global a presets',
+    motivo:'Nuevo campo "Producto global" en el modal de preset (Filete, Porción, Lomo, HG, IQF, Bloque, MC, Entero, Pulpa, …). Sin esta columna, Supabase rechaza el upsert con: column "producto_global" of relation "presets" does not exist.',
+    sql:`-- Agrega columna producto_global a presets (idempotente)\nalter table public.presets\n  add column if not exists producto_global text;\n\ncomment on column public.presets.producto_global is\n  'Producto global / familia (Filete, Porción, Lomo, HG, IQF, Bloque, MC, Entero, Pulpa, ...).';`,
+    verify:async()=>{
+      if(!_sb)return{needed:true,reason:'Sin conexión Supabase para verificar'};
+      try{
+        // Si la columna existe, el select no falla. Si no existe, devuelve error 42703.
+        const{error}=await _sb.from('presets').select('id,producto_global').limit(1);
+        if(error&&/producto_global|column.*does not exist|42703/i.test(error.message||'')){
+          return{needed:true,reason:'Columna producto_global no existe todavía'};
+        }
+        if(error)return{needed:true,reason:'Error al verificar: '+(error.message||'')};
+        return{needed:false,reason:'Columna producto_global ya existe'};
+      }catch(e){return{needed:true,reason:'No se pudo verificar: '+(e.message||e)};}
+    }
+  },
+  {
+    id:'can_write_include_operario',
+    titulo:'can_write(): permitir operario y tunelero',
+    motivo:'La tablet logueada como operario o tunelero recibía "new row violates row-level security policy" en moldes/pesajes/generales porque can_write() solo aceptaba admin/supervisor/planillero. Esto causaba el "Por subir" pegado por 67s.',
+    sql:`-- Permite a operario y tunelero escribir en tablas operativas (idempotente).\ncreate or replace function public.can_write()\n  returns boolean language sql stable security definer\n  set search_path to 'public'\nas $function$\n  select coalesce(\n    lower(trim((select rol from public.user_profiles where id = auth.uid())))\n    in ('admin', 'supervisor', 'planillero', 'operario', 'tunelero'),\n    false\n  );\n$function$;`,
+    verify:async()=>{
+      if(!_sb)return{needed:true,reason:'Sin conexión Supabase para verificar'};
+      try{
+        // No podemos leer pg_proc desde el cliente. Hacemos un probe indirecto:
+        // intentar un select head sobre generales — si la sesión es escritora válida no falla.
+        const{error}=await _sb.from('generales').select('id',{count:'exact',head:true}).limit(0);
+        if(error&&/row[- ]level security|policy/i.test(error.message||'')){
+          return{needed:true,reason:'Tu sesión no puede leer generales — revisa rol en user_profiles y aplica esta migración.'};
+        }
+        // Estado informativo: requiere verificación manual contra pg_proc.
+        return{needed:false,reason:'OK (verificación indirecta). Si la tablet sigue con RLS error, aplícala igual desde el SQL Editor.'};
+      }catch(e){return{needed:true,reason:'No se pudo verificar: '+(e.message||e)};}
+    }
   }
 ];
 /** Construye URL del SQL Editor de Supabase con la query pre-llenada. */
@@ -2140,6 +2177,22 @@ function abrirSQLEditor(sql){
   window.open(url,'_blank','noopener');
   toast('Abriendo SQL Editor de Supabase… pulsa Run para aplicar','info');
 }
+/** Lookup por id para botones de migración (evita inyectar SQL con comillas en onclick HTML). */
+function _migBySQLId(id){
+  return (MIGRACIONES_SQL||[]).find(m=>m.id===id);
+}
+function abrirSQLEditorPorId(id){
+  const m=_migBySQLId(id);
+  if(!m){toast('Migración no encontrada: '+id,'err');return;}
+  abrirSQLEditor(m.sql);
+}
+function copiarSQLPorId(id,btn){
+  const m=_migBySQLId(id);
+  if(!m){toast('Migración no encontrada: '+id,'err');return;}
+  copiarSQLAlPortapapeles(m.sql,btn);
+}
+window.abrirSQLEditorPorId=abrirSQLEditorPorId;
+window.copiarSQLPorId=copiarSQLPorId;
 async function renderMigracionesSQL(){
   const cont=document.getElementById('migracionesSQLList');if(!cont)return;
   cont.innerHTML='<div style="padding:12px;color:var(--text-3);font-size:12px;">Verificando migraciones pendientes…</div>';
@@ -2165,8 +2218,8 @@ async function renderMigracionesSQL(){
         <pre style="background:#0f172a;color:#e0f2fe;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:6px;">${sqlEsc}</pre>
       </details>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn" type="button" onclick="abrirSQLEditor(\`${m.sql.replace(/`/g,'\\`')}\`)" ${res.needed?'':'disabled'}>▶ Abrir SQL Editor en Supabase</button>
-        <button class="btn ghost sm" type="button" onclick="copiarSQLAlPortapapeles(\`${m.sql.replace(/`/g,'\\`')}\`,this)">📋 Copiar SQL</button>
+        <button class="btn" type="button" onclick="abrirSQLEditorPorId('${esc(m.id)}')" ${res.needed?'':'disabled'}>▶ Abrir SQL Editor en Supabase</button>
+        <button class="btn ghost sm" type="button" onclick="copiarSQLPorId('${esc(m.id)}',this)">📋 Copiar SQL</button>
         <button class="btn ghost sm" type="button" onclick="renderMigracionesSQL()">↻ Re-verificar</button>
       </div>
     </div>`;
@@ -4769,7 +4822,7 @@ function renderPresets(){
     if(est==='1'&&!p.activo)return false;
     if(est==='0'&&p.activo)return false;
     if(!q)return true;
-    return [p.nombre,p.destino,p.especie,p.calibre,p.formato,p.tipo,p.usoEquipo].some(v=>String(v||'').toLowerCase().includes(q));
+    return [p.nombre,p.destino,p.especie,p.calibre,p.formato,p.tipo,p.usoEquipo,p.productoGlobal,p.producto_global].some(v=>String(v||'').toLowerCase().includes(q));
   });
   if(stats)stats.textContent=filtered.length+' / '+all.length;
   const usoLbl=u=>u==='tunel'?'Túnel':u==='placa'?'Placa':u==='general'?'Reg. general':u==='placa_general'?'Placa + General':'Ambos';
@@ -4777,10 +4830,11 @@ function renderPresets(){
   tb.innerHTML=filtered.map(p=>`<tr>
     <td><strong>${esc(p.nombre)}</strong></td>
     <td>${esc(p.tipo||'—')}</td><td>${esc(p.destino||'—')}</td><td>${esc(p.especie||'—')}</td><td>${esc(p.calibre||'—')}</td>
+    <td>${esc(p.productoGlobal||p.producto_global||'—')}</td>
     <td class="num">${p.kgRef}</td><td class="num">${p.horasTunel||0}</td><td class="num">${p.horasPlaca||0}</td><td><span class="badge ${usoBadge(inferUsoEquipo(p))}">${usoLbl(inferUsoEquipo(p))}</span></td><td class="num">${p.tempObj||0}</td>
     <td>${p.activo?'<span class="badge ok">Activo</span>':'<span class="badge err">Inactivo</span>'}</td>
     <td><button class="btn sm ghost" onclick="openPresetModal(${p.id})">✎</button> <button class="btn sm ghost" onclick="delPreset(${p.id})">✕</button></td>
-  </tr>`).join('')||'<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets que coincidan con el filtro</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text-3);">Sin presets que coincidan con el filtro</td></tr>';
 }
 function _adminNextPresetId(){
   let m=0;
@@ -4791,7 +4845,9 @@ function openPresetModal(id){
   const editing=id!=null&&id!=='';
   const src=editing?DB.data.presets.find(x=>String(x.id)===String(id)):null;
   if(editing&&!src){toast('Preset no encontrado','err');return;}
-  const p=src?{...src}:{id:null,nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true,subUnidad:'',subCantidad:0,subPeso:0};
+  const p=src?{...src}:{id:null,nombre:'',tipo:'molde',destino:'',especie:'',calibre:'',formato:'',productoGlobal:'',kgRef:7.5,horasTunel:8,horasPlaca:4,tempObj:-18,usoEquipo:'ambos',activo:true,subUnidad:'',subCantidad:0,subPeso:0};
+  // Normaliza nombre del campo si el preset vino de la nube en snake_case
+  if(!p.productoGlobal&&p.producto_global)p.productoGlobal=p.producto_global;
   const uso=inferUsoEquipo(p);
   const subUni=p.subUnidad||(p.tipo==='pallet'?'canastillo':(p.tipo==='carro'||p.tipo==='castillo'?'caja':''));
   const isContainer=['pallet','carro','castillo'].includes(p.tipo);
@@ -4803,6 +4859,7 @@ function openPresetModal(id){
       <div class="form-field"><label class="form-label">Destino</label><input class="input" id="f_destino" value="${esc(p.destino||'')}"></div>
       <div class="form-field"><label class="form-label">Especie</label><input class="input" id="f_especie" value="${esc(p.especie||'')}"></div>
       <div class="form-field"><label class="form-label">Calibre</label><input class="input" id="f_calibre" value="${esc(p.calibre||'')}"></div>
+      <div class="form-field"><label class="form-label">Producto global <span class="hint" style="font-size:10px;color:var(--text-3);">(porción, filete, lomo…)</span></label><input class="input" id="f_productoGlobal" list="dl_productoGlobal" value="${esc(p.productoGlobal||'')}" placeholder="Filete / Porción / Lomo / HG / IQF / Bloque / MC / Entero / Pulpa"><datalist id="dl_productoGlobal"><option value="Filete"><option value="Porción"><option value="Lomo"><option value="HG"><option value="IQF"><option value="Bloque"><option value="MC"><option value="Entero"><option value="Pulpa"><option value="Trozo"><option value="Cubo"><option value="Despresado"></datalist></div>
       <div class="form-field"><label class="form-label">Kg/unidad <span class="hint" id="hintKgRef" style="font-size:10px;color:var(--text-3);"></span></label><input class="input" id="f_kgRef" type="number" step="0.1" value="${p.kgRef||0}"></div>
       <div class="form-field"><label class="form-label">Horas Túnel</label><input class="input" id="f_horasTunel" type="number" step="0.5" value="${p.horasTunel||0}"></div>
       <div class="form-field"><label class="form-label">Horas Placa</label><input class="input" id="f_horasPlaca" type="number" step="0.5" value="${p.horasPlaca||0}"></div>
@@ -4825,7 +4882,8 @@ function openPresetModal(id){
     const subUnidadVal=String(document.getElementById('f_subUnidad')?document.getElementById('f_subUnidad').value:'').trim();
     const subCantidadVal=parseInt(document.getElementById('f_subCantidad')?document.getElementById('f_subCantidad').value:0,10)||0;
     const subPesoVal=parseFloat(document.getElementById('f_subPeso')?document.getElementById('f_subPeso').value:0)||0;
-    const n={id:newId,nombre:document.getElementById('f_nombre').value.trim(),tipo:tipoVal,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1',subUnidad:subUnidadVal,subCantidad:subCantidadVal,subPeso:subPesoVal};
+    const productoGlobalVal=String(document.getElementById('f_productoGlobal')?document.getElementById('f_productoGlobal').value:'').trim();
+    const n={id:newId,nombre:document.getElementById('f_nombre').value.trim(),tipo:tipoVal,formato:document.getElementById('f_formato').value,destino:document.getElementById('f_destino').value,especie:document.getElementById('f_especie').value,calibre:document.getElementById('f_calibre').value,productoGlobal:productoGlobalVal,kgRef:parseFloat(document.getElementById('f_kgRef').value)||0,horasTunel:parseFloat(document.getElementById('f_horasTunel').value)||0,horasPlaca:parseFloat(document.getElementById('f_horasPlaca').value)||0,usoEquipo:document.getElementById('f_usoEquipo').value,tempObj:parseFloat(document.getElementById('f_tempObj').value)||0,activo:document.getElementById('f_activo').value==='1',subUnidad:subUnidadVal,subCantidad:subCantidadVal,subPeso:subPesoVal};
     if(!n.nombre){toast('Nombre obligatorio','err');return false;}
     // Si es contenedor (pallet/carro/castillo) y se definió sub-unidad, validar y recalcular kgRef
     if(['pallet','carro','castillo'].includes(tipoVal)&&subCantidadVal>0&&subPesoVal>0){
@@ -6835,8 +6893,8 @@ async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}t
 const _today=()=>new Date().toISOString().slice(0,10);
 const SB_MAP={
   presets:{
-    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:presetUsoEquipoForCloud(r),temp_obj:r.tempObj??r.temp_obj??null,activo:r.activo!==false}),
-    in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo,usoEquipo:r.uso_equipo})
+    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:presetUsoEquipoForCloud(r),temp_obj:r.tempObj??r.temp_obj??null,producto_global:(r.productoGlobal??r.producto_global??null)||null,activo:r.activo!==false}),
+    in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo,usoEquipo:r.uso_equipo,productoGlobal:r.producto_global||''})
   },
   trabajadores:{
     out:r=>({id:r.id,codigo:r.codigo||null,nombre:r.nombre,ficha:r.ficha||null,area:r.area||null,rol:r.rol||null,turno:r.turno||null,linea:r.linea||null,centro_costo:r.centro_costo||null,contrato:r.contrato||null,activo:r.activo!==false}),
