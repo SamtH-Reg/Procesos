@@ -6872,12 +6872,14 @@ function aggregatePendientes(filterTipo){
     const p=DB.data.presets.find(x=>String(x.id)===String(r.presetId));if(!p)return;
     if(filterTipo==='molde'&&!_presetEsConteoMoldePlaca(p))return;
     if(filterTipo==='tunel'&&!tunelTipos.has(String(p.tipo||'').toLowerCase()))return;
-    if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,totalRegistrado:0,consumido:0,especieRow:''};
+    if(!map[r.presetId])map[r.presetId]={preset:p,cant:0,totalRegistrado:0,consumido:0,especieRow:'',guias:new Set()};
     map[r.presetId].cant+=Math.max(0,pendR);
     map[r.presetId].totalRegistrado+=cantR;
     map[r.presetId].consumido+=consumido;
     const rowEsp=String(r.especie||'').trim();
     if(rowEsp&&!map[r.presetId].especieRow)map[r.presetId].especieRow=rowEsp;
+    const rowGuia=String(r.guia||'').trim();
+    if(rowGuia)map[r.presetId].guias.add(rowGuia);
   };
   (RT.moldes||[]).forEach(push);
   (RT.generales||[]).forEach(push);
@@ -6907,18 +6909,31 @@ function renderPorCargar(){
   const grupoMoldes=items.filter(it=>String(it.preset.tipo||'').toLowerCase()==='molde');
   const grupoTunel=items.filter(it=>['pallet','carro','castillo'].includes(String(it.preset.tipo||'').toLowerCase()));
   const otros=items.filter(it=>!grupoMoldes.includes(it)&&!grupoTunel.includes(it));
-  // Item compacto: 1 sola línea con todo lo esencial
+  // Item compacto: 1 sola línea con producto global · especie · guía · nombre
   const renderItem=(it,last,accentColor)=>{
     const cons=it.consumido||0;
     const totR=it.totalRegistrado||it.cant;
     const pctCarg=totR>0?Math.round(cons/totR*100):0;
     const especie=_idxEspeciePendiente(it);
-    const cal=it.preset.calibre&&it.preset.calibre!=='—'?' · '+esc(it.preset.calibre):'';
+    const prodGlob=String(it.preset.productoGlobal||it.preset.producto_global||'').trim();
+    // Guías agregadas — mostrar todas con un truncado suave si son muchas
+    const guiasArr=it.guias?[...it.guias].filter(Boolean):[];
+    let guiasTxt='';
+    if(guiasArr.length){
+      if(guiasArr.length<=3)guiasTxt=guiasArr.join(', ');
+      else guiasTxt=guiasArr.slice(0,3).join(', ')+' +'+(guiasArr.length-3);
+    }
     const consBadge=cons>0?`<span style="font-size:10px;color:var(--text-muted);font-family:var(--mono);margin-left:6px;">(${cons}/${totR})</span>`:'';
-    return `<div style="padding:7px 12px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:10px;background:var(--surface);font-size:13px;" title="Pendientes: ${it.cant} · Cargados: ${cons} · Registrados: ${totR}${cons>0?' ('+pctCarg+'%)':''}">
+    // Construcción de la línea: solo se incluyen tramos no vacíos para evitar separadores huérfanos.
+    const partes=[];
+    if(prodGlob)partes.push(`<span style="font-weight:700;color:${accentColor};">${esc(prodGlob)}</span>`);
+    if(especie&&especie!=='—')partes.push(`<span>${esc(especie)}</span>`);
+    if(guiasTxt)partes.push(`<span style="color:#0369a1;font-family:var(--mono);font-size:11px;">G·${esc(guiasTxt)}</span>`);
+    partes.push(`<span style="font-weight:600;">${esc(it.preset.nombre)}</span>`);
+    const linea=partes.join('<span style="color:var(--text-3);margin:0 4px;">·</span>');
+    return `<div style="padding:7px 12px;${last?'':'border-bottom:1px solid var(--border);'}display:flex;align-items:center;gap:10px;background:var(--surface);font-size:13px;" title="Pendientes: ${it.cant} · Cargados: ${cons} · Registrados: ${totR}${cons>0?' ('+pctCarg+'%)':''}${guiasArr.length>3?'\nGuías completas: '+guiasArr.join(', '):''}">
       <div style="flex:1;min-width:0;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        <span style="font-weight:600;">${esc(it.preset.nombre)}</span>
-        <span style="font-size:11px;color:var(--text-3);margin-left:6px;">${esc(especie)}${cal} · ${it.preset.kgRef}kg</span>
+        ${linea}
         ${consBadge}
       </div>
       <div style="font-size:16px;font-weight:800;color:${accentColor};font-family:var(--mono);line-height:1;min-width:32px;text-align:right;">${it.cant}</div>
