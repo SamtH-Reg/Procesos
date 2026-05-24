@@ -3502,20 +3502,20 @@ function renderTunReport(){
     rows.sort((a,b)=>(b.h.id||0)-(a.h.id||0));
     if(!rows.length){histWrap.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3);">Sin ciclos en histórico</div>';histSub.textContent='0 ciclos';}
     else{
-      histWrap.innerHTML='<table><thead><tr><th>Equipo</th><th>Tipo</th><th>Evento</th><th>Hora inicio</th><th>Hora término</th><th class="num">Duración (h)</th><th>Turno</th><th class="num">Cant.</th><th>Productos</th><th>Guía(s)</th><th>Cierre anticipado</th></tr></thead><tbody>'+
+      histWrap.innerHTML='<table><thead><tr><th>Turno</th><th>Equipo</th><th>Tipo</th><th>Evento</th><th>Hora inicio</th><th>Hora término</th><th class="num">Duración (h)</th><th class="num">Cant.</th><th>Productos</th><th>Guía(s)</th><th>Cierre anticipado</th></tr></thead><tbody>'+
         rows.map(r=>{
           const prodTxt=Array.isArray(r.h.productos)?r.h.productos.join(', '):String(r.h.productos||'');
           const guias=_tunHistGuiasFromItems(r.h);
           const cierreEarly=r.h.cierreAnticipado?((r.h.cierreCausal||'').trim()+(r.h.cierreMinRestantes!=null?' · faltaban ~'+r.h.cierreMinRestantes+' min':'')):'';
           const ev=r.h.tipoEvento==='deshielo'?'Deshielo':'Frío';
           return`<tr>
+          <td>${esc(r.turno||'—')}</td>
           <td><strong>${esc(r.eq.codigo)}</strong> — ${esc(r.eq.nombre)}</td>
           <td>${r.eq.tipo==='tunel'?'Túnel':'Placa'}</td>
           <td><span class="badge ${r.h.tipoEvento==='deshielo'?'warn':'info'}" style="font-size:10px;">${esc(ev)}</span></td>
           <td class="num">${esc(r.h.horaInicio||'—')}</td>
           <td class="num">${esc(r.h.horaDescarga||'—')}</td>
           <td class="num">${(r.h.horasTotal||0).toFixed(2)}</td>
-          <td>${esc(r.turno||'—')}</td>
           <td class="num">${r.h.cant||0}</td>
           <td style="font-size:11px;">${esc(prodTxt||'—')}</td>
           <td style="font-size:11px;">${esc(guias)}</td>
