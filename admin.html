@@ -7855,9 +7855,71 @@ function _ieSrc(mod){
   if(mod==='equipos')return DB.data.equipos||[];
   return [];
 }
+/** Normaliza turno desde string (Día/Tarde/Noche o ya código dia/tarde/noche). */
+function _adminNormTurnoFromAny(t){
+  const s=String(t==null?'':t).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  if(!s)return'';
+  if(s.startsWith('dia')||s==='d')return'dia';
+  if(s.startsWith('tarde')||s==='t')return'tarde';
+  if(s.startsWith('noche')||s==='n')return'noche';
+  return s;
+}
+/** Convierte 'DD-MM-YYYY' o 'DD/MM/YYYY' a 'YYYY-MM-DD'. Si ya está en ISO, lo deja. */
+function _adminParseFechaImport(v){
+  const s=String(v==null?'':v).trim();
+  if(!s)return'';
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  const m=s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/);
+  if(m){
+    let yyyy=m[3];if(yyyy.length===2)yyyy='20'+yyyy;
+    return yyyy+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  }
+  return s;
+}
+/** Normaliza una fila importada de moldes desde Excel a la forma interna.
+ *  Acepta headers en español (Turno, Fecha, Hora, Guía, Producto, Cant, Kilos…)
+ *  y headers crudos (turno, fecha, hora, guia, producto, cant, kg…). Genera id
+ *  nuevo y reconstruye presetId por nombre del producto si falta. */
+function _adminNormMoldeRowFromImport(raw){
+  if(!raw||typeof raw!=='object')return null;
+  const pick=(...keys)=>{for(const k of keys){if(raw[k]!=null&&String(raw[k]).trim()!=='')return raw[k];}return'';};
+  const producto=String(pick('producto','Producto')||'').trim();
+  let presetId=raw.presetId||raw.preset_id||null;
+  if(!presetId&&producto){
+    const p=(DB.data.presets||[]).find(x=>String(x.nombre||'').trim().toLowerCase()===producto.toLowerCase());
+    if(p)presetId=p.id;
+  }
+  const cantN=Number(pick('cant','Cant','cantidad','Cantidad')||0)||0;
+  const pendRaw=pick('pendiente','Pendiente');
+  const pendN=pendRaw===''?cantN:(Number(pendRaw)||0);
+  const kgN=Number(pick('kg','kilos','Kilos')||0)||0;
+  return{
+    id:raw.id!=null&&raw.id!==''?raw.id:(Date.now()+Math.floor(Math.random()*1e6)),
+    hora:String(pick('hora','Hora')||'').trim().slice(0,8),
+    fecha:_adminParseFechaImport(pick('fecha','Fecha')),
+    turno:_adminNormTurnoFromAny(pick('turno','Turno')),
+    linea:String(pick('linea','Linea','línea','Línea')||'').trim(),
+    codigo:String(pick('codigo','Codigo','código','Código')||'').trim(),
+    nombre:String(pick('nombre','Nombre')||'').trim(),
+    ficha:String(pick('ficha','Ficha')||'').trim(),
+    producto:producto,
+    presetId:presetId||null,
+    destino:String(pick('destino','Destino')||'').trim(),
+    calibre:String(pick('calibre','Calibre')||'').trim(),
+    especie:String(pick('especie','Especie')||'').trim(),
+    cant:cantN,
+    pendiente:pendN,
+    kg:kgN,
+    guia:String(pick('guia','Guía','guía')||'').trim()
+  };
+}
 function _ieWrite(mod,arr,reemplazar){
   const tgt=_ieSrc(mod);
-  if(mod==='moldes'){RT.data.moldes=reemplazar?arr:tgt.concat(arr);RT._ensureShape();RT.save();}
+  if(mod==='moldes'){
+    // Normaliza headers en español/sin id antes de persistir
+    const norm=(Array.isArray(arr)?arr:[]).map(_adminNormMoldeRowFromImport).filter(Boolean);
+    RT.data.moldes=reemplazar?norm:tgt.concat(norm);RT._ensureShape();RT.save();
+  }
   else if(mod==='pesajes'){RT.data.pesajes=reemplazar?arr:tgt.concat(arr);RT._ensureShape();RT.save();}
   else if(mod==='presets'){DB.data.presets=reemplazar?arr:tgt.concat(arr);DB.save();}
   else if(mod==='trabajadores'){DB.data.trabajadores=reemplazar?arr:tgt.concat(arr);DB.save();renderTrabs&&renderTrabs();}
@@ -7996,6 +8058,33 @@ function _adminPesajesSheetRowsForExport(rows){
     };
   });
 }
+/** Filas para exportar a Excel desde Moldes. Mismo formato y orden que pesajes
+ *  (Turno, Fecha, Hora…) + columnas propias de moldes (Producto, Destino, Calibre,
+ *  Cant, Pendiente, Kg). NO incluye id / created_at / presetId — esos campos
+ *  son técnicos de la nube y no aportan información al usuario en Excel. */
+function _adminMoldesSheetRowsForExport(rows){
+  return(Array.isArray(rows)?rows:[]).map(r=>{
+    const kg=r.kg!=null&&r.kg!==''?Number(r.kg):'';
+    return{
+      'Turno':_adminTurnoLabelPesajeExport(r.turno),
+      'Fecha':_adminFechaDdMmYyyyExport(r.fecha),
+      'Hora':String(r.hora||'').trim().slice(0,8),
+      'Hora Entera':_adminHoraEnteraFromHm(r.hora),
+      'Guía':String(r.guia!=null?r.guia:''),
+      'Especie':String(r.especie!=null?r.especie:''),
+      'Producto':String(r.producto!=null?r.producto:''),
+      'Destino':String(r.destino!=null?r.destino:''),
+      'Calibre':String(r.calibre!=null?r.calibre:''),
+      'Codigo':String(r.codigo!=null?r.codigo:''),
+      'Nombre':String(r.nombre!=null?r.nombre:''),
+      'Ficha':String(r.ficha!=null?r.ficha:''),
+      'Linea':String(r.linea!=null?r.linea:''),
+      'Cant':r.cant!=null&&r.cant!==''?Number(r.cant):'',
+      'Pendiente':r.pendiente!=null&&r.pendiente!==''?Number(r.pendiente):'',
+      'Kilos':kg
+    };
+  });
+}
 function exportFiltered(){
   const mod=document.getElementById('ieModulo').value;
   if(mod==='tuneles'){
@@ -8017,6 +8106,9 @@ function exportFiltered(){
   const wb=XLSX.utils.book_new();
   if(mod==='pesajes'){
     const sheet=_adminPesajesSheetRowsForExport(f);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheet),mod);
+  }else if(mod==='moldes'){
+    const sheet=_adminMoldesSheetRowsForExport(f);
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheet),mod);
   }else{
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
