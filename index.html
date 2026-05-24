@@ -2575,14 +2575,17 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
         </div>
         <div class="form-field">
           <label class="form-label">Línea</label>
-          <select class="select filled" id="gRegLinea">
+          <select class="select filled" id="gRegLinea" onchange="_gRegLineaChange()">
             <option value="L1">L1 — Línea 1</option>
             <option value="L2" selected>L2 — Línea 2</option>
             <option value="L3">L3 — Línea 3</option>
             <option value="L4">L4 — Línea 4</option>
             <option value="L5">L5 — Línea 5</option>
+            <option value="SP">SP — Línea Subproducto</option>
+            <option value="__manual__">✏️ Otra (manual)…</option>
             <option value="—">— Sin línea</option>
           </select>
+          <input class="input" id="gRegLineaManual" type="text" placeholder="Ej: LX, EXTRA…" maxlength="40" autocomplete="off" style="display:none;margin-top:6px;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();">
         </div>
         <div class="form-field">
           <label class="form-label">Especie</label>
@@ -6315,6 +6318,34 @@ function renderGRegEspecieSelect(){
   if(prev&&especies.includes(prev))sel.value=prev;
   else sel.value='';
 }
+/** Lee el valor real de Línea del registro general: el del input manual si el
+ *  usuario eligió "Otra (manual)", o el value del select en cualquier otro caso. */
+function _gRegLineaValue(){
+  const sel=document.getElementById('gRegLinea');
+  if(!sel)return'';
+  const v=String(sel.value||'');
+  if(v==='__manual__'){
+    const inp=document.getElementById('gRegLineaManual');
+    const manual=String(inp&&inp.value||'').trim().toUpperCase();
+    return manual||'—'; // si quedó vacío tras seleccionar manual, no romper la fila
+  }
+  return v;
+}
+/** Muestra/oculta el input manual cuando el usuario cambia el select de Línea. */
+function _gRegLineaChange(){
+  const sel=document.getElementById('gRegLinea');
+  const inp=document.getElementById('gRegLineaManual');
+  if(!sel||!inp)return;
+  if(sel.value==='__manual__'){
+    inp.style.display='';
+    inp.focus();
+  }else{
+    inp.style.display='none';
+    inp.value='';
+  }
+}
+window._gRegLineaValue=_gRegLineaValue;
+window._gRegLineaChange=_gRegLineaChange;
 function onGRegEspecieChange(){
   const especie=_getGRegEspecieFilter();
   if(especie&&RT.selPresetG){
@@ -6493,7 +6524,7 @@ function regGeneral(){
   const rec={
     id:nextId(RT.generales),hora:nowHM(),fecha:fechaReg,
     turno:_cycleTurnoNorm(turnoCode),
-    linea:document.getElementById('gRegLinea').value,
+    linea:_gRegLineaValue(),
     producto:p.nombre,presetId:p.id,tipo:p.tipo,
     destino:p.destino,calibre:p.calibre,especie:p.especie,
     cant,pendiente:cant,kg,guia,
