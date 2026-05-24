@@ -10635,19 +10635,23 @@ function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
   const isArmadoPlanillero=(mode==='planillero'&&!Array.isArray(list));
   let defaultPool=isArmadoPlanillero?_planilleroPickerMergedList():pool.filter(t=>t&&t.activo!==false).sort((a,b)=>String((a&&a.nombre)||'').localeCompare(String((b&&b.nombre)||'')));
   // Filtro por turno cuando el picker se abre desde armado de línea (Moldes / Pesaje).
-  // El trabajador.turno viene de UCO Asistencia (Día/Tarde/Noche). Filtramos para que solo
-  // aparezcan los del turno seleccionado en el modal. Incluye también los "Sin turno" como
-  // fallback (no excluir gente sin clasificar).
+  // ESTRICTO: el trabajador.turno viene de UCO Asistencia (Día/Tarde/Noche). Solo aparecen
+  // los del turno EXACTO seleccionado en el modal. Sin fallback "mostrar todos" — antes,
+  // cuando no había matches, se mostraban TODOS los trabajadores (defeating el propósito).
+  //
+  // Excepción: planilleros del catálogo manual (`pln:...` IDs) no tienen turno UCO porque
+  // se agregan a mano para suplir Asistencia. Siempre se preservan en el picker de planillero
+  // para que el usuario pueda elegirlos aunque ningún trabajador real coincida con el turno.
   const lineaTurnoKey=_idxArmadoLineaTurnoKey();
   const filtrarPorTurno=!Array.isArray(list)&&lineaTurnoKey&&(mode==='trab'||mode==='planillero');
   if(filtrarPorTurno){
-    const filtered=defaultPool.filter(t=>{
-      const k=_idxTurnoKey(t&&t.turno);
-      return k===lineaTurnoKey||k==='__sin__'; // sin turno se mantiene como fallback
+    defaultPool=defaultPool.filter(t=>{
+      if(!t)return false;
+      // Preservar siempre los planilleros del catálogo manual — no tienen turno UCO.
+      if(mode==='planillero'&&String(t.id||'').startsWith('pln:'))return true;
+      const k=_idxTurnoKey(t.turno);
+      return k===lineaTurnoKey;
     });
-    // Solo aplicar el filtro si hay al menos algún match — caso límite cuando los
-    // trabajadores no tienen turno todavía sincronizado de UCO.
-    if(filtered.length)defaultPool=filtered;
   }
   const allTrabs=Array.isArray(list)?list:defaultPool;
   const isRegistro=Array.isArray(list);
@@ -10657,7 +10661,10 @@ function openIosPicker(evOrMode,modeOrCb,cbOrList,trabsList){
   let emptyMsg=isRegistro?'Sin trabajadores asignados en esta línea':'Sin resultados';
   if(filtrarPorTurno&&!allTrabs.length){
     const lblMap={dia:'Día',tarde:'Tarde',noche:'Noche'};
-    emptyMsg='Sin trabajadores del turno '+(lblMap[lineaTurnoKey]||lineaTurnoKey)+' en Asistencia. Re-sync UCO o cambia el turno de la línea.';
+    const tLbl=lblMap[lineaTurnoKey]||lineaTurnoKey;
+    emptyMsg='Sin trabajadores asignados al turno '+tLbl+' en Asistencia (UCO). '+
+             'Revisa el catálogo Turnos en admin o sincroniza UCO. '+
+             'Si necesitas alguien fuera de turno, cambia el turno de la línea arriba.';
   }
   openFsCombo({
     anchorEl,
