@@ -322,6 +322,23 @@ tbody tr:hover{background:var(--surface-alt);}
 .resumen-pivot-filters .rp-checklist label:hover{background:var(--surface-alt);}
 .resumen-pivot-filters .rp-search{width:100%;margin-bottom:6px;font-size:12px;padding:6px 8px;}
 .resumen-pivot-head .resumen-th-filt{position:relative;vertical-align:bottom;}
+/* ─── Filtros estilo Excel AutoFilter en encabezados ─── */
+#rgMasterTable thead th{position:relative;background:#1e3a5f;color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px 22px 8px 10px;border:none;white-space:nowrap;}
+#rgMasterTable thead th[data-col]{cursor:pointer;user-select:none;}
+#rgMasterTable thead th .rg-filter-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;opacity:.85;background:rgba(255,255,255,.15);border-radius:3px;padding:1px 4px;}
+#rgMasterTable thead th.rg-active .rg-filter-btn{background:#fbbf24;color:#1e3a5f;font-weight:900;opacity:1;}
+#rgMasterTable .rg-filter-pop{display:none;position:absolute;top:100%;left:0;min-width:220px;max-width:280px;background:#fff;color:#0f172a;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.15);padding:8px;z-index:50;text-align:left;font-weight:normal;text-transform:none;letter-spacing:0;}
+#rgMasterTable .rg-filter-pop.open{display:block;}
+#rgMasterTable .rg-filter-pop input.rg-search{width:100%;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;}
+#rgMasterTable .rg-filter-pop .rg-items{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px 6px;background:var(--surface-alt);}
+#rgMasterTable .rg-filter-pop .rg-items label{display:flex;align-items:center;gap:6px;padding:3px 2px;font-size:12px;cursor:pointer;}
+#rgMasterTable .rg-filter-pop .rg-items label:hover{background:var(--surface);}
+#rgMasterTable .rg-filter-pop .rg-actions{display:flex;gap:6px;margin-top:6px;}
+#rgMasterTable .rg-filter-pop .rg-actions button{flex:1;padding:5px 8px;font-size:11px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;}
+#rgMasterTable .rg-filter-pop .rg-actions button:hover{background:var(--surface-alt);}
+#rgMasterTable .rg-filter-pop .rg-actions button.primary{background:var(--brand,#0f172a);color:#fff;border-color:var(--brand,#0f172a);}
+#rgMasterTable tbody tr.rg-subtotal td{background:#dbeafe;font-weight:700;color:#1e3a5f;}
+#rgMasterTable tfoot td{background:#0f172a;color:#fbbf24;font-weight:800;}
 .resumen-pivot-head .resumen-th-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:72px;background:transparent;border:none;color:#fff;font:inherit;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;cursor:pointer;padding:0;text-align:left;}
 .resumen-pivot-head .resumen-th-btn.is-filtered .resumen-th-ic{color:#fde68a;}
 .resumen-pivot-head .resumen-th-ic{font-size:10px;opacity:.85;flex-shrink:0;}
@@ -717,113 +734,78 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     </div>
   </div>
 
-  <!-- ═══ FILTROS INTERACTIVOS ═══ -->
-  <div class="card" style="margin-bottom:14px;padding:14px;">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">
-      <div class="form-field" style="margin:0;"><label class="form-label">📅 Fecha desde</label><input type="date" class="input" id="rgFechaDesde" onchange="renderResumenGeneral()"></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">📅 Fecha hasta</label><input type="date" class="input" id="rgFechaHasta" onchange="renderResumenGeneral()"></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">🕐 Turno</label><select class="select" id="rgTurno" onchange="renderResumenGeneral()"><option value="">Todos</option><option value="dia">Día</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">🐟 Especie</label><select class="select" id="rgEspecie" onchange="renderResumenGeneral()"><option value="">Todas</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">⚙️ Producto global</label><select class="select" id="rgProductoGlobal" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">🏷️ Producto</label><select class="select" id="rgProducto" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">📋 Guía</label><input class="input" id="rgGuia" placeholder="Filtrar guía…" oninput="rgDebounceFilter()"></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">🏭 Línea</label><select class="select" id="rgLinea" onchange="renderResumenGeneral()"><option value="">Todas</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">🎯 Destino</label><select class="select" id="rgDestino" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">📐 Calibre</label><select class="select" id="rgCalibre" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
-      <div class="form-field" style="margin:0;"><label class="form-label">📦 Tipo</label><select class="select" id="rgTipo" onchange="renderResumenGeneral()"><option value="">Todos</option><option value="molde">Molde</option><option value="pallet">Pallet</option><option value="carro">Carro</option><option value="castillo">Castillo</option><option value="general">General</option><option value="pesaje">Pesaje</option></select></div>
-    </div>
-    <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center;padding-top:10px;border-top:1px solid var(--border);">
-      <span style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Atajos:</span>
-      <button type="button" class="btn ghost sm" onclick="rgSetHoy()">Hoy</button>
-      <button type="button" class="btn ghost sm" onclick="rgSetAyer()">Ayer</button>
-      <button type="button" class="btn ghost sm" onclick="rgSet7Dias()">7 días</button>
-      <button type="button" class="btn ghost sm" onclick="rgSetSemana()">Esta semana</button>
-      <button type="button" class="btn ghost sm" onclick="rgSetMes()">Este mes</button>
-      <button type="button" class="btn ghost sm" onclick="rgSet30Dias()">30 días</button>
+  <!-- ═══ FILTROS GLOBALES (fecha + atajos) ═══ -->
+  <div class="card" style="margin-bottom:14px;padding:12px 14px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;">
+      <div class="form-field" style="margin:0;min-width:160px;"><label class="form-label">📅 Desde</label><input type="date" class="input" id="rgFechaDesde" onchange="renderResumenGeneral()"></div>
+      <div class="form-field" style="margin:0;min-width:160px;"><label class="form-label">📅 Hasta</label><input type="date" class="input" id="rgFechaHasta" onchange="renderResumenGeneral()"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <button type="button" class="btn ghost sm" onclick="rgSetHoy()">Hoy</button>
+        <button type="button" class="btn ghost sm" onclick="rgSetAyer()">Ayer</button>
+        <button type="button" class="btn ghost sm" onclick="rgSet7Dias()">7 días</button>
+        <button type="button" class="btn ghost sm" onclick="rgSetSemana()">Esta semana</button>
+        <button type="button" class="btn ghost sm" onclick="rgSetMes()">Este mes</button>
+        <button type="button" class="btn ghost sm" onclick="rgSet30Dias()">30 días</button>
+      </div>
       <span style="flex:1;"></span>
-      <span id="rgFiltrosActivos" style="font-size:11px;color:var(--brand);font-weight:600;"></span>
+      <span id="rgFiltrosActivos" style="font-size:11px;color:var(--brand);font-weight:600;align-self:center;"></span>
+    </div>
+    <!-- Selects ocultos para los filtros por columna (manipulados desde la tabla maestra) -->
+    <div style="display:none;">
+      <select id="rgTurno"><option value="">Todos</option><option value="dia">Día</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select>
+      <select id="rgEspecie"><option value="">Todas</option></select>
+      <select id="rgProductoGlobal"><option value="">Todos</option></select>
+      <select id="rgProducto"><option value="">Todos</option></select>
+      <input id="rgGuia">
+      <select id="rgLinea"><option value="">Todas</option></select>
+      <select id="rgDestino"><option value="">Todos</option></select>
+      <select id="rgCalibre"><option value="">Todos</option></select>
+      <select id="rgTipo"><option value="">Todos</option><option value="molde">Molde</option><option value="pallet">Pallet</option><option value="carro">Carro</option><option value="castillo">Castillo</option><option value="general">General</option><option value="pesaje">Pesaje</option></select>
     </div>
   </div>
 
   <!-- ═══ KPI CARDS ═══ -->
-  <div id="rgKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
+  <div id="rgKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;"></div>
 
-  <!-- ═══ Por tipo de producción ═══ -->
+  <!-- ═══ TABLA MAESTRA estilo Excel pivot con filtros en encabezados ═══ -->
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">📦 Por tipo de producción</div><div class="card-sub" id="rgPorTipoSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Tipo</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
-      <tbody id="tbRgPorTipo"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Por especie ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">🐟 Por especie</div><div class="card-sub" id="rgPorEspSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Especie</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
-      <tbody id="tbRgPorEsp"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Productos por kg (todos los del filtro) ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">🏆 Productos por kilos</div><div class="card-sub" id="rgTopProdSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>#</th><th>Producto</th><th>Tipo</th><th>Especie</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
-      <tbody id="tbRgTopProd"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Fecha × Turno ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">📅 Producción por fecha × turno</div><div class="card-sub" id="rgPorFechaSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Fecha</th><th class="num">Día</th><th class="num">Tarde</th><th class="num">Noche</th><th class="num">Total (kg)</th><th class="num">% del total</th></tr></thead>
-      <tbody id="tbRgPorFecha"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Por guía ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">📋 Por guía</div><div class="card-sub" id="rgPorGuiaSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Guía</th><th>Especie(s)</th><th>Producto(s)</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th></tr></thead>
-      <tbody id="tbRgPorGuia"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Por producto global (familia) ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">⚙️ Por producto global (familia)</div><div class="card-sub" id="rgPorProdGlobalSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Producto global</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
-      <tbody id="tbRgPorProdGlobal"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Por destino ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">🎯 Por destino</div><div class="card-sub" id="rgPorDestinoSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Destino</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
-      <tbody id="tbRgPorDestino"></tbody>
-    </table></div>
-  </div>
-
-  <!-- ═══ Por línea ═══ -->
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">🏭 Por línea</div><div class="card-sub" id="rgPorLineaSub">—</div></div>
-    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th>Línea</th><th class="num">Moldes</th><th class="num">Pallets/Cont.</th><th class="num">Pesajes</th><th class="num">Unidades</th><th class="num">Kg total</th></tr></thead>
-      <tbody id="tbRgPorLinea"></tbody>
-    </table></div>
+    <div class="card-hdr">
+      <div class="card-title">📊 Resumen de producción</div>
+      <div class="card-sub" id="rgMasterSub">— Click en ▾ de cada columna para filtrar</div>
+    </div>
+    <div style="padding:6px 14px;background:var(--surface-alt);border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;font-size:11px;color:var(--text-3);">
+      <span>Cada fila combina turno+línea+especie+guía+familia+producto+calibre+destino. Subtotales por turno y total general.</span>
+      <span style="flex:1;"></span>
+      <span style="font-weight:700;color:var(--brand);">Filas: <span id="rgMasterCount">0</span></span>
+    </div>
+    <div class="tbl-wrap" style="max-height:600px;overflow:auto;">
+      <table class="resumen-pivot-tbl" id="rgMasterTable" style="font-size:12px;">
+        <thead style="position:sticky;top:0;background:var(--surface);z-index:2;">
+          <tr>
+            <th data-col="turno">Turno <span class="rg-filter-btn" data-col="turno">▾</span><div class="rg-filter-pop" id="rgPop_turno"></div></th>
+            <th data-col="linea">Línea <span class="rg-filter-btn" data-col="linea">▾</span><div class="rg-filter-pop" id="rgPop_linea"></div></th>
+            <th data-col="especie">Especie <span class="rg-filter-btn" data-col="especie">▾</span><div class="rg-filter-pop" id="rgPop_especie"></div></th>
+            <th data-col="guia">Guía <span class="rg-filter-btn" data-col="guia">▾</span><div class="rg-filter-pop" id="rgPop_guia"></div></th>
+            <th data-col="productoGlobal">P. global <span class="rg-filter-btn" data-col="productoGlobal">▾</span><div class="rg-filter-pop" id="rgPop_productoGlobal"></div></th>
+            <th data-col="producto">Producto <span class="rg-filter-btn" data-col="producto">▾</span><div class="rg-filter-pop" id="rgPop_producto"></div></th>
+            <th data-col="calibre">Calibre <span class="rg-filter-btn" data-col="calibre">▾</span><div class="rg-filter-pop" id="rgPop_calibre"></div></th>
+            <th data-col="destino">Destino <span class="rg-filter-btn" data-col="destino">▾</span><div class="rg-filter-pop" id="rgPop_destino"></div></th>
+            <th data-col="tipo">Tipo <span class="rg-filter-btn" data-col="tipo">▾</span><div class="rg-filter-pop" id="rgPop_tipo"></div></th>
+            <th class="num">Cant.</th>
+            <th class="num">Kg</th>
+            <th class="num">% Kg</th>
+          </tr>
+        </thead>
+        <tbody id="tbRgMaster"></tbody>
+        <tfoot id="tfRgMaster"></tfoot>
+      </table>
+    </div>
   </div>
 
   <!-- ═══ Vista jerárquica estilo Excel (Pivot) ═══ -->
   <div class="card">
     <div class="card-hdr">
-      <div class="card-title">📑 Análisis jerárquico (estilo Excel pivot)</div>
+      <div class="card-title">📑 Análisis jerárquico (drill-down)</div>
       <div class="card-sub" id="rgPivotSub">Línea → Especie → Guía → Producto global → Producto · Kg + % del total</div>
     </div>
     <div style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--surface-alt);">
@@ -4881,7 +4863,13 @@ function renderResumenGeneral(){
       kpiCard('Guías',guiasUnicas+'','distintas','#be185d','#fce7f3');
   }
 
-  // ═══ Por tipo ═══
+  // ═══ TABLA MAESTRA estilo Excel ═══
+  // Cada fila combina: turno + linea + especie + guia + productoGlobal + producto + calibre + destino + tipo
+  // Agrega cant y kg. Subtotales por turno + total general.
+  _rgRenderMasterTable(moldes,generales,pesajes);
+
+  // El cálculo legacy de "Por tipo" sigue ejecutándose para alimentar KPIs ya removidos —
+  // mantengo la variable totKgGlobal porque la usa el pivot tree y otros bloques.
   const porTipo={};
   const sumarTipo=(r,esPesaje)=>{
     const tipo=_rgTipoDeFila(r,esPesaje);
@@ -5202,6 +5190,211 @@ function rgPivotExpandAll(expand){
   cont.querySelectorAll('details').forEach(d=>{d.open=!!expand;});
 }
 window.rgPivotExpandAll=rgPivotExpandAll;
+
+/* ════════════════════════════════════════════════════════════════════
+ * TABLA MAESTRA estilo Excel con AutoFilter en encabezados
+ * ════════════════════════════════════════════════════════════════════ */
+/** Construye una fila de la tabla maestra a partir de un registro operativo. */
+function _rgMasterRowFromOp(r,esPesaje){
+  return{
+    turno:_rgNormTurnoKey(r.turno).replace(/^./,c=>c.toUpperCase()),
+    linea:String(r.linea||'—').trim()||'—',
+    especie:String(r.especie||'—').trim()||'—',
+    guia:String(r.guia||'').trim()||'(sin guía)',
+    productoGlobal:_rgProductoGlobalDe(r.producto)||(esPesaje?'':'(sin clasificar)'),
+    producto:String(r.producto||(esPesaje?'(pesaje)':'—')).trim(),
+    calibre:_rgCalibreDe(r)||'—',
+    destino:_rgDestinoDe(r)||'—',
+    tipo:_rgTipoDeFila(r,esPesaje),
+    cant:esPesaje?1:(+r.cant||0),
+    kg:+r.kg||0
+  };
+}
+/** Construye agregaciones por la clave compuesta y renderiza la tabla maestra. */
+function _rgRenderMasterTable(moldes,generales,pesajes){
+  const filas=[];
+  moldes.forEach(r=>filas.push(_rgMasterRowFromOp(r,false)));
+  generales.forEach(r=>filas.push(_rgMasterRowFromOp(r,false)));
+  pesajes.forEach(r=>filas.push(_rgMasterRowFromOp(r,true)));
+  // Agrupar por clave compuesta
+  const COLS=['turno','linea','especie','guia','productoGlobal','producto','calibre','destino','tipo'];
+  const grupo={};
+  filas.forEach(row=>{
+    const key=COLS.map(c=>row[c]).join('|');
+    if(!grupo[key]){
+      grupo[key]={};COLS.forEach(c=>grupo[key][c]=row[c]);
+      grupo[key].cant=0;grupo[key].kg=0;
+    }
+    grupo[key].cant+=row.cant;
+    grupo[key].kg+=row.kg;
+  });
+  let rows=Object.values(grupo);
+  // Aplicar filtros por columna (definidos en _rgColFilters)
+  if(window._rgColFilters){
+    rows=rows.filter(r=>{
+      for(const col of COLS){
+        const sel=_rgColFilters[col];
+        if(sel&&sel.size>0&&!sel.has(String(r[col])))return false;
+      }
+      return true;
+    });
+  }
+  // Marcar columnas con filtro activo
+  COLS.forEach(c=>{
+    const th=document.querySelector(`#rgMasterTable thead th[data-col="${c}"]`);
+    if(!th)return;
+    const sel=window._rgColFilters&&_rgColFilters[c];
+    if(sel&&sel.size>0)th.classList.add('rg-active');
+    else th.classList.remove('rg-active');
+  });
+  // Ordenar: turno → linea → especie → guia → productoGlobal → producto
+  rows.sort((a,b)=>{
+    for(const c of COLS){
+      const x=String(a[c]||'');const y=String(b[c]||'');
+      if(x!==y)return x.localeCompare(y);
+    }
+    return 0;
+  });
+  // Total
+  const totKg=rows.reduce((s,r)=>s+r.kg,0);
+  // Render con subtotales por turno
+  const tb=document.getElementById('tbRgMaster');
+  const tf=document.getElementById('tfRgMaster');
+  const cnt=document.getElementById('rgMasterCount');
+  if(cnt)cnt.textContent=_rgFmtN(rows.length);
+  if(tb){
+    if(!rows.length){
+      tb.innerHTML='<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-3);">Sin datos para los filtros actuales</td></tr>';
+      if(tf)tf.innerHTML='';
+      // Guardar dataset para los popups de filtros
+      _rgMasterAllRows=Object.values(grupo);
+      return;
+    }
+    // Inserta subtotales por turno
+    const out=[];
+    let curTurno=null;let subKg=0;let subCant=0;let subN=0;
+    rows.forEach((r,i)=>{
+      if(curTurno!==null&&r.turno!==curTurno){
+        out.push(`<tr class="rg-subtotal"><td colspan="9">▶ Total ${esc(curTurno)} (${subN} filas)</td><td class="num">${_rgFmtN(subCant)}</td><td class="num">${_rgFmtKg(subKg)}</td><td class="num">${totKg>0?Math.round(subKg/totKg*100):0}%</td></tr>`);
+        subKg=0;subCant=0;subN=0;
+      }
+      curTurno=r.turno;
+      subKg+=r.kg;subCant+=r.cant;subN++;
+      const pct=totKg>0?Math.round(r.kg/totKg*100):0;
+      out.push(`<tr>
+        <td>${esc(r.turno)}</td>
+        <td>${esc(r.linea)}</td>
+        <td>${esc(r.especie)}</td>
+        <td style="font-family:var(--mono,monospace);">${esc(r.guia)}</td>
+        <td><span style="color:#7c3aed;font-weight:600;">${esc(r.productoGlobal)}</span></td>
+        <td style="font-weight:600;">${esc(r.producto)}</td>
+        <td>${esc(r.calibre)}</td>
+        <td>${esc(r.destino)}</td>
+        <td><span class="badge slate" style="font-size:10px;">${esc(r.tipo)}</span></td>
+        <td class="num">${_rgFmtN(r.cant)}</td>
+        <td class="num" style="font-weight:700;">${_rgFmtKg(r.kg)}</td>
+        <td class="num">${pct}%</td>
+      </tr>`);
+    });
+    // Cierra el último subtotal
+    if(curTurno!==null){
+      out.push(`<tr class="rg-subtotal"><td colspan="9">▶ Total ${esc(curTurno)} (${subN} filas)</td><td class="num">${_rgFmtN(subCant)}</td><td class="num">${_rgFmtKg(subKg)}</td><td class="num">${totKg>0?Math.round(subKg/totKg*100):0}%</td></tr>`);
+    }
+    tb.innerHTML=out.join('');
+  }
+  if(tf){
+    const totCant=rows.reduce((s,r)=>s+r.cant,0);
+    tf.innerHTML=`<tr><td colspan="9" style="text-align:right;">TOTAL GENERAL</td><td class="num">${_rgFmtN(totCant)}</td><td class="num">${_rgFmtKg(totKg)}</td><td class="num">100%</td></tr>`;
+  }
+  // Guarda el dataset completo (sin aplicar col-filters) para construir los popups
+  _rgMasterAllRows=Object.values(grupo);
+}
+
+/** Estado de los filtros por columna. Map<col, Set<value>>. Si Set vacío o ausente = sin filtro. */
+let _rgColFilters={};
+let _rgMasterAllRows=[];
+
+/** Toggle del popup de filtro en una columna. Cierra todos los demás. */
+function rgToggleFilterPop(col){
+  const pops=document.querySelectorAll('#rgMasterTable .rg-filter-pop');
+  pops.forEach(p=>{if(p.id!=='rgPop_'+col)p.classList.remove('open');});
+  const pop=document.getElementById('rgPop_'+col);
+  if(!pop)return;
+  if(pop.classList.contains('open')){pop.classList.remove('open');return;}
+  // Construir contenido: lista de valores únicos en esta columna (sin aplicar el filtro de la columna misma)
+  const otrasCols=Object.keys(_rgColFilters).filter(c=>c!==col);
+  // Filtrar rows por filtros de OTRAS columnas, luego sacar únicos de ESTA columna
+  const rowsForCol=_rgMasterAllRows.filter(r=>{
+    for(const oc of otrasCols){
+      const sel=_rgColFilters[oc];
+      if(sel&&sel.size>0&&!sel.has(String(r[oc])))return false;
+    }
+    return true;
+  });
+  const unicos=[...new Set(rowsForCol.map(r=>String(r[col]||'')))].sort();
+  const activos=_rgColFilters[col]||new Set();
+  const html=`
+    <input class="rg-search" type="text" placeholder="🔍 Buscar…" oninput="rgFilterPopSearch('${esc(col)}',this.value)">
+    <div class="rg-items" id="rgItems_${esc(col)}">
+      ${unicos.map(v=>`<label><input type="checkbox" value="${esc(v)}" ${activos.size===0||activos.has(v)?'checked':''} onchange="rgFilterCheckChange('${esc(col)}',this)"> <span>${esc(v||'(vacío)')}</span></label>`).join('')}
+    </div>
+    <div class="rg-actions">
+      <button type="button" onclick="rgFilterSelectAll('${esc(col)}',true)">Todos</button>
+      <button type="button" onclick="rgFilterSelectAll('${esc(col)}',false)">Ninguno</button>
+      <button type="button" class="primary" onclick="rgFilterApply('${esc(col)}')">Aplicar</button>
+    </div>
+  `;
+  pop.innerHTML=html;
+  pop.classList.add('open');
+}
+function rgFilterPopSearch(col,q){
+  const cont=document.getElementById('rgItems_'+col);
+  if(!cont)return;
+  const term=String(q||'').toLowerCase();
+  cont.querySelectorAll('label').forEach(lab=>{
+    const txt=lab.textContent.toLowerCase();
+    lab.style.display=(!term||txt.includes(term))?'flex':'none';
+  });
+}
+function rgFilterSelectAll(col,checked){
+  const cont=document.getElementById('rgItems_'+col);
+  if(!cont)return;
+  cont.querySelectorAll('input[type=checkbox]').forEach(cb=>{if(cb.closest('label').style.display!=='none')cb.checked=!!checked;});
+}
+function rgFilterCheckChange(col,cb){/* no-op: se aplica al pulsar Aplicar */}
+function rgFilterApply(col){
+  const cont=document.getElementById('rgItems_'+col);
+  if(!cont)return;
+  const all=[...cont.querySelectorAll('input[type=checkbox]')];
+  const checked=all.filter(cb=>cb.checked).map(cb=>cb.value);
+  // Si están TODOS marcados → sin filtro
+  if(checked.length===all.length){
+    delete _rgColFilters[col];
+  }else{
+    _rgColFilters[col]=new Set(checked);
+  }
+  document.getElementById('rgPop_'+col).classList.remove('open');
+  renderResumenGeneral();
+}
+window.rgToggleFilterPop=rgToggleFilterPop;
+window.rgFilterPopSearch=rgFilterPopSearch;
+window.rgFilterSelectAll=rgFilterSelectAll;
+window.rgFilterCheckChange=rgFilterCheckChange;
+window.rgFilterApply=rgFilterApply;
+
+/** Wire-up: click en TH o en flecha ▾ abre el popup. Click fuera lo cierra. */
+document.addEventListener('click',(e)=>{
+  const th=e.target.closest('#rgMasterTable thead th[data-col]');
+  const pop=e.target.closest('.rg-filter-pop');
+  if(th&&!pop){
+    e.stopPropagation();
+    rgToggleFilterPop(th.dataset.col);
+    return;
+  }
+  if(!pop){
+    document.querySelectorAll('#rgMasterTable .rg-filter-pop.open').forEach(p=>p.classList.remove('open'));
+  }
+});
 
 /** Normaliza turno crudo (Día/Tarde/Noche / d/t/n) → 'dia' | 'tarde' | 'noche' (default 'dia'). */
 function _rgNormTurnoKey(raw){
