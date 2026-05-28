@@ -724,9 +724,12 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div class="form-field" style="margin:0;"><label class="form-label">📅 Fecha hasta</label><input type="date" class="input" id="rgFechaHasta" onchange="renderResumenGeneral()"></div>
       <div class="form-field" style="margin:0;"><label class="form-label">🕐 Turno</label><select class="select" id="rgTurno" onchange="renderResumenGeneral()"><option value="">Todos</option><option value="dia">Día</option><option value="tarde">Tarde</option><option value="noche">Noche</option></select></div>
       <div class="form-field" style="margin:0;"><label class="form-label">🐟 Especie</label><select class="select" id="rgEspecie" onchange="renderResumenGeneral()"><option value="">Todas</option></select></div>
+      <div class="form-field" style="margin:0;"><label class="form-label">⚙️ Producto global</label><select class="select" id="rgProductoGlobal" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
       <div class="form-field" style="margin:0;"><label class="form-label">🏷️ Producto</label><select class="select" id="rgProducto" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
       <div class="form-field" style="margin:0;"><label class="form-label">📋 Guía</label><input class="input" id="rgGuia" placeholder="Filtrar guía…" oninput="rgDebounceFilter()"></div>
       <div class="form-field" style="margin:0;"><label class="form-label">🏭 Línea</label><select class="select" id="rgLinea" onchange="renderResumenGeneral()"><option value="">Todas</option></select></div>
+      <div class="form-field" style="margin:0;"><label class="form-label">🎯 Destino</label><select class="select" id="rgDestino" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
+      <div class="form-field" style="margin:0;"><label class="form-label">📐 Calibre</label><select class="select" id="rgCalibre" onchange="renderResumenGeneral()"><option value="">Todos</option></select></div>
       <div class="form-field" style="margin:0;"><label class="form-label">📦 Tipo</label><select class="select" id="rgTipo" onchange="renderResumenGeneral()"><option value="">Todos</option><option value="molde">Molde</option><option value="pallet">Pallet</option><option value="carro">Carro</option><option value="castillo">Castillo</option><option value="general">General</option><option value="pesaje">Pesaje</option></select></div>
     </div>
     <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center;padding-top:10px;border-top:1px solid var(--border);">
@@ -790,13 +793,46 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     </table></div>
   </div>
 
+  <!-- ═══ Por producto global (familia) ═══ -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">⚙️ Por producto global (familia)</div><div class="card-sub" id="rgPorProdGlobalSub">—</div></div>
+    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
+      <thead><tr><th>Producto global</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
+      <tbody id="tbRgPorProdGlobal"></tbody>
+    </table></div>
+  </div>
+
+  <!-- ═══ Por destino ═══ -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">🎯 Por destino</div><div class="card-sub" id="rgPorDestinoSub">—</div></div>
+    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
+      <thead><tr><th>Destino</th><th class="num">Registros</th><th class="num">Unidades</th><th class="num">Kg totales</th><th class="num">% Kg</th></tr></thead>
+      <tbody id="tbRgPorDestino"></tbody>
+    </table></div>
+  </div>
+
   <!-- ═══ Por línea ═══ -->
-  <div class="card">
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hdr"><div class="card-title">🏭 Por línea</div><div class="card-sub" id="rgPorLineaSub">—</div></div>
     <div class="tbl-wrap"><table class="resumen-pivot-tbl">
       <thead><tr><th>Línea</th><th class="num">Moldes</th><th class="num">Pallets/Cont.</th><th class="num">Pesajes</th><th class="num">Unidades</th><th class="num">Kg total</th></tr></thead>
       <tbody id="tbRgPorLinea"></tbody>
     </table></div>
+  </div>
+
+  <!-- ═══ Vista jerárquica estilo Excel (Pivot) ═══ -->
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-title">📑 Análisis jerárquico (estilo Excel pivot)</div>
+      <div class="card-sub" id="rgPivotSub">Línea → Especie → Guía → Producto global → Producto · Kg + % del total</div>
+    </div>
+    <div style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--surface-alt);">
+      <button class="btn ghost sm" type="button" onclick="rgPivotExpandAll(true)">⊞ Expandir todo</button>
+      <button class="btn ghost sm" type="button" onclick="rgPivotExpandAll(false)">⊟ Colapsar todo</button>
+      <span style="flex:1;"></span>
+      <span style="font-size:11px;color:var(--text-3);align-self:center;">Click en ▶ para expandir nivel</span>
+    </div>
+    <div id="rgPivotTree" style="padding:8px 14px;font-size:13px;"></div>
   </div>
 </div>
 
@@ -4660,7 +4696,7 @@ function rgDebounceFilter(){
 }
 function rgClearAllFilters(){
   ['rgFechaDesde','rgFechaHasta','rgGuia'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  ['rgTurno','rgEspecie','rgProducto','rgLinea','rgTipo'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['rgTurno','rgEspecie','rgProducto','rgProductoGlobal','rgLinea','rgDestino','rgCalibre','rgTipo'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   renderResumenGeneral();
 }
 function rgSetAyer(){
@@ -4689,11 +4725,34 @@ function rgSet30Dias(){
 window.rgDebounceFilter=rgDebounceFilter;window.rgClearAllFilters=rgClearAllFilters;
 window.rgSetAyer=rgSetAyer;window.rgSet7Dias=rgSet7Dias;window.rgSet30Dias=rgSet30Dias;
 
+/** Mapa producto → producto_global desde el catálogo de presets para enriquecer filas operativas. */
+function _rgProductoGlobalDe(producto){
+  if(!producto)return'';
+  const p=(DB&&DB.data&&DB.data.presets||[]).find(x=>String(x.nombre||'').trim().toUpperCase()===String(producto).trim().toUpperCase());
+  if(!p)return'';
+  return String(p.productoGlobal||p.producto_global||'').trim();
+}
+/** Mapa producto → destino desde el catálogo de presets (las filas operativas pueden no traerlo). */
+function _rgDestinoDe(r){
+  const direct=String(r&&r.destino||'').trim();
+  if(direct)return direct;
+  const p=(DB&&DB.data&&DB.data.presets||[]).find(x=>String(x.nombre||'').trim().toUpperCase()===String(r.producto||'').trim().toUpperCase());
+  return p?String(p.destino||'').trim():'';
+}
+function _rgCalibreDe(r){
+  const direct=String(r&&r.calibre||'').trim();
+  if(direct)return direct;
+  const p=(DB&&DB.data&&DB.data.presets||[]).find(x=>String(x.nombre||'').trim().toUpperCase()===String(r.producto||'').trim().toUpperCase());
+  return p?String(p.calibre||'').trim():'';
+}
 /** Poblar selects dinámicos preservando la selección actual. */
 function _rgPopulateDropdowns(rows){
   const especies=[...new Set(rows.map(r=>String(r.especie||'').trim()).filter(Boolean))].sort();
   const productos=[...new Set(rows.map(r=>String(r.producto||'').trim()).filter(Boolean))].sort();
   const lineas=[...new Set(rows.map(r=>String(r.linea||'').trim()).filter(Boolean))].sort();
+  const destinos=[...new Set(rows.map(r=>_rgDestinoDe(r)).filter(Boolean))].sort();
+  const calibres=[...new Set(rows.map(r=>_rgCalibreDe(r)).filter(Boolean))].sort();
+  const prodGlobales=[...new Set(rows.map(r=>_rgProductoGlobalDe(r.producto)).filter(Boolean))].sort();
   const fill=(id,arr,defaultLbl)=>{
     const sel=document.getElementById(id);if(!sel)return;
     const cur=sel.value;
@@ -4702,7 +4761,10 @@ function _rgPopulateDropdowns(rows){
   };
   fill('rgEspecie',especies,'Todas');
   fill('rgProducto',productos,'Todos');
+  fill('rgProductoGlobal',prodGlobales,'Todos');
   fill('rgLinea',lineas,'Todas');
+  fill('rgDestino',destinos,'Todos');
+  fill('rgCalibre',calibres,'Todos');
 }
 
 /** Construye etiqueta de filtros activos para el footer del card. */
@@ -4712,9 +4774,12 @@ function _rgFiltrosActivosLabel(f){
   else if(f.desde||f.hasta)partes.push('📅 '+(f.desde||'…')+' → '+(f.hasta||'…'));
   if(f.turno)partes.push('🕐 '+f.turno);
   if(f.especie)partes.push('🐟 '+f.especie);
+  if(f.productoGlobal)partes.push('⚙️ '+f.productoGlobal);
   if(f.producto)partes.push('🏷️ '+f.producto);
   if(f.guia)partes.push('📋 guía='+f.guia);
   if(f.linea)partes.push('🏭 '+f.linea);
+  if(f.destino)partes.push('🎯 '+f.destino);
+  if(f.calibre)partes.push('📐 '+f.calibre);
   if(f.tipo)partes.push('📦 '+f.tipo);
   return partes.length?'Filtros activos: '+partes.join(' · '):'';
 }
@@ -4733,8 +4798,11 @@ function renderResumenGeneral(){
     turno:String((document.getElementById('rgTurno')||{}).value||'').trim(),
     especie:String((document.getElementById('rgEspecie')||{}).value||'').trim(),
     producto:String((document.getElementById('rgProducto')||{}).value||'').trim(),
+    productoGlobal:String((document.getElementById('rgProductoGlobal')||{}).value||'').trim(),
     guia:String((document.getElementById('rgGuia')||{}).value||'').trim().toLowerCase(),
     linea:String((document.getElementById('rgLinea')||{}).value||'').trim(),
+    destino:String((document.getElementById('rgDestino')||{}).value||'').trim(),
+    calibre:String((document.getElementById('rgCalibre')||{}).value||'').trim(),
     tipo:String((document.getElementById('rgTipo')||{}).value||'').trim().toLowerCase()
   };
   if(f.hasta===''&&f.desde!=='')f.hasta=f.desde;
@@ -4750,8 +4818,11 @@ function renderResumenGeneral(){
     if(!matchBase(r))return false;
     if(f.especie&&String(r.especie||'').trim()!==f.especie)return false;
     if(f.producto&&String(r.producto||'').trim()!==f.producto)return false;
+    if(f.productoGlobal&&_rgProductoGlobalDe(r.producto)!==f.productoGlobal)return false;
     if(f.guia&&!String(r.guia||'').toLowerCase().includes(f.guia))return false;
     if(f.linea&&String(r.linea||'').trim()!==f.linea)return false;
+    if(f.destino&&_rgDestinoDe(r)!==f.destino)return false;
+    if(f.calibre&&_rgCalibreDe(r)!==f.calibre)return false;
     if(f.tipo){
       const t=_rgTipoDeFila(r,esPesaje);
       if(t!==f.tipo)return false;
@@ -4760,11 +4831,14 @@ function renderResumenGeneral(){
   };
   const moldes=moldesAll.filter(r=>matchFull(r,false));
   const generales=generalesAll.filter(r=>matchFull(r,false));
-  // Pesajes: no tiene producto (no aplica filtro de producto), no aplica tipo molde/pallet
+  // Pesajes: no tiene producto / productoGlobal / destino / calibre — solo filtros aplicables
   const pesajes=pesajesAll.filter(r=>{
     if(!matchBase(r))return false;
     if(f.especie&&String(r.especie||'').trim()!==f.especie)return false;
     if(f.producto)return false; // pesajes no tienen producto
+    if(f.productoGlobal)return false;
+    if(f.destino)return false;
+    if(f.calibre)return false;
     if(f.guia&&!String(r.guia||'').toLowerCase().includes(f.guia))return false;
     if(f.linea&&String(r.linea||'').trim()!==f.linea)return false;
     if(f.tipo&&f.tipo!=='pesaje')return false;
@@ -4987,8 +5061,147 @@ function renderResumenGeneral(){
   }
   const subLn=document.getElementById('rgPorLineaSub');
   if(subLn)subLn.textContent=Object.keys(porLn).length+' línea(s)';
+
+  // ═══ Por producto global (familia) ═══
+  const porPG={};
+  const sumarPG=(r,esPesaje)=>{
+    const k=_rgProductoGlobalDe(r.producto)||'(sin clasificar)';
+    if(!porPG[k])porPG[k]={pg:k,registros:0,unidades:0,kg:0};
+    porPG[k].registros++;
+    porPG[k].unidades+=esPesaje?1:(+r.cant||0);
+    porPG[k].kg+=(+r.kg||0);
+  };
+  moldes.forEach(r=>sumarPG(r,false));
+  generales.forEach(r=>sumarPG(r,false));
+  const totPGKg=Object.values(porPG).reduce((s,e)=>s+e.kg,0);
+  const tbPG=document.getElementById('tbRgPorProdGlobal');
+  if(tbPG){
+    const rows=Object.values(porPG).sort((a,b)=>b.kg-a.kg);
+    tbPG.innerHTML=rows.length?rows.map(r=>{
+      const pct=totPGKg>0?Math.round(r.kg/totPGKg*100):0;
+      const bar=`<div style="display:inline-block;width:60px;height:6px;background:var(--surface-alt);border-radius:3px;vertical-align:middle;overflow:hidden;margin-right:6px;"><div style="width:${pct}%;height:100%;background:#0891b2;"></div></div>`;
+      return `<tr>
+        <td style="font-weight:700;">${esc(r.pg)}</td>
+        <td class="num">${_rgFmtN(r.registros)}</td>
+        <td class="num">${_rgFmtN(r.unidades)}</td>
+        <td class="num" style="font-weight:700;">${_rgFmtKg(r.kg)}</td>
+        <td class="num">${bar}${pct}%</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">Sin datos por producto global</td></tr>';
+  }
+  const subPG=document.getElementById('rgPorProdGlobalSub');
+  if(subPG)subPG.textContent=Object.keys(porPG).length+' familia(s) · '+_rgFmtKg(totPGKg)+' kg';
+
+  // ═══ Por destino ═══
+  const porDest={};
+  const sumarDest=(r,esPesaje)=>{
+    const k=_rgDestinoDe(r)||'(sin destino)';
+    if(!porDest[k])porDest[k]={destino:k,registros:0,unidades:0,kg:0};
+    porDest[k].registros++;
+    porDest[k].unidades+=esPesaje?1:(+r.cant||0);
+    porDest[k].kg+=(+r.kg||0);
+  };
+  moldes.forEach(r=>sumarDest(r,false));
+  generales.forEach(r=>sumarDest(r,false));
+  const totDestKg=Object.values(porDest).reduce((s,e)=>s+e.kg,0);
+  const tbDest=document.getElementById('tbRgPorDestino');
+  if(tbDest){
+    const rows=Object.values(porDest).sort((a,b)=>b.kg-a.kg);
+    tbDest.innerHTML=rows.length?rows.map(r=>{
+      const pct=totDestKg>0?Math.round(r.kg/totDestKg*100):0;
+      const bar=`<div style="display:inline-block;width:60px;height:6px;background:var(--surface-alt);border-radius:3px;vertical-align:middle;overflow:hidden;margin-right:6px;"><div style="width:${pct}%;height:100%;background:#b45309;"></div></div>`;
+      return `<tr>
+        <td style="font-weight:700;">${esc(r.destino)}</td>
+        <td class="num">${_rgFmtN(r.registros)}</td>
+        <td class="num">${_rgFmtN(r.unidades)}</td>
+        <td class="num" style="font-weight:700;">${_rgFmtKg(r.kg)}</td>
+        <td class="num">${bar}${pct}%</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-3);">Sin datos por destino</td></tr>';
+  }
+  const subDest=document.getElementById('rgPorDestinoSub');
+  if(subDest)subDest.textContent=Object.keys(porDest).length+' destino(s) · '+_rgFmtKg(totDestKg)+' kg';
+
+  // ═══ Vista pivot jerárquica (estilo Excel) ═══
+  // Estructura: Línea → Especie → Guía → Producto global → Producto
+  // Cada nivel acumula kg y se muestra como <details>/<summary> expandible
+  _rgRenderPivotTree(moldes,generales);
 }
 window.renderResumenGeneral=renderResumenGeneral;
+
+/** Renderiza el árbol jerárquico estilo Excel pivot.
+ *  Línea → Especie → Guía → Producto global → Producto, con kg y % de cada nivel. */
+function _rgRenderPivotTree(moldes,generales){
+  const cont=document.getElementById('rgPivotTree');
+  const sub=document.getElementById('rgPivotSub');
+  if(!cont)return;
+  // Construir árbol: linea → especie → guia → productoGlobal → producto
+  const tree={};
+  const sumar=(r)=>{
+    const linea=String(r.linea||'—').trim()||'—';
+    const esp=String(r.especie||'—').trim()||'—';
+    const guia=String(r.guia||'(sin guía)').trim()||'(sin guía)';
+    const pg=_rgProductoGlobalDe(r.producto)||'(sin clasificar)';
+    const prod=String(r.producto||'—').trim()||'—';
+    const kg=+r.kg||0;
+    const cant=+r.cant||0;
+    tree[linea]=tree[linea]||{kg:0,cant:0,children:{}};
+    tree[linea].kg+=kg;tree[linea].cant+=cant;
+    const tE=tree[linea].children[esp]=tree[linea].children[esp]||{kg:0,cant:0,children:{}};
+    tE.kg+=kg;tE.cant+=cant;
+    const tG=tE.children[guia]=tE.children[guia]||{kg:0,cant:0,children:{}};
+    tG.kg+=kg;tG.cant+=cant;
+    const tPG=tG.children[pg]=tG.children[pg]||{kg:0,cant:0,children:{}};
+    tPG.kg+=kg;tPG.cant+=cant;
+    const tP=tPG.children[prod]=tPG.children[prod]||{kg:0,cant:0,children:null};
+    tP.kg+=kg;tP.cant+=cant;
+  };
+  moldes.forEach(sumar);
+  generales.forEach(sumar);
+  const totalKg=Object.values(tree).reduce((s,t)=>s+t.kg,0);
+  if(!totalKg){
+    cont.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-3);">Sin datos para el pivot con el filtro actual</div>';
+    if(sub)sub.textContent='—';
+    return;
+  }
+  if(sub)sub.textContent='Total: '+_rgFmtKg(totalKg)+' kg · '+Object.keys(tree).length+' línea(s)';
+  // Render recursivo
+  const fmt=(kg,pct,cant)=>`<span style="font-family:var(--mono,monospace);color:var(--text-3);font-size:11px;margin-left:8px;">${_rgFmtKg(kg)} kg · ${pct}%${cant?' · '+_rgFmtN(cant)+' u':''}</span>`;
+  const colors={linea:'#0f172a',especie:'#7c3aed',guia:'#0369a1',pg:'#0891b2',prod:'#0f172a'};
+  const render=(node,key,level,parentKg,labelPrefix)=>{
+    const childrenKeys=node.children?Object.keys(node.children).sort((a,b)=>(node.children[b].kg||0)-(node.children[a].kg||0)):[];
+    const pct=parentKg>0?Math.round(node.kg/parentKg*100):0;
+    const indent=level*14;
+    const lvlNames=['linea','especie','guia','pg','prod'];
+    const lvlName=lvlNames[level]||'prod';
+    const color=colors[lvlName];
+    const icons={linea:'🏭',especie:'🐟',guia:'📋',pg:'⚙️',prod:'🏷️'};
+    const icon=icons[lvlName]||'•';
+    if(!childrenKeys.length){
+      return `<div style="padding:3px 0 3px ${indent+18}px;font-size:12px;color:${color};">
+        <span style="opacity:.6;">${icon}</span> ${esc(key)} ${fmt(node.kg,pct,node.cant)}
+      </div>`;
+    }
+    const childrenHtml=childrenKeys.map(k=>render(node.children[k],k,level+1,node.kg,'')).join('');
+    return `<details ${level===0?'open':''} style="padding-left:${indent}px;">
+      <summary style="padding:4px 0;cursor:pointer;font-weight:${level<2?'700':'600'};color:${color};font-size:${13-level}px;">
+        ${icon} ${esc(key)} ${fmt(node.kg,pct,node.cant)}
+      </summary>
+      ${childrenHtml}
+    </details>`;
+  };
+  const html=Object.keys(tree).sort((a,b)=>tree[b].kg-tree[a].kg)
+    .map(k=>render(tree[k],k,0,totalKg,'')).join('');
+  cont.innerHTML=html;
+}
+
+/** Expande o colapsa todos los <details> del pivot tree. */
+function rgPivotExpandAll(expand){
+  const cont=document.getElementById('rgPivotTree');
+  if(!cont)return;
+  cont.querySelectorAll('details').forEach(d=>{d.open=!!expand;});
+}
+window.rgPivotExpandAll=rgPivotExpandAll;
 
 /** Normaliza turno crudo (Día/Tarde/Noche / d/t/n) → 'dia' | 'tarde' | 'noche' (default 'dia'). */
 function _rgNormTurnoKey(raw){
@@ -5005,9 +5218,11 @@ function exportResumenGeneralExcel(){
   const sheets=[
     {id:'tbRgPorTipo',name:'PorTipo'},
     {id:'tbRgPorEsp',name:'PorEspecie'},
+    {id:'tbRgPorProdGlobal',name:'PorProdGlobal'},
     {id:'tbRgTopProd',name:'PorProducto'},
     {id:'tbRgPorFecha',name:'FechaXTurno'},
     {id:'tbRgPorGuia',name:'PorGuia'},
+    {id:'tbRgPorDestino',name:'PorDestino'},
     {id:'tbRgPorLinea',name:'PorLinea'}
   ];
   sheets.forEach(s=>{
