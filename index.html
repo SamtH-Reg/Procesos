@@ -4999,14 +4999,25 @@ async function tbManualPullMoldesPesajes(opts){
     try{if(typeof _tbPullEqRuntimeFromCloud==='function')await _tbPullEqRuntimeFromCloud({silent});}catch(e){console.warn('[tb pull eq_runtime]',e);}
     idxRefreshMoldesKpis();
     /* Subir antes de refreshPushSignaturesFromLocal: si no, las firmas quedan alineadas al merge local
-       y pushAll puede no detectar filas que aún no existían en la nube. */
+       y pushAll puede no detectar filas que aún no existían en la nube.
+
+       BUG FIX (2026-05-27): antes refreshPushSignaturesFromLocal corría SIEMPRE, incluso cuando
+       skipPostPush=true. Eso cortocircuitaba el push subsecuente del caller (tbPullCloudMultiDevice
+       hace su propio schedulePush) porque dejaba la firma alineada al estado local que aún no
+       había sido subido — resultado: 'Por subir' pegado, registros locales perdidos.
+       Ahora solo se refrescan firmas cuando este método mismo hizo el push (skipPostPush=false). */
     if(!skipPostPush){
+      let pushOk=false;
       try{
-        if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function')
-          await TBSync.pushAll();
+        if(typeof TBSync!=='undefined'&&typeof TBSync.pushAll==='function'){
+          const pr=await TBSync.pushAll();
+          pushOk=!!(pr&&pr.ok);
+        }
       }catch(ePush){console.warn('[tb push tras pull operativos]',ePush);}
+      if(pushOk&&typeof TBSync!=='undefined'&&typeof TBSync.refreshPushSignaturesFromLocal==='function'){
+        TBSync.refreshPushSignaturesFromLocal();
+      }
     }
-    if(typeof TBSync!=='undefined'&&typeof TBSync.refreshPushSignaturesFromLocal==='function')TBSync.refreshPushSignaturesFromLocal();
     if(!silent&&typeof showToast==='function')showToast('Moldes, pesajes y registros generales actualizados desde Supabase','success');
   }catch(e){if(!silent&&typeof showToast==='function')showToast('Error: '+(e&&e.message?e.message:String(e)),'error');}
 }
