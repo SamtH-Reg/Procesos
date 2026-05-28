@@ -12399,7 +12399,14 @@ const TBSync={
       _tbMarkPendingPush(true);
       return Promise.resolve({ok:true,skipped:true,reason:'offline'});
     }
+    // Lock: solo un pushAll en vuelo. Si ya hay uno, devolver esa promesa.
+    // Previene race condition cuando Realtime echo dispara schedulePush mientras
+    // el push original todavía está calculando moldesRows / haciendo upsert.
+    if(this._pushAllPromise){
+      return this._pushAllPromise;
+    }
     this.setStatus('☁ …','#f59e0b');
+    this._pushAllPromise=(async()=>{
     try{
       const{moldesRows,pesajesRows,generalesRows}=this._rowsForCloudPush();
       const sigM=this._sigRows(moldesRows,'id');
@@ -12560,6 +12567,23 @@ const TBSync={
       }
       return{ok:false,err:m,fatal:fatalNoRetry};
     }
+    })().finally(()=>{
+      // RE-ALINEAR firmas con el estado actual de RT.* tras el push:
+      // entre el cálculo inicial de sigM y el momento en que asignamos _lastSig=sigM,
+      // un Realtime echo puede haber mutado RT.moldes/pesajes/generales (mismos datos
+      // pero shape ligeramente distinto). Sin esto, el próximo pushAll detecta sig
+      // diferente y dispara un push fantasma → ciclo de eco infinito con varias tablets.
+      try{
+        const pack=this._rowsForCloudPush();
+        this._lastSig.moldes=this._sigRows(pack.moldesRows,'id');
+        this._lastSig.pesajes=this._sigRows(pack.pesajesRows,'id');
+        this._lastSig.generales=this._sigRows(pack.generalesRows,'id');
+        this._lastSig.armado=_tbArmadoSigFromRows(_tbArmadoRowsFromRt());
+        _tbPersistLastPushSigsToStorage();
+      }catch(eRealign){console.warn('[pushAll realign sigs]',eRealign);}
+      this._pushAllPromise=null;
+    });
+    return this._pushAllPromise;
   },
   subscribe(){
     if(!_tbSb)return;
@@ -12593,7 +12617,14 @@ const TBSync={
         this._catVisT=setTimeout(()=>{try{this.pullCatalogs();}catch(_){}},2800);
       });
     }
-    /* moldes + pesajes + generales: Realtime siempre activo */
+    /* moldes + pesajes + generales: Realtime siempre activo
+       NOTA: si el evento es ECHO de nuestro propio push (datos idénticos a lo local),
+       lo descartamos para evitar el ciclo de eco que mantiene 'Por subir' pegado
+       cuando hay varias tablets trabajando en paralelo. */
+      const _rtRowEquals=(a,b)=>{
+        if(!a||!b)return false;
+        try{return JSON.stringify(a)===JSON.stringify(b);}catch(_){return false;}
+      };
       _tbSb.channel('tb-ops')
         .on('postgres_changes',{event:'*',schema:'public',table:'moldes'},(p)=>{
         const rec=p.new||p.old;if(!rec)return;
@@ -12606,8 +12637,12 @@ const TBSync={
         const localPend=localExisting&&localExisting.pendiente;
         const pendiente=remotePend!=null?remotePend:(localPend!=null?localPend:(rec.cant!=null?rec.cant:null));
         const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,producto:rec.producto,presetId:rec.preset_id,destino:rec.destino,calibre:rec.calibre,especie:rec.especie,cant:rec.cant,pendiente,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
-        if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);}
-        else{if(i>=0)RT.moldes[i]=local;else RT.moldes.unshift(local);}
+        if(p.eventType==='DELETE'){if(i>=0)RT.moldes.splice(i,1);else return;}
+        else{
+          // ECHO: la fila remota produce el mismo objeto que el local — no-op
+          if(localExisting&&_rtRowEquals(local,localExisting))return;
+          if(i>=0)RT.moldes[i]=local;else RT.moldes.unshift(local);
+        }
         _rtSaveLocal&&_rtSaveLocal();
         if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
         if(typeof renderMoldesTable==='function')renderMoldesTable();
@@ -12618,8 +12653,12 @@ const TBSync={
         if(_rtIsDemoPesajeId(rec.id))return;
         const local={id:rec.id,hora:rec.hora,turno:rec.turno,linea:rec.linea,trabId:rec.trab_id,codigo:rec.codigo,nombre:rec.nombre,ficha:rec.ficha,especie:rec.especie,tipo:rec.tipo,kg:rec.kg,guia:rec.guia,fecha:rec.fecha};
         const i=RT.pesajes.findIndex(r=>String(r.id)===String(rec.id));
-        if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);}
-        else{if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);}
+        const localExisting=i>=0?RT.pesajes[i]:null;
+        if(p.eventType==='DELETE'){if(i>=0)RT.pesajes.splice(i,1);else return;}
+        else{
+          if(localExisting&&_rtRowEquals(local,localExisting))return;
+          if(i>=0)RT.pesajes[i]=local;else RT.pesajes.unshift(local);
+        }
         _rtSaveLocal&&_rtSaveLocal();
         if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
         if(typeof renderPesajeTable==='function')renderPesajeTable();
@@ -12629,12 +12668,13 @@ const TBSync={
         const parsed=_tbParseSbGeneral(rec);
         if(!parsed)return;
         const i=RT.generales.findIndex(r=>String(r.id)===String(parsed.id));
-        // Reconciliar pendiente: si remoto envía null pero local tiene valor (ya cargado),
-        // preservar el local para no reaparecer en "Por cargar".
         const localExisting=i>=0?RT.generales[i]:null;
         const local=_tbReconcilePendiente(parsed,localExisting);
-        if(p.eventType==='DELETE'){if(i>=0)RT.generales.splice(i,1);}
-        else{if(i>=0)RT.generales[i]=local;else RT.generales.unshift(local);}
+        if(p.eventType==='DELETE'){if(i>=0)RT.generales.splice(i,1);else return;}
+        else{
+          if(localExisting&&_rtRowEquals(local,localExisting))return;
+          if(i>=0)RT.generales[i]=local;else RT.generales.unshift(local);
+        }
         _rtSaveLocal&&_rtSaveLocal();
         if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
         if(typeof renderGeneralesTable==='function')renderGeneralesTable();
