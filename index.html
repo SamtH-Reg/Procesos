@@ -4544,6 +4544,11 @@ const TB_PUSH_SIG_PREFIX='friosur_tb_push_sig_v1';
 function _tbPushSigStorageKeyForUser(){
   return(_tbUser&&_tbUser.id)?TB_PUSH_SIG_PREFIX+'_'+String(_tbUser.id):null;
 }
+// v2: descarta firmas v1 (podían quedar corruptas por el deadlock del finally que
+// marcaba tablas fallidas como "ya sincronizadas"). Al ignorar firmas viejas, la
+// próxima carga reconcilia TODO el estado local contra la nube (upserts idempotentes)
+// y recupera registros que quedaron atrapados localmente sin subir.
+const TB_PUSHSIG_VERSION=2;
 function _tbPersistLastPushSigsToStorage(){
   try{
     const key=_tbPushSigStorageKeyForUser();
@@ -4551,7 +4556,7 @@ function _tbPersistLastPushSigsToStorage(){
     if(typeof TBSync==='undefined'||!TBSync._lastSig)return;
     const s=TBSync._lastSig;
     localStorage.setItem(key,JSON.stringify({
-      v:1,
+      v:TB_PUSHSIG_VERSION,
       at:Date.now(),
       moldes:s.moldes||'',
       pesajes:s.pesajes||'',
@@ -4572,6 +4577,12 @@ function _tbLoadLastPushSigsFromStorage(){
     if(!raw)return;
     const o=JSON.parse(raw);
     if(!o||typeof o!=='object')return;
+    // Versión distinta a la actual → ignorar (fuerza reconciliación completa).
+    if(o.v!==TB_PUSHSIG_VERSION){
+      console.info('[tb push sig] versión '+o.v+' obsoleta — se ignora para reconciliar con la nube');
+      try{localStorage.removeItem(key);}catch(_){}
+      return;
+    }
     if(typeof o.moldes==='string')TBSync._lastSig.moldes=o.moldes;
     if(typeof o.pesajes==='string')TBSync._lastSig.pesajes=o.pesajes;
     if(typeof o.generales==='string')TBSync._lastSig.generales=o.generales;
@@ -12406,6 +12417,10 @@ const TBSync={
       return this._pushAllPromise;
     }
     this.setStatus('☁ …','#f59e0b');
+    // Rastrea qué tablas FALLARON en este push. El finally NO re-alinea las firmas
+    // de tablas fallidas — así el próximo pushAll las reintenta (evita el deadlock
+    // donde una tabla que falló quedaba marcada como "ya sincronizada" para siempre).
+    this._pushFailedTables=new Set();
     this._pushAllPromise=(async()=>{
     try{
       const{moldesRows,pesajesRows,generalesRows}=this._rowsForCloudPush();
@@ -12424,6 +12439,7 @@ const TBSync={
           }
           if(err){
             console.warn('[sb push moldes]',err.message||err);
+            this._pushFailedTables.add('moldes');
             if(typeof showToast==='function')showToast('No se subieron moldes a Supabase: '+err.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
           }else this._lastSig.moldes=sigM;
         }
@@ -12443,6 +12459,7 @@ const TBSync={
           }
           if(err){
             console.warn('[sb push pesajes]',err.message||err);
+            this._pushFailedTables.add('pesajes');
             if(typeof showToast==='function')showToast('No se subieron pesajes a Supabase: '+err.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
           }else this._lastSig.pesajes=sigP;
         }
@@ -12462,6 +12479,7 @@ const TBSync={
           }
           if(gErr){
             console.warn('[sb push generales]',gErr.message||gErr);
+            this._pushFailedTables.add('generales');
             if(typeof showToast==='function')showToast('No se subieron registros generales a Supabase: '+gErr.message+(_tbUser?'':' · Inicia sesión en la tablet'),'error');
           }else this._lastSig.generales=sigG;
         }
@@ -12483,6 +12501,7 @@ const TBSync={
           }
           if(armErr){
             console.warn('[sb push armado_lineas]',armErr.message);
+            this._pushFailedTables.add('armado');
             if(typeof showToast==='function'){
               const msg=String(armErr.message||'');
               const hint=/no unique or exclusion constraint/i.test(msg)
@@ -12516,10 +12535,23 @@ const TBSync={
         }
       }
       this._pushLastAt=Date.now();
-      this._retryAttempt=0; // éxito → reset backoff
-      this.setStatus('☁ Sync','#16a34a');
+      const huboFallo=this._pushFailedTables&&this._pushFailedTables.size>0;
+      if(huboFallo){
+        // Al menos una tabla falló — programa reintento con backoff y mantén el badge.
+        this.setStatus('⚠ Parcial','#f59e0b');
+        const RETRY_DELAYS=[2000,5000,15000,45000];
+        this._retryAttempt=(this._retryAttempt||0);
+        if(this._retryAttempt<RETRY_DELAYS.length&&tbNavigatorOnline()){
+          const delay=RETRY_DELAYS[this._retryAttempt];this._retryAttempt++;
+          if(this._retryTimer)clearTimeout(this._retryTimer);
+          this._retryTimer=setTimeout(()=>{this._retryTimer=null;this.pushAll(opts);},delay);
+        }
+      }else{
+        this._retryAttempt=0; // éxito total → reset backoff
+        this.setStatus('☁ Sync','#16a34a');
+      }
       _tbPersistLastPushSigsToStorage();
-      return{ok:true};
+      return{ok:!huboFallo,partialFail:huboFallo,failedTables:[...(this._pushFailedTables||[])]};
     }catch(e){
       console.warn('[sb pushAll]',e);
       this.setStatus('⚠ Error','#dc2626');
@@ -12568,19 +12600,25 @@ const TBSync={
       return{ok:false,err:m,fatal:fatalNoRetry};
     }
     })().finally(()=>{
-      // RE-ALINEAR firmas con el estado actual de RT.* tras el push:
-      // entre el cálculo inicial de sigM y el momento en que asignamos _lastSig=sigM,
-      // un Realtime echo puede haber mutado RT.moldes/pesajes/generales (mismos datos
-      // pero shape ligeramente distinto). Sin esto, el próximo pushAll detecta sig
-      // diferente y dispara un push fantasma → ciclo de eco infinito con varias tablets.
+      // RE-ALINEAR firmas SOLO de tablas que subieron OK (no en _pushFailedTables).
+      // Propósito original: capturar drift de shape por Realtime echo tras un push
+      // exitoso (evita push fantasma con varias tablets).
+      // CRÍTICO: nunca re-alinear una tabla que FALLÓ — si no, queda marcada como
+      // "ya sincronizada" para siempre y sus datos nunca llegan a la nube (deadlock
+      // del badge 'Por subir' pegado con datos atrapados localmente).
+      const failed=this._pushFailedTables||new Set();
       try{
         const pack=this._rowsForCloudPush();
-        this._lastSig.moldes=this._sigRows(pack.moldesRows,'id');
-        this._lastSig.pesajes=this._sigRows(pack.pesajesRows,'id');
-        this._lastSig.generales=this._sigRows(pack.generalesRows,'id');
-        this._lastSig.armado=_tbArmadoSigFromRows(_tbArmadoRowsFromRt());
+        if(!failed.has('moldes'))this._lastSig.moldes=this._sigRows(pack.moldesRows,'id');
+        if(!failed.has('pesajes'))this._lastSig.pesajes=this._sigRows(pack.pesajesRows,'id');
+        if(!failed.has('generales'))this._lastSig.generales=this._sigRows(pack.generalesRows,'id');
+        if(!failed.has('armado'))this._lastSig.armado=_tbArmadoSigFromRows(_tbArmadoRowsFromRt());
         _tbPersistLastPushSigsToStorage();
       }catch(eRealign){console.warn('[pushAll realign sigs]',eRealign);}
+      // Reconciliar el badge 'Por subir' con la realidad: si NO quedan datos locales
+      // por subir (todas las firmas alineadas), limpia el flag. Si alguna tabla falló,
+      // su firma quedó stale → _tbHasLocalDataPendingPush()=true → badge se mantiene.
+      try{_tbMarkPendingPush(_tbHasLocalDataPendingPush());}catch(_){}
       this._pushAllPromise=null;
     });
     return this._pushAllPromise;
