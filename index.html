@@ -5490,6 +5490,36 @@ function _pArmEntriesForScope(turno,fecha){
   _sortArmadoLineRows(out);
   return out;
 }
+/** Busca la ficha asignada a un trabajador en CUALQUIER línea de armado de pesaje
+ *  del turno/fecha (no solo la línea seleccionada). Devuelve '' si no está armado o sin ficha.
+ *  Soluciona "a veces no carga la ficha": la persona puede estar armada en otra línea. */
+function _pArmFichaDeTrab(trabId,turno,fecha){
+  if(trabId==null||trabId==='')return'';
+  const tid=String(trabId);
+  for(const e of (_pArmEntriesForScope(turno,fecha)||[])){
+    const w=(e.data&&e.data.trabajadores||[]).find(x=>x&&x.trabId!=null&&String(x.trabId)===tid);
+    if(w&&w.ficha!=null&&String(w.ficha).trim()!=='')return String(w.ficha).trim();
+  }
+  return'';
+}
+/** Busca si un trabajador (trabId) ya está armado en OTRA línea del mismo turno/fecha,
+ *  en CUALQUIER área (pesaje o moldes). Un trabajador solo puede estar en una línea a la vez.
+ *  Excluye la línea+área que se está editando ahora. Devuelve {linea, area} o null. */
+function _armTrabajadorEnOtraLinea(trabId,areaActual,lineaActual,turno,fecha){
+  if(trabId==null||trabId==='')return null;
+  const tid=String(trabId);
+  const lAct=String(lineaActual||'').trim().toUpperCase();
+  const scan=(entries,area)=>{
+    for(const e of (entries||[])){
+      const L=String(e.linea||'').trim().toUpperCase();
+      if(area===areaActual&&L===lAct)continue; // misma línea+área en edición → omitir
+      const ws=(e.data&&e.data.trabajadores)||[];
+      if(ws.some(w=>w&&w.trabId!=null&&String(w.trabId)===tid))return{linea:e.linea,area};
+    }
+    return null;
+  };
+  return scan(_pArmEntriesForScope(turno,fecha),'pesaje')||scan(_armEntriesForScope(turno,fecha),'moldes');
+}
 /** Código de línea válido (L1…L999); evita filas corruptas en Supabase («Linea» sin número). */
 function _armValidLineaCodigo(ln){
   return/^L\d{1,3}$/i.test(String(ln||'').trim());
@@ -8203,7 +8233,10 @@ function onPRegTrabChange(){
     const opt=sel.options[sel.selectedIndex];
     const nombreDisp=t?t.nombre:(opt&&opt.dataset.nombre)||val;
     const _nfF=v=>(v==null||String(v).trim()==='')?'':String(v).trim();
-    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)||_nfF(entryArmado&&entryArmado.ficha)||_nfF(t&&t.ficha);
+    // Cadena robusta: opción → armado de la línea seleccionada → armado de CUALQUIER
+    // línea del turno (la persona puede estar armada en otra línea) → ficha catálogo → código.
+    const fichaCualquierLinea=_nfF(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha()));
+    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)||_nfF(entryArmado&&entryArmado.ficha)||fichaCualquierLinea||_nfF(t&&t.ficha)||_nfF(t&&t.codigo);
     badge.style.display='';
     const ini=(nombreDisp||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     document.getElementById('pRegWorkerInit').textContent=ini;
@@ -9902,6 +9935,15 @@ function addPArmTrab(){
     fichaIn&&fichaIn.select();
     return; // NO borramos pendingId para que el usuario pueda corregir y reintentar
   }
+  // Unicidad entre líneas: un trabajador solo puede estar en una línea por turno.
+  if(trabId!=null){
+    const otra=_armTrabajadorEnOtraLinea(trabId,'pesaje',_editPLn,_editPArmado&&_editPArmado.turno,_editPArmado&&_editPArmado.fecha);
+    if(otra){
+      const areaTxt=otra.area==='moldes'?'Moldes':'Pesaje';
+      showToast('⚠️ '+nombre.toUpperCase()+' ya está en '+areaTxt+' · línea '+otra.linea+' (mismo turno). Quítalo de esa línea para moverlo aquí.','error');
+      return;
+    }
+  }
   // Sin duplicado: ahora sí limpiamos pendingId y guardamos
   if(hasPending&&fichaIn){delete fichaIn.dataset.pendingId;delete fichaIn.dataset.pendingNombre;}
   _editPArmado.trabajadores.push({trabId,nombre:nombre.toUpperCase(),ficha});
@@ -10924,7 +10966,10 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
         const fichArm=(entryArm&&entryArm.ficha!=null&&String(entryArm.ficha).trim()!=='')?String(entryArm.ficha).trim():'';
         const fichOpt=(opt&&opt.dataset&&String(opt.dataset.ficha||'').trim())||'';
         const fichDb=(tDb&&tDb.ficha!=null&&String(tDb.ficha).trim()!=='')?String(tDb.ficha).trim():'';
-        const fichaTxt=fichArm||fichOpt||fichDb;
+        // Fallback: ficha en CUALQUIER línea del turno + código del trabajador.
+        const fichAny=(typeof _pArmFichaDeTrab==='function')?(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha())||''):'';
+        const fichCod=(tDb&&tDb.codigo!=null&&String(tDb.codigo).trim()!=='')?String(tDb.codigo).trim():'';
+        const fichaTxt=fichArm||fichOpt||fichAny||fichDb||fichCod;
         if(opt)opt.dataset.ficha=fichaTxt;
         displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
       }else if(selectId==='pRegPlanillero'){
@@ -11253,7 +11298,14 @@ function _mArmSetPlanillero(id,nombre,codigo){
 function _mArmAddById(id,nombre,codigo){
   const t=DB.data.trabajadores.find(x=>String(x.id)===String(id));
   if(!t)return;
-  if(_editMArmado.trabajadores.some(x=>x.trabId===t.id)){showToast('Ya está agregado','error');return;}
+  if(_editMArmado.trabajadores.some(x=>x.trabId===t.id)){showToast('Ya está agregado en esta línea','error');return;}
+  // Unicidad entre líneas: un trabajador solo puede estar en una línea por turno (pesaje o moldes).
+  const otra=_armTrabajadorEnOtraLinea(t.id,'moldes',_editMLn,_editMArmado&&_editMArmado.turno,_editMArmado&&_editMArmado.fecha);
+  if(otra){
+    const areaTxt=otra.area==='moldes'?'Moldes':'Pesaje';
+    showToast('⚠️ '+String(t.nombre||'').toUpperCase()+' ya está en '+areaTxt+' · línea '+otra.linea+' (mismo turno). Quítalo de esa línea para moverlo aquí.','error');
+    return;
+  }
   _editMArmado.trabajadores.push({trabId:t.id,nombre:t.nombre});
   renderMArmModal();
   showToast(t.nombre+' agregado','success');
