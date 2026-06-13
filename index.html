@@ -1521,6 +1521,17 @@ body[data-theme="dark"] .p-reg-kg-pad .pk{background:var(--surface-alt);border-c
   thead th,tbody td,.tbl-wrap tfoot td,.tbl-wrap tfoot th{padding:10px 8px;}
 }
 
+/* Tablet 10.5" (≈700–1024px): mantener formularios en 2 columnas para menos scroll.
+   Sobrescribe el colapso a 1 columna del breakpoint 900px. */
+@media (min-width:700px) and (max-width:1024px){
+  .form-grid.cols-2,.form-grid.cols-3,.form-grid.cols-4{grid-template-columns:1fr 1fr;}
+  .form-field.span-2{grid-column:span 2;}
+  /* Inputs y selects más altos para dedos en planta */
+  .input,.select{min-height:46px;font-size:15px;}
+  .form-label{font-size:12px;}
+  .card-body{padding:16px;}
+}
+
 /* Mobile muy pequeno */
 @media (max-width:480px){
   .stats-grid{grid-template-columns:1fr 1fr;}
@@ -2163,8 +2174,9 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
       <div id="mVerInfo" style="font-size:12px;color:var(--text-3);padding:0 2px 10px;display:none;"></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Hora</th><th>L.</th><th>Trabajador</th><th>Producto</th><th>Especie</th><th class="num">Cant.</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Hora</th><th>Turno</th><th>Línea</th><th>Trabajador</th><th>Producto</th><th>Especie</th><th>Calibre</th><th class="num">Cant.</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
           <tbody id="tbMoldes"></tbody>
+          <tfoot id="tfMoldes"></tfoot>
         </table>
       </div>
     </div>
@@ -2334,12 +2346,12 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
             <div class="card-body">
               <div class="form-grid cols-3">
                 <div class="form-field">
-                  <label class="form-label">Turno de armado <span class="required">*</span></label>
+                  <label class="form-label">Turno <span class="required">*</span></label>
                   <select class="select filled" id="pRegTurno" onchange="onPRegTurnoChange()"></select>
                   <div id="pRegTurnoHint" style="font-size:10px;color:var(--text-3);margin-top:4px;display:none;"></div>
                 </div>
                 <div class="form-field">
-                  <label class="form-label">Fecha de armado <span class="required">*</span></label>
+                  <label class="form-label">Fecha <span class="required">*</span></label>
                   <input type="date" class="input filled" id="pRegFechaArmado" onchange="onPRegFechaArmadoChange()">
                 </div>
                 <div class="form-field">
@@ -2361,14 +2373,14 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
                 </div>
                 <div class="form-field">
                   <label class="form-label">N° Guía <span class="required">*</span></label>
-                  <input class="input filled" id="pRegGuia" placeholder="G-2026-000" value="">
+                  <input class="input filled" id="pRegGuia" placeholder="G-2026-000" value="" inputmode="text" autocomplete="off">
                 </div>
                 <div class="form-field">
-                  <label class="form-label">Especie <span class="hint">solo se define en Armado</span></label>
-                  <input type="text" class="input filled" id="pRegEspecie" readonly autocomplete="off" placeholder="— Definir en pestaña Armado —" title="La especie viene de la línea configurada en Pesaje → Armado">
+                  <label class="form-label">Especie</label>
+                  <input type="text" class="input filled" id="pRegEspecie" readonly autocomplete="off" placeholder="— Definir en Armado —" title="La especie viene de la línea configurada en Pesaje → Armado">
                 </div>
                 <div class="form-field">
-                  <label class="form-label">Tipo <span class="hint">solo merluza austral</span></label>
+                  <label class="form-label">Tipo</label>
                   <select class="select" id="pRegTipo">
                     <option value="">—</option>
                     <option value="Filete">Filete</option>
@@ -2412,12 +2424,12 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
               </div>
               <div class="form-field">
                 <label class="form-label">N° Ficha <span class="required">*</span></label>
-                <input class="input ficha-fixed" id="pRegFicha" type="text" inputmode="numeric" placeholder="Autoasignada por trabajador" autocomplete="off" readonly>
+                <input class="input ficha-fixed" id="pRegFicha" type="text" inputmode="numeric" placeholder="—" autocomplete="off" readonly>
               </div>
               <div class="form-field">
-                <label class="form-label">Kilos procesados <span class="required">*</span> <span class="hint">rango 0,2 – 20 kg</span></label>
+                <label class="form-label">Kilos procesados <span class="required">*</span></label>
                 <div class="input-suffix">
-                  <input class="input big-input" id="pRegKg" type="text" placeholder="0,0" inputmode="decimal">
+                  <input class="input big-input" id="pRegKg" type="text" placeholder="0,0" inputmode="decimal" autocomplete="off" enterkeyhint="done">
                   <span class="suffix">kg</span>
                 </div>
               </div>
@@ -2515,8 +2527,9 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Hora</th><th>L.</th><th>Trabajador</th><th>Especie</th><th>Corte</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
+          <thead><tr><th>Hora</th><th>Turno</th><th>Línea</th><th>Trabajador</th><th>Ficha</th><th>Especie</th><th>Corte</th><th class="num">Kg</th><th>Guía</th><th></th></tr></thead>
           <tbody id="tbPesaje"></tbody>
+          <tfoot id="tfPesaje"></tfoot>
         </table>
       </div>
     </div>
@@ -6166,9 +6179,12 @@ function renderMoldesTable(){
       if(state&&state.lineaVal)hints.push('línea <strong>'+esc(state.lineaVal)+'</strong>');
       msg='Sin registros que coincidan con '+(hints.join(' · ')||'los filtros')+'.<br><span style="font-size:11px;color:var(--text-muted);">Total operativo: '+opRows.length+' registros. Cambia la fecha o turno para ver datos.</span>';
     }
-    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">'+msg+'</td></tr>';
+    tb.innerHTML='<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-3);">'+msg+'</td></tr>';
+    const tfE=document.getElementById('tfMoldes');if(tfE)tfE.innerHTML='';
     return;
   }
+  const turnoLbl=t=>{const k=String(t||'').toLowerCase();if(k.startsWith('dia')||k==='d')return'Día';if(k.startsWith('noche')||k==='n')return'Noche';if(k.startsWith('tarde')||k==='t')return'Tarde';return t||'—';};
+  const turnoBadge=t=>{const k=String(t||'').toLowerCase();return k.startsWith('noche')?'info':k.startsWith('tarde')?'amber':'warn';};
   const canCor=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
   tb.innerHTML=rows.map(r=>{
     const pend=r.pendiente!=null?r.pendiente:r.cant;
@@ -6184,15 +6200,28 @@ function renderMoldesTable(){
     return `<tr>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(fechaDisp)}</td>
     <td class="mono">${esc(r.hora)}</td>
+    <td><span class="badge ${turnoBadge(r.turno)}">${esc(turnoLbl(r.turno))}</span></td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
     <td>${esc(r.producto)} ${pendBadge}${genBadge}</td>
     <td>${esc(_especieDe(r))}</td>
+    <td style="font-size:12px;color:var(--text-2);">${esc(r.calibre||'—')}</td>
     <td class="num">${r.cant||0}</td>
-    <td class="num">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
+    <td class="num" style="font-weight:700;">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
     <td style="white-space:nowrap;">${actBtns}</td>
   </tr>`;}).join('');
+  const tf=document.getElementById('tfMoldes');
+  if(tf){
+    const totCant=rows.reduce((s,r)=>s+(+r.cant||0),0);
+    const totKg=rows.reduce((s,r)=>s+(+r.kg||0),0);
+    tf.innerHTML=`<tr style="background:#0f172a;color:#fff;font-weight:700;">
+      <td colspan="8" style="padding:10px 8px;">${rows.length} registro(s)</td>
+      <td class="num" style="padding:10px 8px;">${totCant}</td>
+      <td class="num" style="padding:10px 8px;font-size:15px;">${totKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>
+      <td colspan="2"></td>
+    </tr>`;
+  }
 }
 function editMolde(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para editar registros','error');return;}
@@ -8198,7 +8227,8 @@ function pRegHasWorkerSelected(){
   return !!String(sel.value||'').trim();
 }
 function pRegKgPadIsCustom(){
-  try{return localStorage.getItem(PREG_KG_NUMPAD_KEY)!=='0';}catch(e){return true;}
+  // Default: teclado del sistema (Android). El numpad propio solo si el usuario lo activa.
+  try{return localStorage.getItem(PREG_KG_NUMPAD_KEY)==='1';}catch(e){return false;}
 }
 function pRegKgPadSetCustom(on){
   try{localStorage.setItem(PREG_KG_NUMPAD_KEY,on?'1':'0');}catch(e){}
@@ -8475,17 +8505,22 @@ function renderPesajeTable(){
       onChange:'renderPesajeTable',state
     });
   }
+  const tf=document.getElementById('tfPesaje');
   if(!RT.pesajes.length){
-    tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes registrados.</td></tr>';
+    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes registrados.</td></tr>';
+    if(tf)tf.innerHTML='';
     return;
   }
   const rows=_filterPesajesPorListaFiltros(RT.pesajes,state);
   if(!rows.length){
     const hoyStr=state.fechaTurno.split('-').reverse().join('/');
     const filtroSub=_resumenFiltroTurnoSub(state.filtro);
-    tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.<br><span style="font-size:11px;color:var(--text-muted);">Total: '+tot+' pesajes en otras fechas/turnos. Cambia el filtro para verlos.</span></td></tr>';
+    tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes para '+esc(hoyStr)+(state.lineaVal?' · línea '+esc(state.lineaVal):'')+(state.filtro!=='todos'?' · '+esc(filtroSub):'')+'.<br><span style="font-size:11px;color:var(--text-muted);">Total: '+tot+' pesajes en otras fechas/turnos. Cambia el filtro para verlos.</span></td></tr>';
+    if(tf)tf.innerHTML='';
     return;
   }
+  const turnoLbl=t=>{const k=String(t||'').toLowerCase();if(k.startsWith('dia')||k==='d')return'Día';if(k.startsWith('noche')||k==='n')return'Noche';if(k.startsWith('tarde')||k==='t')return'Tarde';return t||'—';};
+  const turnoBadge=t=>{const k=String(t||'').toLowerCase();return k.startsWith('noche')?'info':k.startsWith('tarde')?'amber':'warn';};
   const canCorP=typeof _idxPermCorregirRegistrosVer==='function'&&_idxPermCorregirRegistrosVer();
   tb.innerHTML=rows.map(r=>{
     const pBtns=canCorP
@@ -8493,15 +8528,28 @@ function renderPesajeTable(){
       :'';
     return `<tr>
     <td class="mono">${esc(r.hora)}</td>
+    <td><span class="badge ${turnoBadge(r.turno)}">${esc(turnoLbl(r.turno))}</span></td>
     <td><span class="badge slate">${esc(r.linea)}</span></td>
     <td style="font-weight:600;">${esc(r.nombre)}</td>
+    <td class="mono" style="font-size:12px;color:var(--text-2);">${esc(r.ficha||'—')}</td>
     <td>${esc(r.especie)}</td>
     <td><span class="badge blue">${esc(r.tipo)}</span></td>
-    <td class="num">${r.kg.toString().replace('.',',')}</td>
+    <td class="num" style="font-weight:700;">${r.kg.toString().replace('.',',')}</td>
     <td class="mono" style="font-size:11px;color:var(--slate-500);">${esc(r.guia)}</td>
     <td style="white-space:nowrap;">${pBtns}</td>
   </tr>`;
   }).join('');
+  if(tf){
+    const sumKg=rows.reduce((s,r)=>s+(+r.kg||0),0);
+    const trabsUnicos=new Set(rows.map(r=>String(r.nombre||'').trim()).filter(Boolean)).size;
+    const sumStr=(Math.round(sumKg*10)/10).toString().replace('.',',');
+    tf.innerHTML=`<tr style="background:#0f172a;color:#fff;font-weight:700;">
+      <td colspan="3" style="padding:10px 8px;">${rows.length} pesaje(s) · ${trabsUnicos} trabajador(es)</td>
+      <td colspan="4"></td>
+      <td class="num" style="padding:10px 8px;font-size:15px;">${sumStr}</td>
+      <td colspan="2"></td>
+    </tr>`;
+  }
 }
 function delPesaje(id){
   if(typeof _idxPermCorregirRegistrosVer==='function'&&!_idxPermCorregirRegistrosVer()){showToast('Sin permiso para eliminar registros','error');return;}
