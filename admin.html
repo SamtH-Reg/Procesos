@@ -1271,6 +1271,10 @@ function sbRtCatalogOnChange(){
 }
 const SB_DEFAULT={url:'https://etiltewnmupnifedhyld.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ'};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/** Líneas de planta estándar (paridad con index FR_PLANT_LINEAS): L1…L5.
+ *  Se siembran en resúmenes/widgets/filtros para que las 5 líneas siempre
+ *  aparezcan aunque una todavía no tenga registros. */
+const ADMIN_PLANT_LINEAS=['L1','L2','L3','L4','L5'];
 function _slugCodigoRol(nombre){
   const s=String(nombre==null?'':nombre).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
   return(s||'rol').slice(0,48);
@@ -3402,6 +3406,7 @@ function drawTableWidget(w,moldes,pesajes){
   } else if(w.type==='pv-consol-mol'){
     if(!moldes.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
     const hoursSet=new Set();const linSet=new Set();
+    ADMIN_PLANT_LINEAS.forEach(l=>linSet.add(l)); // siempre incluir L1–L5
     moldes.forEach(r=>{const m=(r.hora||'').match(/^(\d{1,2}):/);if(m)hoursSet.add(parseInt(m[1]));linSet.add(r.linea||'—');});
     const hours=[...hoursSet].sort((a,b)=>a-b);const lins=[...linSet].sort();
     const map={};lins.forEach(l=>map[l]={byH:{},tot:0});
@@ -3656,7 +3661,9 @@ function renderReport(){
     drawRepTable(['Especie','Registros','Kg'],rows,i=>drillTo('especie',arr[i][0]));
   } else if(tipo==='linea'){
     tit.textContent='Rendimiento por línea';
-    const map={};[...moldes,...pesajes].forEach(r=>{const k=r.linea||'—';if(!map[k])map[k]={n:0,kg:0};map[k].n++;map[k].kg+=(r.kg||0);});
+    const map={};
+    ADMIN_PLANT_LINEAS.forEach(l=>{map[l]={n:0,kg:0};}); // siembra L1–L5 para que siempre aparezcan
+    [...moldes,...pesajes].forEach(r=>{const k=r.linea||'—';if(!map[k])map[k]={n:0,kg:0};map[k].n++;map[k].kg+=(r.kg||0);});
     const arr=Object.entries(map).sort();
     labels=arr.map(x=>x[0]);values=arr.map(x=>x[1].kg);
     rows=arr.map(x=>[x[0],x[1].n,x[1].kg.toFixed(1)]);
@@ -4731,7 +4738,8 @@ function _rgCalibreDe(r){
 function _rgPopulateDropdowns(rows){
   const especies=[...new Set(rows.map(r=>String(r.especie||'').trim()).filter(Boolean))].sort();
   const productos=[...new Set(rows.map(r=>String(r.producto||'').trim()).filter(Boolean))].sort();
-  const lineas=[...new Set(rows.map(r=>String(r.linea||'').trim()).filter(Boolean))].sort();
+  // Siempre incluir L1–L5 + cualquier otra línea presente en los datos
+  const lineas=[...new Set([...ADMIN_PLANT_LINEAS,...rows.map(r=>String(r.linea||'').trim()).filter(Boolean)])].sort();
   const destinos=[...new Set(rows.map(r=>_rgDestinoDe(r)).filter(Boolean))].sort();
   const calibres=[...new Set(rows.map(r=>_rgCalibreDe(r)).filter(Boolean))].sort();
   const prodGlobales=[...new Set(rows.map(r=>_rgProductoGlobalDe(r.producto)).filter(Boolean))].sort();
@@ -5032,6 +5040,8 @@ function renderResumenGeneral(){
 
   // ═══ Por línea ═══
   const porLn={};
+  // Sembrar las 5 líneas estándar para que siempre aparezcan (aunque tengan 0)
+  ADMIN_PLANT_LINEAS.forEach(l=>{porLn[l]={linea:l,mol:0,gen:0,pes:0,unidades:0,kg:0};});
   moldes.forEach(r=>{const k=String(r.linea||'—').trim()||'—';if(!porLn[k])porLn[k]={linea:k,mol:0,gen:0,pes:0,unidades:0,kg:0};porLn[k].mol++;porLn[k].unidades+=(+r.cant||0);porLn[k].kg+=(+r.kg||0);});
   generales.forEach(r=>{const k=String(r.linea||'—').trim()||'—';if(!porLn[k])porLn[k]={linea:k,mol:0,gen:0,pes:0,unidades:0,kg:0};porLn[k].gen++;porLn[k].unidades+=(+r.cant||0);porLn[k].kg+=(+r.kg||0);});
   pesajes.forEach(r=>{const k=String(r.linea||'—').trim()||'—';if(!porLn[k])porLn[k]={linea:k,mol:0,gen:0,pes:0,unidades:0,kg:0};porLn[k].pes++;porLn[k].unidades+=1;porLn[k].kg+=(+r.kg||0);});
