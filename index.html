@@ -12452,33 +12452,40 @@ const TBSync={
     const today=todayLocalYmd();
     const validPresetIds=new Set((DB.data.presets||[]).map(p=>p.id));
     const validTrabIds=new Set((DB.data.trabajadores||[]).map(t=>t.id));
+    // Normalización defensiva: especie en MAYÚSCULAS sin espacios sobrantes;
+    // calibre/producto/destino/linea sin espacios. Evita que variaciones de
+    // capitalización/espacios fragmenten los reportes que agrupan por texto exacto
+    // (p.ej. "Merluza de Cola" vs "MERLUZA DE COLA" se separaban en distintos grupos).
+    const _esp=v=>{const s=String(v==null?'':v).trim();return s?s.toUpperCase():null;};
+    const _tx=v=>{const s=String(v==null?'':v).trim();return s||null;};
+    const _ln=v=>{const s=String(v==null?'':v).trim().toUpperCase();return s||null;};
     const moldesRows=(RT.moldes||[]).filter(r=>!_rtIsDemoMolde(r)).map(r=>{
       const pid=r.presetId!=null?r.presetId:r.preset_id;
       return{
-        id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
+        id:r.id,hora:r.hora,turno:r.turno||null,linea:_ln(r.linea),
         codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
-        producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
-        destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,
-        cant:r.cant!=null?r.cant:null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
+        producto:_tx(r.producto),preset_id:validPresetIds.has(pid)?pid:null,
+        destino:_tx(r.destino),calibre:_tx(r.calibre),especie:_esp(r.especie),
+        cant:r.cant!=null?r.cant:null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:_tx(r.guia),
         fecha:r.fecha||today
       };
     });
     const pesajesRows=(RT.pesajes||[]).filter(r=>!_rtIsDemoPesaje(r)).map(r=>{
       const tid=r.trabId!=null?r.trabId:r.trab_id;
       return{
-        id:r.id,hora:r.hora,turno:r.turno||null,linea:r.linea||null,
+        id:r.id,hora:r.hora,turno:r.turno||null,linea:_ln(r.linea),
         trab_id:validTrabIds.has(tid)?tid:null,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
-        especie:r.especie||null,tipo:r.tipo||null,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
+        especie:_esp(r.especie),tipo:_tx(r.tipo),kg:r.kg!=null?r.kg:null,guia:_tx(r.guia),
         fecha:r.fecha||today
       };
     });
     const generalesRows=(RT.generales||[]).map(r=>{
       const pid=r.presetId!=null?r.presetId:r.preset_id;
       return{
-        id:r.id,hora:r.hora||null,turno:r.turno||null,linea:r.linea||null,
-        producto:r.producto||null,preset_id:validPresetIds.has(pid)?pid:null,
-        destino:r.destino||null,calibre:r.calibre||null,especie:r.especie||null,tipo:r.tipo||null,
-        cant:r.cant||null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:r.guia||null,
+        id:r.id,hora:r.hora||null,turno:r.turno||null,linea:_ln(r.linea),
+        producto:_tx(r.producto),preset_id:validPresetIds.has(pid)?pid:null,
+        destino:_tx(r.destino),calibre:_tx(r.calibre),especie:_esp(r.especie),tipo:_tx(r.tipo),
+        cant:r.cant||null,pendiente:r.pendiente!=null?r.pendiente:r.cant,kg:r.kg!=null?r.kg:null,guia:_tx(r.guia),
         fecha:r.fecha||today
       };
     });

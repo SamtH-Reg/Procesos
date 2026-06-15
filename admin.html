@@ -7534,7 +7534,7 @@ async function testSupabase(){if(!_sb){toast('Conecta primero','warn');return;}t
 const _today=()=>new Date().toISOString().slice(0,10);
 const SB_MAP={
   presets:{
-    out:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo||null,formato:r.formato||null,destino:r.destino||null,especie:r.especie||null,calibre:r.calibre||null,kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:presetUsoEquipoForCloud(r),temp_obj:r.tempObj??r.temp_obj??null,producto_global:(r.productoGlobal??r.producto_global??null)||null,activo:r.activo!==false}),
+    out:r=>{const _t=v=>{const s=String(v==null?'':v).trim();return s||null;};const _e=v=>{const s=String(v==null?'':v).trim();return s?s.toUpperCase():null;};return{id:r.id,nombre:_t(r.nombre),tipo:r.tipo||null,formato:_t(r.formato),destino:_t(r.destino),especie:_e(r.especie),calibre:_t(r.calibre),kg_ref:r.kgRef??r.kg_ref??null,horas_tunel:r.horasTunel??r.horas_tunel??null,horas_placa:r.horasPlaca??r.horas_placa??null,uso_equipo:presetUsoEquipoForCloud(r),temp_obj:r.tempObj??r.temp_obj??null,producto_global:_t(r.productoGlobal??r.producto_global),activo:r.activo!==false};},
     in:r=>({id:r.id,nombre:r.nombre,tipo:r.tipo,formato:r.formato,destino:r.destino,especie:r.especie,calibre:r.calibre,kgRef:r.kg_ref,horasTunel:r.horas_tunel,horasPlaca:r.horas_placa,tempObj:r.temp_obj,activo:r.activo,usoEquipo:r.uso_equipo,productoGlobal:r.producto_global||''})
   },
   trabajadores:{
