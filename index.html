@@ -2429,7 +2429,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
               <div class="form-field">
                 <label class="form-label">Kilos procesados <span class="required">*</span></label>
                 <div class="input-suffix">
-                  <input class="input big-input" id="pRegKg" type="text" placeholder="0,0" inputmode="decimal" autocomplete="off" enterkeyhint="done">
+                  <input class="input big-input" id="pRegKg" type="text" placeholder="0,0" inputmode="decimal" autocomplete="off" enterkeyhint="done" onfocus="setTimeout(()=>{try{this.scrollIntoView({block:'center',behavior:'smooth'});}catch(e){}},300)">
                   <span class="suffix">kg</span>
                 </div>
               </div>
@@ -10705,15 +10705,22 @@ function _fsComboPositionPanel(){
   const r=anchor.getBoundingClientRect();
   const inArmado=!!anchor.closest('#mArmadoModal,#pArmadoModal');
   const cap=inArmado?520:420;
-  const spaceBelow=window.innerHeight-r.bottom-10;
-  const spaceAbove=r.top-10;
-  let maxH=Math.min(cap,spaceBelow);
-  let top=r.bottom+4;
-  if(inArmado&&(spaceBelow<300||spaceAbove>spaceBelow+80)){
-    maxH=Math.min(cap,spaceAbove);
-    top=Math.max(8,r.top-maxH-4);
+  // Altura visible REAL: visualViewport descuenta el teclado de Android (window.innerHeight
+  // NO cambia cuando el teclado se abre, por eso el panel se tapaba).
+  const vv=window.visualViewport;
+  const viewTop=vv?vv.offsetTop:0;
+  const viewH=vv?vv.height:window.innerHeight;
+  const viewBottom=viewTop+viewH;
+  const spaceBelow=viewBottom-r.bottom-10;
+  const spaceAbove=r.top-viewTop-10;
+  let maxH,top;
+  // Si abajo queda poco espacio (teclado abierto) o arriba hay más, abrir hacia ARRIBA.
+  if(spaceAbove>spaceBelow+40||spaceBelow<200){
+    maxH=Math.min(cap,Math.max(150,spaceAbove));
+    top=Math.max(viewTop+8,r.top-maxH-4);
   }else{
-    maxH=Math.min(cap,Math.max(200,spaceBelow));
+    maxH=Math.min(cap,Math.max(150,spaceBelow));
+    top=r.bottom+4;
   }
   panel.style.top=top+'px';
   panel.style.left=r.left+'px';
@@ -10728,6 +10735,10 @@ function closeFsCombo(){
   }
   if(_fsCombo&&_fsCombo._docClick)document.removeEventListener('mousedown',_fsCombo._docClick,true);
   if(_fsCombo&&_fsCombo._reposition)window.removeEventListener('resize',_fsCombo._reposition);
+  if(_fsCombo&&_fsCombo._vv&&window.visualViewport){
+    window.visualViewport.removeEventListener('resize',_fsCombo._vv);
+    window.visualViewport.removeEventListener('scroll',_fsCombo._vv);
+  }
   _fsCombo=null;
 }
 function _fsComboDocClick(e){
@@ -10748,12 +10759,32 @@ function _fsComboRenderList(trabs,q,opts){
   const qLow=(q||'').toLowerCase().trim();
   let filtered=trabs;
   if(qLow){
-    filtered=trabs.filter(t=>{
+    // Si se escribe SOLO números, priorizar la FICHA: exacta → empieza con → contiene.
+    // (El planillero/operario suele teclear el número de ficha del trabajador.)
+    const isNum=/^\d+$/.test(qLow);
+    const scored=[];
+    trabs.forEach(t=>{
       const n=(t.nombre||'').toLowerCase();
       const c=(t.codigo||'').toLowerCase();
-      const f=(t.ficha||'').toString().toLowerCase();
-      return n.includes(qLow)||c.includes(qLow)||f.includes(qLow);
+      const f=(t.ficha==null?'':String(t.ficha)).toLowerCase().trim();
+      let score=-1;
+      if(isNum){
+        if(f===qLow)score=0;              // ficha exacta (lo más buscado)
+        else if(f.startsWith(qLow))score=1; // ficha empieza con
+        else if(c===qLow)score=2;          // código exacto
+        else if(c.startsWith(qLow))score=3;
+        else if(f.includes(qLow))score=4;
+        else if(c.includes(qLow))score=5;
+        else if(n.includes(qLow))score=6;
+      }else{
+        if(n.includes(qLow))score=0;
+        else if(c.includes(qLow))score=1;
+        else if(f.includes(qLow))score=2;
+      }
+      if(score>=0)scored.push({t,score});
     });
+    scored.sort((a,b)=>a.score-b.score||String(a.t.nombre||'').localeCompare(String(b.t.nombre||''),'es',{sensitivity:'base'}));
+    filtered=scored.map(x=>x.t);
   }
   let html='';
   if(opts&&opts.allowManual){
@@ -10827,6 +10858,12 @@ function openFsCombo(cfg){
   _fsComboPositionPanel();
   _fsCombo._reposition=()=>_fsComboPositionPanel();
   window.addEventListener('resize',_fsCombo._reposition);
+  // Reubicar el panel cuando el teclado de Android abre/cierra (visualViewport cambia)
+  if(window.visualViewport){
+    _fsCombo._vv=()=>_fsComboPositionPanel();
+    window.visualViewport.addEventListener('resize',_fsCombo._vv);
+    window.visualViewport.addEventListener('scroll',_fsCombo._vv);
+  }
   _fsCombo._docClick=_fsComboDocClick;
   document.addEventListener('mousedown',_fsCombo._docClick,true);
   setTimeout(()=>{try{searchInp.focus();}catch(e){}},40);
