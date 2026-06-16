@@ -8684,6 +8684,21 @@ function _adminHoraEnteraFromHm(hmStr){
   const h=Math.min(23,Math.max(0,parseInt(m[1],10)));
   return h+':00';
 }
+/** Extrae el nombre del planillero, que puede venir como string u objeto {nombre,...}. */
+function _adminPlanilleroNombre(pl){
+  if(pl==null)return'';
+  if(typeof pl==='string')return pl.trim();
+  if(typeof pl==='object')return String(pl.nombre||'').trim();
+  return String(pl).trim();
+}
+/** Resta un día a una fecha 'YYYY-MM-DD'. */
+function _adminFechaMenosUnDia(ymd){
+  const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return'';
+  const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));
+  d.setUTCDate(d.getUTCDate()-1);
+  return d.toISOString().slice(0,10);
+}
 function _adminPlanilleroForPesajeRow(r){
   try{
     const ap=(RT.data&&RT.data.armadoPesaje)||{};
@@ -8691,8 +8706,32 @@ function _adminPlanilleroForPesajeRow(r){
     if(!linea)return'';
     const turno=_adminCycleTurnoNorm(r.turno||'dia');
     const fecha=_adminCycleDateNorm(r.fecha);
-    const ent=_adminArmGetEntry(ap,linea,turno,fecha);
-    return ent&&ent.planillero!=null&&ent.planillero!==''?String(ent.planillero):'';
+    // 1) Coincidencia exacta línea+turno+fecha
+    let ent=_adminArmGetEntry(ap,linea,turno,fecha);
+    let nom=_adminPlanilleroNombre(ent&&ent.planillero);
+    if(nom)return nom;
+    // 2) Turno noche: el pesaje de madrugada (fecha D) suele pertenecer al armado
+    //    configurado el día anterior (D-1, cuando arrancó el turno 19:00→07:00).
+    if(turno==='noche'){
+      const prev=_adminFechaMenosUnDia(fecha);
+      const e2=prev?_adminArmGetEntry(ap,linea,turno,prev):null;
+      nom=_adminPlanilleroNombre(e2&&e2.planillero);
+      if(nom)return nom;
+    }
+    // 3) Fallback: escanear todas las claves de la misma línea+turno y tomar el
+    //    armado con planillero cuya fecha sea la más cercana <= fecha del pesaje.
+    let best=null,bestF='';
+    Object.keys(ap).forEach(k=>{
+      const parts=String(k).split(_ADMIN_ARM_SCOPE_SEP);
+      if(parts.length<3)return;
+      const L=String(parts[0]||'').trim().toUpperCase();
+      const T=_adminCycleTurnoNorm(parts[1]);
+      const F=String(parts[2]||'').trim();
+      if(L!==linea||T!==turno)return;
+      if(!_adminPlanilleroNombre(ap[k]&&ap[k].planillero))return;
+      if(F<=fecha && F>bestF){bestF=F;best=ap[k];}
+    });
+    return _adminPlanilleroNombre(best&&best.planillero);
   }catch(e){return'';}
 }
 function _adminPesajesSheetRowsForExport(rows){
