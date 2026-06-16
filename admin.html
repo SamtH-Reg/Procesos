@@ -1761,15 +1761,22 @@ function _ymdToLocalEnd(ymd){
   if(!m)return null;
   return new Date(+m[1],+m[2]-1,+m[3],23,59,59,999);
 }
+// Zona de planta FIJA: Puerto Aysén = UTC-3 todo el año (sin horario de verano).
+// Calculamos "hoy"/"ahora" en UTC-3 desde el instante UTC absoluto, así coincide
+// con la tablet aunque el equipo del admin tenga otra zona horaria configurada.
+// -180 min = UTC-3 inline (evita Temporal Dead Zone si se llama durante la carga).
+function _adminFrioNow(){return new Date(Date.now()-180*60000);}
 function _adminTodayLocalYmd(){
-  const d=new Date();
+  const d=_adminFrioNow();
   const p=n=>String(n).padStart(2,'0');
-  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate());
 }
 /** Fecha operativa del turno: para turnos que cruzan medianoche, 00:00..fin pertenece al día anterior. */
 function _dashTurnoOperativeYmd(turnoCodigo){
-  const now=new Date();
-  const fallback=_dateObjToLocalYmd(now);
+  const now=_adminFrioNow(); // UTC-3 fijo (Aysén)
+  const p=n=>String(n).padStart(2,'0');
+  const ymdUTC=d=>d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate());
+  const fallback=ymdUTC(now);
   const code=String(turnoCodigo||'').trim();
   if(!code)return fallback;
   const t=(DB.data.turnos||[]).find(x=>String(x.codigo||'').trim()===code);
@@ -1777,11 +1784,11 @@ function _dashTurnoOperativeYmd(turnoCodigo){
   const iniM=_adminParseHMToMinutes(t.inicio),finM=_adminParseHMToMinutes(t.fin);
   if(iniM==null||finM==null)return fallback;
   if(finM<iniM){
-    const nowM=now.getHours()*60+now.getMinutes();
+    const nowM=now.getUTCHours()*60+now.getUTCMinutes();
     if(nowM<finM){
       const prev=new Date(now);
-      prev.setDate(prev.getDate()-1);
-      return _dateObjToLocalYmd(prev);
+      prev.setUTCDate(prev.getUTCDate()-1);
+      return ymdUTC(prev);
     }
   }
   return fallback;

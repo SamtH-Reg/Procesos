@@ -4807,11 +4807,17 @@ function rtPushArmadoCloud(){try{if(typeof TBSync!=='undefined'&&TBSync.pushImme
 window.RT=RT;
 try{rtLoad();}catch(e){console.error('[rtLoad]',e);}
 
-const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+// Zona de planta FIJA: Puerto Aysén = UTC-3 todo el año (no cambia con horario de
+// verano). Capturamos hora/fecha en UTC-3 desde el instante UTC absoluto (Date.now),
+// así el registro queda correcto AUNQUE la tablet tenga mal configurada su zona horaria.
+// -180 min = UTC-3 inline (no usar const aquí: estas funciones son hoisted y pueden
+// llamarse durante la carga, antes de que se inicialice una const → Temporal Dead Zone).
+function _frioNow(){return new Date(Date.now()-180*60000);}
+const nowHM=()=>{const d=_frioNow();return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');};
 function todayLocalYmd(){
-  const d=new Date();
+  const d=_frioNow();
   const p=n=>String(n).padStart(2,'0');
-  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate());
 }
 const nowDate=()=>todayLocalYmd();
 /**
@@ -5157,7 +5163,7 @@ function _parseHMToMinutes(s){
   const mi=Math.min(59,Math.max(0,parseInt(m[2]||'0',10)));
   return h*60+mi;
 }
-function _minutesNowLocal(){const d=new Date();return d.getHours()*60+d.getMinutes();}
+function _minutesNowLocal(){const d=_frioNow();return d.getUTCHours()*60+d.getUTCMinutes();}
 function _addDaysLocalYmd(ymd,deltaDays){
   const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!m)return ymd;
@@ -5236,7 +5242,7 @@ function _inferTurnoCodigoPorHorario(){
     if(ok)matches.push(String(t.codigo||t.nombre||'').trim());
   });
   if(matches.length)return matches[0];
-  const h=new Date().getHours();
+  const h=_frioNow().getUTCHours();
   const fb=(h>=7&&h<19)?'dia':'noche';
   if(activos.find(t=>String(t.codigo)===fb))return fb;
   return String(activos[0].codigo||activos[0].nombre||'dia');
