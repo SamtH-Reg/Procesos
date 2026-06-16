@@ -1864,6 +1864,11 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 }
 .fs-combo-ficha-lbl{font-size:10px;color:var(--text-3);font-weight:500;line-height:1.2;}
 .fs-combo-ficha-num{color:#dc2626;font-weight:800;font-size:18px;line-height:1.15;letter-spacing:.03em;}
+/* Ficha buscada (al teclear un número) — celda destacada en verde */
+.fs-combo-item-ficha--match{background:#16a34a;border-radius:10px;box-shadow:0 0 0 3px rgba(22,163,74,.25);}
+.fs-combo-item-ficha--match .fs-combo-ficha-lbl{color:#dcfce7;}
+.fs-combo-item-ficha--match .fs-combo-ficha-num{color:#fff;}
+.fs-combo-item--fmatch{background:rgba(22,163,74,.07);}
 .fs-combo-item-body{flex:1;min-width:0;}
 .fs-combo-item-name{font-size:13px;font-weight:600;color:var(--text-3);line-height:1.25;word-break:break-word;}
 .fs-combo-item-name em{font-style:normal;background:rgba(255,214,10,.65);border-radius:2px;padding:0 1px;color:var(--text);}
@@ -10666,10 +10671,10 @@ function _fsComboItemSubHtml(t,qLow){
   }
   return '';
 }
-function _fsComboItemFichaHtml(t,qLow){
+function _fsComboItemFichaHtml(t,qLow,isMatch){
   const ficha=t&&t.ficha!=null&&String(t.ficha).trim()?String(t.ficha).trim():'';
   if(!ficha)return '';
-  return '<span class="fs-combo-item-ficha"><span class="fs-combo-ficha-lbl">Ficha</span><span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span></span>';
+  return '<span class="fs-combo-item-ficha'+(isMatch?' fs-combo-item-ficha--match':'')+'"><span class="fs-combo-ficha-lbl">Ficha</span><span class="fs-combo-ficha-num">'+_fsComboHi(ficha,qLow)+'</span></span>';
 }
 function _fsComboCodeBadge(t){
   const c=String(t&&t.codigo||'').trim();
@@ -10755,13 +10760,19 @@ function _fsComboHi(str,qLow){
   if(i<0)return esc(s);
   return esc(s.slice(0,i))+'<em>'+esc(s.slice(i,i+qLow.length))+'</em>'+esc(s.slice(i+qLow.length));
 }
+/** Ficha como número para ordenar (las no numéricas / vacías van al final). */
+function _fsFichaNum(t){
+  const f=(t&&t.ficha!=null)?String(t.ficha).trim():'';
+  if(/^\d+$/.test(f))return parseInt(f,10);
+  return Number.MAX_SAFE_INTEGER;
+}
 function _fsComboRenderList(trabs,q,opts){
   const qLow=(q||'').toLowerCase().trim();
+  const isNum=/^\d+$/.test(qLow);
   let filtered=trabs;
   if(qLow){
     // Si se escribe SOLO números, priorizar la FICHA: exacta → empieza con → contiene.
     // (El planillero/operario suele teclear el número de ficha del trabajador.)
-    const isNum=/^\d+$/.test(qLow);
     const scored=[];
     trabs.forEach(t=>{
       const n=(t.nombre||'').toLowerCase();
@@ -10783,8 +10794,12 @@ function _fsComboRenderList(trabs,q,opts){
       }
       if(score>=0)scored.push({t,score});
     });
-    scored.sort((a,b)=>a.score-b.score||String(a.t.nombre||'').localeCompare(String(b.t.nombre||''),'es',{sensitivity:'base'}));
+    // Empate de score → por ficha ascendente (1, 2, 3…), luego nombre.
+    scored.sort((a,b)=>a.score-b.score||_fsFichaNum(a.t)-_fsFichaNum(b.t)||String(a.t.nombre||'').localeCompare(String(b.t.nombre||''),'es',{sensitivity:'base'}));
     filtered=scored.map(x=>x.t);
+  }else{
+    // Sin búsqueda: ordenar por FICHA ascendente (1 hacia abajo); sin ficha al final por nombre.
+    filtered=trabs.slice().sort((a,b)=>_fsFichaNum(a)-_fsFichaNum(b)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   }
   let html='';
   if(opts&&opts.allowManual){
@@ -10803,8 +10818,11 @@ function _fsComboRenderList(trabs,q,opts){
   filtered.forEach(t=>{
     const code=_fsComboCodeBadge(t);
     const sub=_fsComboItemSubHtml(t,qLow);
-    const fichaR=_fsComboItemFichaHtml(t,qLow);
-    html+=`<button type="button" class="fs-combo-item" data-id="${esc(String(t.id))}" data-nombre="${esc(t.nombre||'')}" data-codigo="${esc(t.codigo||'')}">
+    // Coincidencia de ficha cuando se busca por número → destacar la celda de ficha.
+    const fApro=(t&&t.ficha!=null)?String(t.ficha).trim().toLowerCase():'';
+    const fichaMatch=isNum&&!!qLow&&(fApro===qLow||fApro.startsWith(qLow)||fApro.includes(qLow));
+    const fichaR=_fsComboItemFichaHtml(t,qLow,fichaMatch);
+    html+=`<button type="button" class="fs-combo-item${fichaMatch?' fs-combo-item--fmatch':''}" data-id="${esc(String(t.id))}" data-nombre="${esc(t.nombre||'')}" data-codigo="${esc(t.codigo||'')}">
       <span class="fs-combo-item-code">${_fsComboHi(code,qLow)}</span>
       <span class="fs-combo-item-body">
         <span class="fs-combo-item-name">${_fsComboHi(t.nombre||'',qLow)}</span>
