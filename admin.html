@@ -6974,6 +6974,22 @@ async function adminPushEqRuntimeToCloud(opts){
     return false;
   }
 }
+/** Trae TODAS las filas de una tabla operativa en páginas de 1000 (Supabase limita
+ *  cada request a ~1000). Reemplaza el viejo .limit(500) que perdía registros cuando
+ *  había más de 500 (moldes/pesajes/generales superan ese número). Ordena id desc. */
+async function _sbFetchAllRows(table){
+  const PAGE=1000, MAX=100000; // techo defensivo
+  let all=[], from=0;
+  while(from<MAX){
+    const{data,error}=await _sb.from(table).select('*').order('id',{ascending:false}).range(from,from+PAGE-1);
+    if(error)return{data:all,error};
+    const chunk=Array.isArray(data)?data:[];
+    all=all.concat(chunk);
+    if(chunk.length<PAGE)break; // última página
+    from+=PAGE;
+  }
+  return{data:all,error:null};
+}
 /** Moldes/pesajes/generales desde Supabase solamente (sin fusionar caché local). La consola admin refleja la nube; la tablet sigue usando merge donde aplique. */
 async function sbPullRuntimeFromCloud(){
   if(!_sb)return;
@@ -6981,7 +6997,7 @@ async function sbPullRuntimeFromCloud(){
   try{
     if(!RT.data)RT.data={};
     for(const t of['moldes','pesajes','generales']){
-      const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+      const{data,error}=await _sbFetchAllRows(t);
       if(error){sbLog('pull RT '+t+': '+error.message,false);continue;}
       const remote=_sbParse(t,data||[]);
       RT.data[t]=remote;
@@ -7483,8 +7499,8 @@ async function _pollFresh(){
       const n=count||0;
       if(n!==_pollCounts[t]){
         _pollCounts[t]=n;
-        // Descarga datos frescos
-        const{data:rows,error:e2}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+        // Descarga datos frescos (todas las filas, paginado)
+        const{data:rows,error:e2}=await _sbFetchAllRows(t);
         if(!e2&&rows){
           if(!RT.data)RT.data={};
           RT.data[t]=_sbParse(t,rows);
@@ -7773,7 +7789,7 @@ async function pullAll(){
     }
     // Operacionales: solo nube (misma política que sbPullRuntimeFromCloud / Traer moldes y pesajes)
     for(const t of['moldes','pesajes','generales']){
-      const{data,error}=await _sb.from(t).select('*').order('id',{ascending:false}).limit(500);
+      const{data,error}=await _sbFetchAllRows(t);
       if(error)throw error;if(!RT.data)RT.data={};
       const remote=_sbParse(t,data||[]);
       RT.data[t]=remote;
