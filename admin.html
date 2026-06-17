@@ -1594,6 +1594,9 @@ const WIDGET_CATALOG=[
   // Por especie
   {type:'pv-esp-mol',    title:'Moldes · Por especie',  size:'lg', group:'Por especie', icon:'🐟'},
   {type:'pv-esp-pes',    title:'Pesaje · Por especie',  size:'lg', group:'Por especie', icon:'🐟'},
+  // Ranking animado (Bar Chart Race) — acumulado de kilos por operario a lo largo de las horas
+  {type:'race-pes',      title:'🏁 Carrera de barras · Pesaje (kg)', size:'lg', group:'Ranking animado', icon:'🏁'},
+  {type:'race-mol',      title:'🏁 Carrera de barras · Moldes (kg)', size:'lg', group:'Ranking animado', icon:'🏁'},
 ];
 const DEFAULT_WIDGETS=[
   {id:'w1',type:'kpi-moldes',title:'Moldes registrados',size:'sm'},
@@ -3058,7 +3061,7 @@ function renderKPIs(){
 let _dashStructKey='';
 function _calcDashStructKey(){return dashWidgets.map(w=>w.id+':'+w.type+':'+w.size+':'+(w.cols==null?'':w.cols)+':'+(w.color||'')+':'+(w.bg||'')+':'+(w.linea||'')).join('|');}
 function _widgetShellHTML(w){
-  const isTable=w.type.startsWith('tbl-')||w.type.startsWith('pv-');
+  const isTable=w.type.startsWith('tbl-')||w.type.startsWith('pv-')||w.type.startsWith('race-');
   const body=isTable?`<div class="widget-body" id="c_${w.id}"></div>`
     :`<div class="widget-body"><canvas id="c_${w.id}"></canvas></div>`;
   const accent=w.color?_sanitizeCssColor(w.color):'';
@@ -3255,6 +3258,10 @@ function drawWidget(w){
   if(w.type.startsWith('tbl-')||w.type.startsWith('pv-')){
     drawTableWidget(w,moldes,pesajes);return;
   }
+  // Bar Chart Race (ranking animado por kilos acumulados)
+  if(w.type.startsWith('race-')){
+    drawRaceWidget(w,moldes,pesajes);return;
+  }
   // KPI canvas: redibujar (liviano, solo texto)
   if(w.type.startsWith('kpi-')){
     const ctx=cv.getContext('2d');const p=cv.parentElement;cv.width=p.clientWidth;cv.height=p.clientHeight;
@@ -3347,9 +3354,10 @@ function drawTableWidget(w,moldes,pesajes){
         map[k].tot+=kg;
       }
     });
+    // Orden por KG total descendente: quien lleva más kilos va a la cima.
     const rows=Object.values(map).sort((a,b)=>{
-      if(isMol)return a.nom.localeCompare(b.nom)||String(a.esp||'').localeCompare(String(b.esp||''))||a.prod.localeCompare(b.prod);
-      return a.nom.localeCompare(b.nom)||a.esp.localeCompare(b.esp);
+      if(isMol)return (b.totKg-a.totKg)||a.nom.localeCompare(b.nom)||String(a.esp||'').localeCompare(String(b.esp||''));
+      return (b.tot-a.tot)||a.nom.localeCompare(b.nom)||a.esp.localeCompare(b.esp);
     });
     const totCol={};
     if(isMol){
@@ -3435,6 +3443,80 @@ function drawTableWidget(w,moldes,pesajes){
       `</tbody><tfoot><tr><td>Total</td>${esps.map(e=>`<td class="num">${_fmt(totCol[e])}</td>`).join('')}<td class="num">${_fmt(gt)}</td></tr></tfoot></table>`;
   }
   host.innerHTML=html;
+}
+
+/* ════════════ BAR CHART RACE · ranking animado de kilos por operario ════════════ */
+const _raceState={};
+function drawRaceWidget(w,moldes,pesajes){
+  const host=document.getElementById('c_'+w.id);if(!host)return;
+  const src=(w.type==='race-mol'?moldes:pesajes)||[];
+  const lineF=(w.linea&&String(w.linea).trim())?String(w.linea).trim().toUpperCase():'';
+  const rows=lineF?src.filter(r=>String(r.linea||'').trim().toUpperCase()===lineF):src.slice();
+  if(!rows.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin datos para la carrera</div>';return;}
+  const horasSet=new Set();
+  rows.forEach(r=>{const m=String(r.hora||'').match(/^(\d{1,2}):/);if(m)horasSet.add(parseInt(m[1],10));});
+  const horas=[...horasSet].sort((a,b)=>a-b);
+  if(!horas.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin horas en los datos</div>';return;}
+  const perWorker={};
+  rows.forEach(r=>{
+    const nom=String(r.nombre||'—').trim()||'—';
+    const m=String(r.hora||'').match(/^(\d{1,2}):/);const hh=m?parseInt(m[1],10):null;
+    if(!perWorker[nom])perWorker[nom]={byH:{}};
+    if(hh!=null)perWorker[nom].byH[hh]=(perWorker[nom].byH[hh]||0)+(+r.kg||0);
+  });
+  const nombres=Object.keys(perWorker);
+  let st=_raceState[w.id];
+  const horasKey=horas.join(',');
+  if(!st||st.horasKey!==horasKey){st=_raceState[w.id]={idx:horas.length-1,playing:false,timer:null,horasKey};}
+  // No interrumpir una animación en curso cuando el dashboard se refresca solo.
+  if(st.playing&&host.querySelector('.race-bars'))return;
+  const TOPN=12,rowH=30,gap=8;
+  const palette=['#1e3a8a','#0891b2','#16a34a','#ca8a04','#dc2626','#7c3aed','#db2777','#0d9488','#ea580c','#4338ca','#65a30d','#9333ea'];
+  const colorFor=nom=>{let h=0;for(let i=0;i<nom.length;i++)h=(h*31+nom.charCodeAt(i))>>>0;return palette[h%palette.length];};
+  const cumAt=(nom,hIdx)=>{let s=0;for(let i=0;i<=hIdx;i++)s+=perWorker[nom].byH[horas[i]]||0;return s;};
+  function renderFrame(){
+    const hIdx=st.idx;
+    const ranking=nombres.map(n=>({n,kg:cumAt(n,hIdx)})).filter(x=>x.kg>0).sort((a,b)=>b.kg-a.kg).slice(0,TOPN);
+    const maxKg=ranking.length?ranking[0].kg:1;
+    const barsHtml=ranking.map((x,rank)=>{
+      const pct=Math.max(3,Math.round(x.kg/maxKg*100));
+      const col=colorFor(x.n);
+      const medal=rank===0?'🥇 ':rank===1?'🥈 ':rank===2?'🥉 ':'';
+      return `<div style="position:absolute;left:0;right:0;height:${rowH}px;transform:translateY(${rank*(rowH+gap)}px);transition:transform .7s cubic-bezier(.4,0,.2,1);">
+        <div style="display:flex;align-items:center;gap:8px;height:100%;">
+          <div style="width:170px;flex-shrink:0;font-size:12px;font-weight:600;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">${medal}${esc(x.n)}</div>
+          <div style="flex:1;height:100%;position:relative;">
+            <div style="position:absolute;left:0;top:0;height:100%;width:${pct}%;background:${col};border-radius:0 6px 6px 0;transition:width .7s cubic-bezier(.4,0,.2,1);min-width:34px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;box-shadow:0 1px 3px rgba(0,0,0,.15);">
+              <span style="color:#fff;font-weight:800;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;">${x.kg.toLocaleString('es-CL',{maximumFractionDigits:1})} kg</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    const bars=host.querySelector('.race-bars');
+    if(bars){bars.style.height=Math.max(ranking.length,1)*(rowH+gap)+'px';bars.innerHTML=barsHtml;}
+    const hr=host.querySelector('.race-hour');if(hr)hr.textContent=String(horas[hIdx]).padStart(2,'0')+':00 · '+(hIdx+1)+'/'+horas.length;
+    const pb=host.querySelector('.race-play');if(pb)pb.textContent=st.playing?'⏸ Pausar':'▶ Reproducir';
+  }
+  function stop(){st.playing=false;if(st.timer){clearInterval(st.timer);st.timer=null;}renderFrame();}
+  function play(){
+    if(st.idx>=horas.length-1)st.idx=0;
+    st.playing=true;renderFrame();
+    if(st.timer)clearInterval(st.timer);
+    st.timer=setInterval(()=>{if(st.idx<horas.length-1){st.idx++;renderFrame();}else{stop();}},900);
+  }
+  host.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 2px 10px;flex-wrap:wrap;">
+      <button type="button" class="btn sm race-play" style="background:var(--brand,#0f172a);color:#fff;">▶ Reproducir</button>
+      <button type="button" class="btn ghost sm race-reset">⟲ Reiniciar</button>
+      <span style="flex:1;"></span>
+      <span class="race-hour" style="font-weight:800;font-size:15px;color:var(--brand);font-variant-numeric:tabular-nums;"></span>
+    </div>
+    <div class="race-bars" style="position:relative;transition:height .5s;"></div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:8px;text-align:center;">Kilos acumulados por operario · avanza hora a hora · quien más lleva sube a la cima</div>`;
+  const pBtn=host.querySelector('.race-play');if(pBtn)pBtn.onclick=()=>{if(st.playing)stop();else play();};
+  const rBtn=host.querySelector('.race-reset');if(rBtn)rBtn.onclick=()=>{stop();st.idx=0;renderFrame();};
+  renderFrame();
 }
 
 /* ════════════ TÚNELES / PLACAS — reporte ════════════ */

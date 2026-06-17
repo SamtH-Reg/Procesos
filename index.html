@@ -4789,7 +4789,11 @@ function _tbMaybeStoreArmadoBackupOnRtSave(){
   _tbTryStoreArmadoEmergencyBackup();
 }
 function _rtSaveLocal(){
-  try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}catch(e){}
+  try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}
+  catch(e){
+    console.warn('[rtSaveLocal]',e);
+    if(typeof showToast==='function')showToast('No se pudo guardar en la tablet (almacenamiento lleno). Sincroniza con la nube o limpia datos antiguos.','error');
+  }
 }
 function rtSave(opts){
   _rtSaveLocal();
@@ -4919,37 +4923,9 @@ function _tbLastPushedIdsFromSig(sigJson){
   }catch(e){}
   return s;
 }
-/**
- * Pull operativo: si el snapshot de Supabase es completo (total filas ≤ límite y trajo todas),
- * las filas que ya subimos y ya no vienen del servidor se interpretan como borradas en la nube
- * y se quitan del RT (evita que vuelvan a aparecer en Supabase tras un reload).
- * Si el snapshot es parcial (>4000 filas en BD) o falla el conteo, se mantiene el merge conservador
- * (remote + extras locales no listados en esta página).
- */
-function _tbMergeRtByIdForPull(localArr,remoteRows,mapFn,opts){
-  opts=opts||{};
-  const pullLimit=opts.pullLimit||4000;
-  const totalInDb=opts.totalInDb;
-  const lastPushedSig=opts.lastPushedSig;
-  const remoteRaw=(remoteRows||[]).map(mapFn).filter(Boolean);
-  const local=Array.isArray(localArr)?localArr:[];
-  // Reconcilia pendiente: si remote.pendiente es null y local tiene número, preservar local.
-  const localMap=new Map();
-  for(const x of local){if(x&&x.id!=null)localMap.set(String(x.id),x);}
-  const remote=remoteRaw.map(r=>_tbReconcilePendiente(r,localMap.get(String(r.id))));
-  const remoteIds=new Set(remote.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
-  const snapshotComplete=totalInDb!=null&&totalInDb>=0&&totalInDb<=pullLimit&&remote.length===totalInDb;
-  if(!snapshotComplete)return _tbMergeRtById(localArr,remoteRows,mapFn);
-  const pushedIds=_tbLastPushedIdsFromSig(lastPushedSig);
-  const extras=[];
-  for(const x of local){
-    if(!x||x.id==null)continue;
-    const id=String(x.id);
-    if(remoteIds.has(id))continue;
-    if(_rtIsDemoMolde(x)||_rtIsDemoPesaje(x))continue;
-    if(!pushedIds.has(id))extras.push(x);
-  }
-  return remote.concat(extras);
+function _tbMergeRtByIdForPull(localArr,remoteRows,mapFn,_opts){
+  /* Siempre merge conservador: no eliminar filas locales por un pull parcial o por límite de filas. */
+  return _tbMergeRtById(localArr,remoteRows,mapFn);
 }
 /** Union por `id` al recibir RT desde otra pestaña (admin/index): evita que un snapshot parcial borre filas y luego el push marque esos ids como DELETE en Supabase. */
 function _tbMergeRtRowsPeer(beforeArr, incomingArr){
@@ -5002,31 +4978,24 @@ async function tbManualPullMoldesPesajes(opts){
   try{
     const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
     const CHUNK=1000;
-    const MAX_ROWS=20000; // techo defensivo para no congelar tablet en tablas enormes
+    const PULL_SAFETY=500000;
     for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
-      let totalInDb=null;
-      try{
-        const cr=await _tbSb.from(t).select('*',{count:'exact',head:true});
-        if(!cr.error&&cr.count!=null)totalInDb=+cr.count;
-      }catch(e){/* conteo opcional */}
-      // Pull paginado: descarga en chunks de 1000 hasta agotar la tabla o llegar al techo
       let allData=[];
       let from=0,gotErr=null;
-      while(allData.length<MAX_ROWS){
+      while(allData.length<PULL_SAFETY){
         const to=from+CHUNK-1;
         const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).range(from,to);
         if(error){gotErr=error;break;}
         const chunk=Array.isArray(data)?data:[];
         if(!chunk.length)break;
         allData=allData.concat(chunk);
-        if(chunk.length<CHUNK)break; // última página
+        if(chunk.length<CHUNK)break;
         from+=CHUNK;
       }
       if(gotErr){console.warn('[tb pull]',t,gotErr);if(!silent&&typeof showToast==='function')showToast(t+': '+gotErr.message,'error');continue;}
       const lastSig=(typeof TBSync!=='undefined'&&TBSync._lastSig)?TBSync._lastSig[t]:'';
-      const pulledAll=totalInDb!=null?allData.length>=totalInDb:allData.length<MAX_ROWS;
-      RT[t]=_tbMergeRtByIdForPull(localBefore,allData,mapFor(t),{pullLimit:pulledAll?Number.MAX_SAFE_INTEGER:MAX_ROWS,totalInDb,lastPushedSig:lastSig});
+      RT[t]=_tbMergeRtByIdForPull(localBefore,allData,mapFor(t),{lastPushedSig:lastSig});
     }
     _rtPurgeDemoFromRt();
     rtSave();
@@ -8422,6 +8391,10 @@ function regPesaje(){
     kg:Math.round(kg*100)/100,guia,
   };
   RT.pesajes.unshift(rec);rtSave({skipCloudSchedule:true});
+  const fv=document.getElementById('pVerFechaTurno');
+  const fr=document.getElementById('pResumenFechaTurno');
+  if(fv)fv.value=rec.fecha;
+  if(fr)fr.value=rec.fecha;
   renderPesajeTable();
   _tbDefer(()=>{
     if(document.getElementById('panelAnalisis')?.classList.contains('active')&&typeof renderAnalisis==='function')renderAnalisis();
@@ -8431,9 +8404,10 @@ function regPesaje(){
   document.getElementById('pRegKg').value='';
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
-  _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg de '+rec.especie);
+  _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg · '+rec.fecha);
   void _tbCloudUpsertOperativoRow('pesajes',rec.id).then(cloud=>{
     if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush();
+    else if(cloud&&cloud.ok===false&&typeof showToast==='function')showToast('Guardado en tablet; no se subió a Supabase: '+String(cloud.err||'error'),'error');
   });
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;
@@ -13155,6 +13129,74 @@ document.addEventListener('visibilitychange',()=>{
   try{clearTimeout(window._tbVisPullT);}catch(_){}
   window._tbVisPullT=setTimeout(()=>{void tbFlushPendingCloudSync({silent:true});},2200);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SYNC ROBUSTO · tablets de larga duración (no perder datos en local)
+   ══════════════════════════════════════════════════════════════════════════
+   La app recolecta datos por horas sin recargar. Si un push inmediato falla
+   (red intermitente / pestaña en segundo plano), antes solo el respaldo de
+   3 min lo reintentaba. Aquí:
+   1) Cuenta registros locales sin confirmar en la nube.
+   2) Auto-sync agresivo cada 30 s mientras haya pendientes (push incremental;
+      si no hay cambios, la firma lo salta — barato).
+   3) Aviso visible al juntar ≥100 registros locales: pide tocar "Por subir".
+   ══════════════════════════════════════════════════════════════════════════ */
+/** Nº de registros locales (moldes+pesajes+generales) cuyo id no está en la última
+ *  firma confirmada en la nube. Aproxima los pendientes por subir. */
+function _tbPendingPushCount(){
+  try{
+    if(typeof TBSync==='undefined'||!TBSync._lastSig||typeof TBSync._rowsForCloudPush!=='function')return 0;
+    const pack=TBSync._rowsForCloudPush();
+    const syncedIds=new Set();
+    ['moldes','pesajes','generales'].forEach(t=>{
+      try{const arr=JSON.parse(TBSync._lastSig[t]||'[]');if(Array.isArray(arr))arr.forEach(r=>r&&syncedIds.add(String(r.id)));}catch(_){}
+    });
+    let pend=0;
+    [...(pack.moldesRows||[]),...(pack.pesajesRows||[]),...(pack.generalesRows||[])].forEach(r=>{if(r&&!syncedIds.has(String(r.id)))pend++;});
+    return pend;
+  }catch(e){return 0;}
+}
+window._tbPendingPushCount=_tbPendingPushCount;
+
+let _tbAutoSyncBusy=false;
+setInterval(async()=>{
+  try{
+    if(_tbAutoSyncBusy)return;
+    if(!navigator.onLine||!_tbSb||!_tbUser)return;
+    if(_tbPendingPushCount()<=0)return;
+    _tbAutoSyncBusy=true;
+    if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();
+  }catch(e){console.warn('[tb auto-sync 30s]',e);}
+  finally{_tbAutoSyncBusy=false;}
+},30000);
+
+/* Aviso de pendientes acumulados (≥100): banner fijo que pide sincronizar. */
+const TB_PENDING_WARN_THRESHOLD=100;
+function _tbRenderPendingWarn(){
+  try{
+    const pend=_tbPendingPushCount();
+    let banner=document.getElementById('tbPendingWarnBanner');
+    if(pend>=TB_PENDING_WARN_THRESHOLD){
+      if(!banner){
+        banner=document.createElement('div');
+        banner.id='tbPendingWarnBanner';
+        banner.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h,78px) + 12px);z-index:9998;max-width:92vw;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);padding:12px 14px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:600;cursor:pointer;animation:tbWarnPulse 2s ease-in-out infinite;';
+        banner.onclick=()=>{try{void tbFlushPendingCloudSync({silent:false});}catch(_){}};
+        document.body.appendChild(banner);
+        if(!document.getElementById('tbWarnPulseStyle')){
+          const st=document.createElement('style');st.id='tbWarnPulseStyle';
+          st.textContent='@keyframes tbWarnPulse{0%,100%{box-shadow:0 8px 28px rgba(0,0,0,.28);}50%{box-shadow:0 8px 28px rgba(220,38,38,.55);}}';
+          document.head.appendChild(st);
+        }
+      }
+      banner.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
+        +'<span><strong>'+pend+' registros sin subir.</strong> Toca aquí o el botón «Por subir» para sincronizar con la nube.</span>';
+    }else if(banner){banner.remove();}
+  }catch(e){}
+}
+setInterval(_tbRenderPendingWarn,15000);
+// Primera verificación tras cargar (da tiempo a que cargue sesión + firmas)
+setTimeout(_tbRenderPendingWarn,8000);
 </script>
 
 </body>
