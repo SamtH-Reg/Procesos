@@ -1149,6 +1149,15 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   </div>
   <div class="card" style="margin-top:16px;">
     <div class="card-hdr">
+      <div class="card-title">📡 Sincronización de tablets (red)</div>
+      <button class="btn sm ghost" type="button" onclick="adminRefreshTabletHealth(true)">↻</button>
+    </div>
+    <p style="margin:0 0 12px;font-size:12px;color:var(--text-3);">Latido persistente de cada tablet: <strong>pendientes sin subir</strong>, calidad de red y antigüedad de la última señal. Si una tablet no aparece o su señal es vieja, su conexión está fallando — útil para decidir mejoras físicas (WiFi/AP).</p>
+    <div id="adminTabletHealthAlert"></div>
+    <div id="adminTabletHealthList" style="font-size:13px;line-height:1.5;">Cargando…</div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="card-hdr">
       <div class="card-title">🛠️ Migraciones SQL pendientes</div>
       <button class="btn sm ghost" type="button" onclick="renderMigracionesSQL()">↻</button>
     </div>
@@ -7178,6 +7187,7 @@ async function applySession(session){
   applyRolePermissions();
   updateUserBadge();
   try{adminStartTabletPresenceWatch();}catch(_){}
+  try{adminStartTabletHealthWatch();}catch(_){}
   sbLog('Sesión admin: '+_currentUser.email+' ('+_currentUser.rol+')');
   try{const ap=document.querySelector('.page.active');if(ap&&ap.id==='page-roles'&&typeof renderRoles==='function')renderRoles();}catch(_){}
   /* Catálogo desde la nube antes que moldes/pesajes (paridad index: pullCatalogs antes del merge RT). */
@@ -7325,6 +7335,7 @@ async function connectSupabase(silent){
     _sb=window.supabase.createClient(url,key,_sbAdminAuthOptions());
     saveSbCreds({url,key,connected:true});document.getElementById('sbDot').className='status-dot online';document.getElementById('sbStatus').textContent='Supabase: conectado';document.getElementById('sbBadge').textContent='Conectado';document.getElementById('sbBadge').className='badge ok';if(!silent){toast('Conectado a Supabase','success');sbLog('Conectado a '+url);}if(_currentUser&&typeof sbStartPoll==='function')sbStartPoll();
     adminStartTabletPresenceWatch();
+    try{adminStartTabletHealthWatch();}catch(_){}
     await bindSupabaseAuth();
   }
   catch(e){
@@ -7400,6 +7411,99 @@ function adminStartTabletPresenceWatch(){
       }
     }
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SALUD DE SINCRONIZACIÓN DE TABLETS  ·  lee latidos  app_kv  tb_hb:<dev>
+   ══════════════════════════════════════════════════════════════════════════
+   Cada tablet escribe un latido cada ~90 s con sus pendientes locales, calidad
+   de red y hora. Aquí los leemos, marcamos en rojo las que dejaron de latir
+   (red caída/inestable) y mostramos cuántos registros quedaron sin subir, para
+   poder decidir mejoras físicas de conexión. */
+let _adminTabletHealthTimer=null;
+function _adminFmtAge(ms){
+  if(ms==null||!isFinite(ms))return '—';
+  const s=Math.max(0,Math.round(ms/1000));
+  if(s<60)return 'hace '+s+'s';
+  const m=Math.round(s/60);
+  if(m<60)return 'hace '+m+' min';
+  const h=Math.floor(m/60),mm=m%60;
+  return 'hace '+h+'h'+(mm?(' '+mm+'m'):'');
+}
+function _adminNetLabel(net){
+  if(!net||!net.type)return '';
+  const extra=[];
+  if(net.rtt!=null)extra.push(net.rtt+'ms');
+  if(net.down!=null)extra.push(net.down+'Mb');
+  return String(net.type).toUpperCase()+(extra.length?(' · '+extra.join(' · ')):'');
+}
+async function adminRefreshTabletHealth(manual){
+  const list=document.getElementById('adminTabletHealthList');
+  if(!_sb){if(list)list.innerHTML='<div style="color:var(--text-3);">Conecta a Supabase para ver el estado.</div>';return;}
+  try{
+    const{data,error}=await _sb.from('app_kv').select('key,value,updated_at').like('key','tb_hb:%');
+    if(error)throw error;
+    const rows=(Array.isArray(data)?data:[]).map(r=>{
+      const v=(r&&r.value)||{};
+      const tsRaw=v.ts||r.updated_at;
+      const ts=tsRaw?Date.parse(tsRaw):NaN;
+      return{dev:v.dev||String(r.key||'').replace('tb_hb:',''),nombre:v.nombre||'',rol:v.rol||'',lineas:Array.isArray(v.lineas)?v.lineas:[],pend:+v.pend||0,net:v.net||null,ts:ts};
+    })
+    // Ocultar tablets retiradas (sin latido hace >12 h): no son la operación actual.
+    .filter(r=>isFinite(r.ts)&&(Date.now()-r.ts)<12*3600000);
+    rows.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    _adminRenderTabletHealth(rows);
+    if(manual&&typeof toast==='function')toast('Estado de tablets actualizado ('+rows.length+')','success');
+  }catch(e){
+    if(list)list.innerHTML='<div style="color:#dc2626;">No se pudo leer el estado: '+esc(e.message||String(e))+'</div>';
+  }
+}
+function _adminRenderTabletHealth(rows){
+  const list=document.getElementById('adminTabletHealthList');
+  const alertBox=document.getElementById('adminTabletHealthAlert');
+  const now=Date.now();
+  const STALE=5*60000; // 5 min sin latido = conexión sospechosa
+  if(!rows.length){
+    if(alertBox)alertBox.innerHTML='';
+    if(list)list.innerHTML='<div style="color:var(--text-3);padding:8px 0;">Aún no hay latidos de tablets. Aparecerán cuando una tablet con sesión esté online (puede tardar ~90 s).</div>';
+    return;
+  }
+  let alertCount=0,pendStuck=0;
+  const rowsHtml=rows.map(t=>{
+    const age=now-(t.ts||0);
+    const stale=!isFinite(t.ts)||age>STALE;
+    const badNet=t.net&&/^(2g|slow-2g)$/i.test(t.net.type||'');
+    const hasPend=t.pend>0;
+    let color='#16a34a',estado='OK';
+    if(stale){color='#dc2626';estado=hasPend?('SIN SEÑAL · '+t.pend+' sin subir'):'SIN SEÑAL';alertCount++;if(hasPend)pendStuck+=t.pend;}
+    else if(hasPend||badNet){color='#d97706';estado=hasPend?(t.pend+' sin subir'):'Red débil';if(hasPend){alertCount++;pendStuck+=t.pend;}}
+    const netL=_adminNetLabel(t.net);
+    return '<tr style="border-top:1px solid var(--border);">'
+      +'<td style="padding:8px 10px;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+color+';margin-right:7px;"></span><strong>'+esc(t.nombre||t.dev)+'</strong>'+(t.rol?'<span style="color:var(--text-3);font-size:11px;"> · '+esc(t.rol)+'</span>':'')+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px;">'+(t.lineas&&t.lineas.length?esc(t.lineas.join(', ')):'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:13px;font-weight:700;color:'+(hasPend?'#d97706':'var(--text-3)')+';">'+(t.pend||0)+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px;color:'+(badNet?'#d97706':'var(--text-3)')+';">'+esc(netL||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px;color:'+(stale?'#dc2626':'var(--text-3)')+';">'+_adminFmtAge(age)+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px;color:'+color+';font-weight:600;">'+esc(estado)+'</td>'
+      +'</tr>';
+  }).join('');
+  if(alertBox){
+    if(alertCount>0){
+      alertBox.innerHTML='<div style="background:rgba(220,38,38,.12);border:1px solid #dc2626;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;">⚠ <strong>'+alertCount+' tablet(s) con problemas de sincronización</strong>'+(pendStuck>0?(' · ~'+pendStuck+' registro(s) sin subir'):'')+'. Revisa la conexión de red en esas estaciones (WiFi/AP).</div>';
+    }else{
+      alertBox.innerHTML='<div style="background:rgba(22,163,74,.10);border:1px solid #16a34a;border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13px;">✓ Todas las tablets sincronizando con normalidad.</div>';
+    }
+  }
+  if(list){
+    list.innerHTML='<table style="width:100%;border-collapse:collapse;"><thead><tr>'
+      +['Tablet / usuario','Líneas','Sin subir','Red','Última señal','Estado'].map(h=>'<th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">'+h+'</th>').join('')
+      +'</tr></thead><tbody>'+rowsHtml+'</tbody></table>';
+  }
+}
+function adminStartTabletHealthWatch(){
+  if(_adminTabletHealthTimer)clearInterval(_adminTabletHealthTimer);
+  adminRefreshTabletHealth(false);
+  _adminTabletHealthTimer=setInterval(()=>adminRefreshTabletHealth(false),60000); // refresca cada 60 s
 }
 
 let _sbChannels=[];

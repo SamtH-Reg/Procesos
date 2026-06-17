@@ -5614,8 +5614,23 @@ function _tbNormalizeArmadoLineaSupabaseRow(row){
  */
 function _applyRemoteArmadoLineasRows(armData){
   const rows=Array.isArray(armData)?armData:[];
-  const prevKeyCount=Object.keys(RT.armadoMolde||{}).length+Object.keys(RT.armadoPesaje||{}).length;
-  if(rows.length===0&&prevKeyCount>0){
+  // ¿El armado local tiene cambios SIN subir aún a la nube? Si la firma local ya no
+  // coincide con la última subida confirmada, hay ediciones pendientes (p.ej. un
+  // planillero acaba de agregar trabajadores y el push todavía no termina).
+  // En ese caso un pull NO debe sobrescribir lo local: era la causa de que los
+  // "trabajadores desaparecieran del armado de línea" (el pull llegaba antes que
+  // el push y reemplazaba lo recién agregado por el estado viejo de la nube).
+  let _armLocalDirty=false;
+  try{
+    const _localSig=(typeof _tbArmadoSigFromRows==='function'&&typeof _tbArmadoRowsFromRt==='function')
+      ?_tbArmadoSigFromRows(_tbArmadoRowsFromRt()):'';
+    const _lastSig=(typeof TBSync!=='undefined'&&TBSync._lastSig)?(TBSync._lastSig.armado||''):'';
+    _armLocalDirty=!!_localSig&&_localSig!==_lastSig;
+  }catch(_){}
+  const _prevMolde={...(RT.armadoMolde||{})};
+  const _prevPesaje={...(RT.armadoPesaje||{})};
+  const prevKeyCount=Object.keys(_prevMolde).length+Object.keys(_prevPesaje).length;
+  if(rows.length===0&&prevKeyCount>0&&!_armLocalDirty){
     _tbTryStoreArmadoEmergencyBackup();
     if(_tbUser&&typeof showToast==='function'){
       showToast('Armado de línea vacío en la nube (se quitó lo local). Si fue un error: restoreArmadoEmergencyBackup()','info');
@@ -5652,12 +5667,24 @@ function _applyRemoteArmadoLineasRows(armData){
   });
   if(!RT.armadoMolde)RT.armadoMolde={};
   if(!RT.armadoPesaje)RT.armadoPesaje={};
-  RT.armadoMolde=newMolde;
-  RT.armadoPesaje=newPesaje;
+  if(_armLocalDirty){
+    // Hay ediciones locales pendientes de subir → precedencia LOCAL: la nube aporta
+    // scopes nuevos de otras tablets, pero NO pisa lo que este equipo modificó y
+    // aún no sincronizó. El push pendiente seguirá su curso (no realineamos firma).
+    RT.armadoMolde={...newMolde,..._prevMolde};
+    RT.armadoPesaje={...newPesaje,..._prevPesaje};
+  }else{
+    RT.armadoMolde=newMolde;
+    RT.armadoPesaje=newPesaje;
+  }
   if(typeof _ensureArmadoMolde==='function')_ensureArmadoMolde();
   if(typeof _ensureArmadoPesaje==='function')_ensureArmadoPesaje();
   _pruneInvalidArmadoKeys();
-  try{if(typeof TBSync!=='undefined'&&typeof TBSync.refreshArmadoSigFromLocal==='function')TBSync.refreshArmadoSigFromLocal();}catch(_){}
+  // Solo realineamos la firma cuando NO había cambios locales pendientes (local==nube).
+  // Si estaba dirty, mantener la firma vieja para que el push pendiente siga disparándose.
+  if(!_armLocalDirty){try{if(typeof TBSync!=='undefined'&&typeof TBSync.refreshArmadoSigFromLocal==='function')TBSync.refreshArmadoSigFromLocal();}catch(_){}}
+  // Si conservamos cambios locales pendientes, empuja para que suban cuanto antes.
+  else{try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}}
   _rtSaveLocal&&_rtSaveLocal();
   if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
   if(typeof renderMArmado==='function')renderMArmado();
@@ -11986,6 +12013,86 @@ if(!window._tbPresenceVisHook){
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   LATIDO DE SINCRONIZACIÓN (heartbeat) → app_kv  ·  clave  tb_hb:<deviceId>
+   ══════════════════════════════════════════════════════════════════════════
+   La presencia Realtime solo dice "online ahora". Para que admin sepa QUÉ tablet
+   no está subiendo por red inestable, cada tablet escribe un latido persistente
+   con: identificación, líneas en armado hoy, pendientes locales sin subir,
+   calidad de red (4g/3g/2g, rtt, downlink) y hora del último latido.
+   Si la red está mal, el latido NO llega → admin ve la señal vieja = alerta. El
+   último 'pend' conocido le dice cuántos registros quedaron atrapados allí.
+   ══════════════════════════════════════════════════════════════════════════ */
+function _tbDeviceId(){
+  try{
+    let d=localStorage.getItem('friosur_tb_device_id');
+    if(!d){d='dev-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);localStorage.setItem('friosur_tb_device_id',d);}
+    return d;
+  }catch(e){return 'dev-anon';}
+}
+window._tbDeviceId=_tbDeviceId;
+function _tbHeartbeatLineas(){
+  try{
+    const today=todayLocalYmd();
+    const set=new Set();
+    [RT.armadoMolde,RT.armadoPesaje].forEach(m=>{
+      if(!m||typeof m!=='object')return;
+      Object.keys(m).forEach(k=>{
+        const e=m[k];if(!e)return;
+        const fe=String(e.fecha||'').slice(0,10);
+        if(fe&&fe!==today)return;
+        const p=typeof _armParseKey==='function'?_armParseKey(k):null;
+        const ln=(p&&p.linea)||'';
+        if(ln)set.add(String(ln).toUpperCase());
+      });
+    });
+    return [...set].sort();
+  }catch(e){return [];}
+}
+function _tbNetInfo(){
+  try{
+    const c=navigator.connection||navigator.webkitConnection||navigator.mozConnection;
+    if(!c)return null;
+    return{type:c.effectiveType||'',down:typeof c.downlink==='number'?c.downlink:null,rtt:typeof c.rtt==='number'?c.rtt:null,save:!!c.saveData};
+  }catch(_){return null;}
+}
+let _tbHbLastOkAt=null,_tbHbInFlight=false,_tbHbTimer=null;
+function _tbHeartbeatPayload(){
+  let pend=0;try{pend=(typeof _tbPendingPushCount==='function')?_tbPendingPushCount():0;}catch(_){}
+  return{
+    dev:_tbDeviceId(),
+    nombre:(_tbUser&&_tbUser.nombre)||'',
+    rol:(_tbUser&&_tbUser.rol)||'',
+    email:(_tbUser&&_tbUser.email)||'',
+    lineas:_tbHeartbeatLineas(),
+    pend:pend,
+    online:!!(typeof tbNavigatorOnline==='function'?tbNavigatorOnline():navigator.onLine),
+    net:_tbNetInfo(),
+    ua:(navigator.userAgent||'').slice(0,140),
+    ts:new Date().toISOString(),
+    lastOkAt:_tbHbLastOkAt
+  };
+}
+async function _tbWriteHeartbeat(){
+  if(!_tbSb||!_tbUser||_tbHbInFlight)return;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return; // sin red: no malgastar
+  _tbHbInFlight=true;
+  try{
+    const value=_tbHeartbeatPayload();
+    const{error}=await _tbSb.from('app_kv').upsert({key:'tb_hb:'+_tbDeviceId(),value},{onConflict:'key'});
+    if(!error)_tbHbLastOkAt=new Date().toISOString();
+    else console.warn('[tb heartbeat]',error.message);
+  }catch(e){console.warn('[tb heartbeat]',e);}
+  finally{_tbHbInFlight=false;}
+}
+window._tbWriteHeartbeat=_tbWriteHeartbeat;
+function _tbStartHeartbeat(){
+  if(_tbHbTimer)clearInterval(_tbHbTimer);
+  void _tbWriteHeartbeat();
+  _tbHbTimer=setInterval(()=>{void _tbWriteHeartbeat();},90000); // cada 90 s (liviano)
+}
+window._tbStartHeartbeat=_tbStartHeartbeat;
+
 /** Opciones Auth: persistencia en localStorage; `storageKey` distinto al de admin para no compartir JWT entre páginas (evita signOut cruzado y parpadeo). */
 function _tbSbAuthOptions(){
   try{
@@ -12905,8 +13012,28 @@ const TBSync={
           turno,
           fecha:fe
         };
-        if(area==='pesaje')_pArmSetEntry(lineaRt,payload,turno,fe);
-        else _armSetEntry(lineaRt,payload,turno,fe);
+        // Guarda anti-eco: si este equipo tiene cambios de armado SIN subir aún
+        // (firma local ≠ última subida), no dejes que un evento Realtime —incluido
+        // el eco de nuestro propio push anterior— pise un scope local que ya tiene
+        // igual o más trabajadores. Era otra vía por la que "desaparecían
+        // trabajadores": el eco viejo (A,B,C) llegaba después de agregar D local.
+        let _skipRtArm=false;
+        try{
+          const _ls=(typeof _tbArmadoSigFromRows==='function'&&typeof _tbArmadoRowsFromRt==='function')?_tbArmadoSigFromRows(_tbArmadoRowsFromRt()):'';
+          const _last=(typeof TBSync!=='undefined'&&TBSync._lastSig)?(TBSync._lastSig.armado||''):'';
+          if(_ls&&_ls!==_last){
+            const scope=(area==='pesaje'?RT.armadoPesaje:RT.armadoMolde)||{};
+            const k=typeof _armScopeKey==='function'?_armScopeKey(lineaRt,turno,fe):null;
+            const cur=k?scope[k]:null;
+            const curN=cur&&Array.isArray(cur.trabajadores)?cur.trabajadores.length:0;
+            const incN=Array.isArray(payload.trabajadores)?payload.trabajadores.length:0;
+            if(cur&&incN<=curN)_skipRtArm=true;
+          }
+        }catch(_){}
+        if(!_skipRtArm){
+          if(area==='pesaje')_pArmSetEntry(lineaRt,payload,turno,fe);
+          else _armSetEntry(lineaRt,payload,turno,fe);
+        }
       }
       _rtSaveLocal&&_rtSaveLocal();
       if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();
@@ -13070,6 +13197,7 @@ async function tbApplySession(session){
   }catch(e){_tbUser={id:session.user.id,email:session.user.email,rol:'operario',nombre:session.user.email};}
   tbUpdateUserBadge();
   try{void tbStartTabletPresence();}catch(e){console.warn('[tb presence]',e);}
+  try{_tbStartHeartbeat();}catch(e){console.warn('[tb heartbeat start]',e);}
   try{_tbLoadLastPushSigsFromStorage();}catch(_){}
   try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
 }
@@ -13131,18 +13259,17 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
-   SYNC ROBUSTO · tablets de larga duración (no perder datos en local)
+   PENDIENTES LOCALES · indicador NO invasivo (sin auto-sync agresivo)
    ══════════════════════════════════════════════════════════════════════════
-   La app recolecta datos por horas sin recargar. Si un push inmediato falla
-   (red intermitente / pestaña en segundo plano), antes solo el respaldo de
-   3 min lo reintentaba. Aquí:
-   1) Cuenta registros locales sin confirmar en la nube.
-   2) Auto-sync agresivo cada 30 s mientras haya pendientes (push incremental;
-      si no hay cambios, la firma lo salta — barato).
-   3) Aviso visible al juntar ≥100 registros locales: pide tocar "Por subir".
+   El auto-sync cada 30 s + el banner de ≥100 (cálculo pesado sobre miles de
+   filas) saturaba la tablet y la cerraba al pesar. Se quitó.
+   La subida queda: push inmediato por registro + respaldo periódico de 3 min
+   (ya existentes) + botón "Por subir" manual. El badge existente ya indica de
+   forma discreta que hay datos locales sin subir — sin alertas invasivas.
+
+   _tbPendingPushCount() queda disponible para diagnóstico en F12, pero NO se
+   llama en bucle. _frioDiagSync() en consola da un resumen rápido.
    ══════════════════════════════════════════════════════════════════════════ */
-/** Nº de registros locales (moldes+pesajes+generales) cuyo id no está en la última
- *  firma confirmada en la nube. Aproxima los pendientes por subir. */
 function _tbPendingPushCount(){
   try{
     if(typeof TBSync==='undefined'||!TBSync._lastSig||typeof TBSync._rowsForCloudPush!=='function')return 0;
@@ -13157,46 +13284,49 @@ function _tbPendingPushCount(){
   }catch(e){return 0;}
 }
 window._tbPendingPushCount=_tbPendingPushCount;
+window._frioDiagSync=function(){
+  const p=_tbPendingPushCount();
+  console.log('[Friosur] Pendientes locales sin subir:',p,'· Toca el badge "Por subir" para forzar el envío.');
+  return p;
+};
 
-let _tbAutoSyncBusy=false;
-setInterval(async()=>{
-  try{
-    if(_tbAutoSyncBusy)return;
-    if(!navigator.onLine||!_tbSb||!_tbUser)return;
-    if(_tbPendingPushCount()<=0)return;
-    _tbAutoSyncBusy=true;
-    if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)await TBSync.pushImmediate();
-  }catch(e){console.warn('[tb auto-sync 30s]',e);}
-  finally{_tbAutoSyncBusy=false;}
-},30000);
-
-/* Aviso de pendientes acumulados (≥100): banner fijo que pide sincronizar. */
-const TB_PENDING_WARN_THRESHOLD=100;
-function _tbRenderPendingWarn(){
-  try{
-    const pend=_tbPendingPushCount();
-    let banner=document.getElementById('tbPendingWarnBanner');
-    if(pend>=TB_PENDING_WARN_THRESHOLD){
-      if(!banner){
-        banner=document.createElement('div');
-        banner.id='tbPendingWarnBanner';
-        banner.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h,78px) + 12px);z-index:9998;max-width:92vw;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);padding:12px 14px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:600;cursor:pointer;animation:tbWarnPulse 2s ease-in-out infinite;';
-        banner.onclick=()=>{try{void tbFlushPendingCloudSync({silent:false});}catch(_){}};
-        document.body.appendChild(banner);
-        if(!document.getElementById('tbWarnPulseStyle')){
-          const st=document.createElement('style');st.id='tbWarnPulseStyle';
-          st.textContent='@keyframes tbWarnPulse{0%,100%{box-shadow:0 8px 28px rgba(0,0,0,.28);}50%{box-shadow:0 8px 28px rgba(220,38,38,.55);}}';
-          document.head.appendChild(st);
-        }
-      }
-      banner.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
-        +'<span><strong>'+pend+' registros sin subir.</strong> Toca aquí o el botón «Por subir» para sincronizar con la nube.</span>';
-    }else if(banner){banner.remove();}
-  }catch(e){}
-}
-setInterval(_tbRenderPendingWarn,15000);
-// Primera verificación tras cargar (da tiempo a que cargue sesión + firmas)
-setTimeout(_tbRenderPendingWarn,8000);
+/* ══════════════════════════════════════════════════════════════════════════
+   SEGURIDAD ANTE CIERRE INESPERADO AL PESAR
+   ══════════════════════════════════════════════════════════════════════════
+   La tablet corre horas sin recargar. Si Android mata la pestaña por memoria, o
+   el operador la manda a segundo plano, persistimos RT en localStorage en el
+   instante en que la página se oculta/descarga — así nunca se pierde un pesaje
+   recién hecho aunque el push a la nube no haya alcanzado a salir.
+   También capturamos errores no atrapados: en vez de dejar la app en estado roto
+   (que el usuario percibe como "se cerró"), guardamos lo local y avisamos suave.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function _frioCrashSafety(){
+  let _lastFlush=0;
+  function _flushLocal(){
+    const now=Date.now();
+    if(now-_lastFlush<400)return;        // anti-rebote: varias señales seguidas
+    _lastFlush=now;
+    try{if(typeof _rtSaveLocal==='function')_rtSaveLocal();}catch(_){}
+  }
+  // pagehide cubre el cierre/descarte real de la pestaña en móvil mejor que unload.
+  window.addEventListener('pagehide',_flushLocal,{capture:true});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden')_flushLocal();
+  });
+  // Último recurso: error JS no atrapado → persistir y avisar sin tumbar la app.
+  let _errToastAt=0;
+  function _onFatal(where,detail){
+    _flushLocal();
+    try{console.error('[Friosur '+where+']',detail);}catch(_){}
+    const now=Date.now();
+    if(now-_errToastAt>8000&&typeof showToast==='function'){
+      _errToastAt=now;
+      try{showToast('Se recuperó de un error interno. Tus datos quedaron guardados en la tablet.','info');}catch(_){}
+    }
+  }
+  window.addEventListener('error',(e)=>{_onFatal('error',(e&&(e.message||e.error))||e);});
+  window.addEventListener('unhandledrejection',(e)=>{_onFatal('promise',(e&&e.reason)||e);});
+})();
 </script>
 
 </body>
