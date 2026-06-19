@@ -12179,6 +12179,79 @@ if(!window._obxHooks){
   setInterval(()=>{void _obxDrain();},60000); // respaldo cada 60 s
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   AUTO-ACTUALIZADOR SUAVE  ·  aplica nuevos deploys sin interrumpir el pesaje
+   ══════════════════════════════════════════════════════════════════════════
+   GitHub Pages cambia el ETag de index.html en cada deploy. La tablet (que corre
+   horas sin recargar) hace un HEAD liviano cada 5 min (solo headers, NO baja los
+   ~740 KB) y compara el ETag con el del arranque. Si cambió → hay versión nueva.
+   Entonces recarga SOLA, pero únicamente en un momento SEGURO: sin kg/ficha a
+   medio escribir, sin modal/picker abierto y con la tablet inactiva ≥45 s; o
+   cuando la pestaña pasa a segundo plano. Antes de recargar persiste todo
+   (localStorage + vacía el outbox + push). Como los datos ya son durables
+   (RT en localStorage + outbox en IndexedDB), ni un flush interrumpido pierde
+   nada. Además muestra un aviso discreto con botón "Actualizar ahora". */
+const _updCfg={pollMs:5*60000,idleMs:45000};
+let _updBaseTag=null,_updPending=false,_updReloading=false,_updLastActivity=Date.now();
+['click','keydown','touchstart','input','pointerdown'].forEach(ev=>
+  document.addEventListener(ev,()=>{_updLastActivity=Date.now();},{passive:true,capture:true}));
+async function _updFetchTag(){
+  try{
+    const base=location.pathname.replace(/[^/]*$/,'');
+    const r=await fetch(base+'index.html?_uv='+Date.now(),{method:'HEAD',cache:'no-store'});
+    return r.headers.get('etag')||r.headers.get('last-modified')||null;
+  }catch(_){return null;}
+}
+async function _updCheck(){
+  if(_updReloading)return;
+  const tag=await _updFetchTag();
+  if(!tag)return;
+  if(_updBaseTag==null){_updBaseTag=tag;return;}     // línea base = versión del arranque
+  if(tag!==_updBaseTag){_updPending=true;_updShowBanner();}
+}
+function _updBusy(){
+  for(const id of ['pRegKg','pRegFicha','pRegGuia']){
+    const el=document.getElementById(id);
+    if(el&&String(el.value||'').trim())return true;          // pesaje a medio ingresar
+  }
+  if(document.querySelector('#modalOverlay.show'))return true; // modal abierto
+  if(document.querySelector('.fs-combo-panel:not([hidden])'))return true; // picker abierto
+  if(Date.now()-_updLastActivity<_updCfg.idleMs)return true;  // actividad reciente
+  return false;
+}
+async function _updApply(force){
+  if(_updReloading)return;
+  if(!force&&_updBusy())return;
+  _updReloading=true;
+  try{
+    if(typeof _rtSaveLocal==='function')_rtSaveLocal();                 // persistir RT (síncrono, crítico)
+    try{if(typeof _obxDrain==='function')await _obxDrain();}catch(_){}  // vaciar outbox (best-effort)
+    try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();}catch(_){}
+    try{if(typeof _tbWriteHeartbeat==='function')await _tbWriteHeartbeat();}catch(_){}
+  }finally{
+    setTimeout(()=>{try{location.reload();}catch(_){location.href=location.href;}},500);
+  }
+}
+window._updApplyNow=()=>_updApply(true);
+function _updShowBanner(){
+  if(document.getElementById('updBanner'))return;
+  const b=document.createElement('div');
+  b.id='updBanner';
+  b.setAttribute('style','position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:12px;background:#0f3d6e;color:#fff;padding:10px 14px;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.35);font-size:13px;max-width:92vw;');
+  b.innerHTML='<span>🔄 Nueva versión lista. Se aplicará sola al terminar el pesaje.</span>'+
+    '<button type="button" onclick="window._updApplyNow()" style="background:#fff;color:#0f3d6e;border:0;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer;">Actualizar ahora</button>'+
+    '<button type="button" onclick="this.parentNode.remove()" aria-label="Cerrar" style="background:transparent;color:#cbd5e1;border:0;font-size:18px;line-height:1;cursor:pointer;">×</button>';
+  document.body.appendChild(b);
+}
+if(!window._updHooks){
+  window._updHooks=true;
+  // Recargar cuando la tablet pasa a segundo plano (operario se alejó) si hay update.
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&_updPending)_updApply(false);});
+  setInterval(_updCheck,_updCfg.pollMs);                 // detectar nuevo deploy
+  setInterval(()=>{if(_updPending)_updApply(false);},15000); // aplicar en cuanto sea seguro
+  setTimeout(_updCheck,8000);                            // línea base ~8 s tras cargar
+}
+
 /** Opciones Auth: persistencia en localStorage; `storageKey` distinto al de admin para no compartir JWT entre páginas (evita signOut cruzado y parpadeo). */
 function _tbSbAuthOptions(){
   try{
