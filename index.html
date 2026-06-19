@@ -4788,12 +4788,51 @@ function _tbMaybeStoreArmadoBackupOnRtSave(){
   _armadoBackupRtThrottle=now;
   _tbTryStoreArmadoEmergencyBackup();
 }
+/** Tope de pesajes que la tablet guarda en localStorage. El historial completo vive
+   en la nube (admin); la tablet solo necesita lo reciente para operar. Sin esto, el
+   blob RT crece sin límite y tarde o temprano llena el almacenamiento (~5 MB) y deja
+   de poder guardar. Los pesajes podados NO se pierden: están en la nube, y los que
+   aún no subieron viven en el outbox (IndexedDB, cuota mucho mayor). */
+const TB_PESAJES_LOCAL_CAP=4000;
+function _rtPruneLocalPesajes(cap){
+  cap=cap||TB_PESAJES_LOCAL_CAP;
+  try{
+    if(!Array.isArray(RT.pesajes)||RT.pesajes.length<=cap)return 0;
+    const before=RT.pesajes.length;
+    // Conserva los MÁS RECIENTES por id (ids crecientes en el tiempo).
+    RT.pesajes=RT.pesajes.slice().sort((a,b)=>((b&&b.id)||0)-((a&&a.id)||0)).slice(0,cap);
+    const removed=before-RT.pesajes.length;
+    if(removed>0&&typeof TBSync!=='undefined'&&TBSync._lastSig&&typeof TBSync._rowsForCloudPush==='function'&&typeof TBSync._sigRows==='function'){
+      // Re-alinea SOLO la firma de pesajes al set podado → el delta-push NO intentará
+      // borrar de la nube los pesajes podados. No toca moldes/generales/armado. Seguro:
+      // los pesajes sin subir están en el outbox y suben por su cuenta.
+      try{
+        const pack=TBSync._rowsForCloudPush();
+        TBSync._lastSig.pesajes=TBSync._sigRows(pack.pesajesRows,'id');
+        if(typeof _tbPersistLastPushSigsToStorage==='function')_tbPersistLastPushSigsToStorage();
+      }catch(_){}
+    }
+    if(removed>0)console.log('[Friosur] Poda local de pesajes:',removed,'quitados (en la nube). Quedan',RT.pesajes.length);
+    return removed;
+  }catch(e){console.warn('[prune pesajes]',e);return 0;}
+}
+window._rtPruneLocalPesajes=_rtPruneLocalPesajes;
 /** Escritura REAL e inmediata de RT a localStorage. */
 function _rtFlushLocalNow(){
   _rtSaveDirty=false;_rtSaveLastWrite=Date.now();
   if(_rtSaveTimer){clearTimeout(_rtSaveTimer);_rtSaveTimer=null;}
   try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}
   catch(e){
+    // Almacenamiento lleno: poda agresiva de pesajes viejos (a salvo en nube/outbox) y reintenta UNA vez.
+    if(e&&e.name==='QuotaExceededError'){
+      const quitados=_rtPruneLocalPesajes(2500);
+      if(quitados>0){
+        try{localStorage.setItem(RT_KEY,JSON.stringify(RT));
+          if(typeof showToast==='function')showToast('Memoria de la tablet liberada ('+quitados+' pesajes antiguos archivados en la nube). Todo sigue guardado.','info');
+          return;
+        }catch(e2){/* sigue sin entrar */}
+      }
+    }
     console.warn('[rtSaveLocal]',e);
     if(typeof showToast==='function')showToast('No se pudo guardar en la tablet (almacenamiento lleno). Sincroniza con la nube o limpia datos antiguos.','error');
   }
@@ -5015,6 +5054,9 @@ async function tbManualPullMoldesPesajes(opts){
       RT[t]=_tbMergeRtByIdForPull(localBefore,allData,mapFor(t),{lastPushedSig:lastSig});
     }
     _rtPurgeDemoFromRt();
+    // El pull re-trae TODO el historial de la nube; poda los pesajes a lo reciente
+    // para no volver a llenar el almacenamiento de la tablet (la nube conserva todo).
+    _rtPruneLocalPesajes();
     rtSave();
     if(typeof initRuntime==='function')initRuntime();
     try{if(typeof _tbPullEqRuntimeFromCloud==='function')await _tbPullEqRuntimeFromCloud({silent});}catch(e){console.warn('[tb pull eq_runtime]',e);}
@@ -13434,6 +13476,11 @@ async function tbApplySession(session){
   try{_tbStartHeartbeat();}catch(e){console.warn('[tb heartbeat start]',e);}
   try{void _obxDrain();}catch(e){console.warn('[outbox drain start]',e);} // vaciar pesajes pendientes tras login
   try{_tbLoadLastPushSigsFromStorage();}catch(_){}
+  // Poda el historial de pesajes que quedó en la tablet AQUÍ (no antes): ya está
+  // TBSync con su firma cargada, así _rtPruneLocalPesajes re-alinea la firma de
+  // pesajes al set podado → el push NO interpreta los podados como borrados de la
+  // nube. Libera memoria si la tablet venía llena. Nube + outbox conservan todo.
+  try{if(_rtPruneLocalPesajes()>0)_rtFlushLocalNow();}catch(e){console.warn('[prune tras sig]',e);}
   try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
 }
 async function tbDoLogin(){
