@@ -12222,13 +12222,28 @@ const Outbox=(()=>{
       r.onerror=()=>{_dead=true;rej(r.error);};
     });
   }
-  const store=(mode)=>open().then(db=>db.transaction(STORE,mode).objectStore(STORE));
-  const req=(q)=>new Promise((res,rej)=>{q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+  // Crea txn + request en el MISMO tick y resuelve en oncomplete (no en onsuccess):
+  // evita que un request quede colgado bajo muchas operaciones seguidas (pesaje
+  // rápido). Cada op trae su propio timeout de seguridad para nunca colgar el worker.
+  function _op(mode,fn){
+    return open().then(db=>new Promise((res,rej)=>{
+      let out,settled=false;
+      const guard=setTimeout(()=>{if(!settled){settled=true;rej(new Error('idb timeout'));}},8000);
+      let tx;
+      try{tx=db.transaction(STORE,mode);}catch(e){clearTimeout(guard);return rej(e);}
+      const st=tx.objectStore(STORE);
+      let q;try{q=fn(st);}catch(e){clearTimeout(guard);return rej(e);}
+      if(q)q.onsuccess=()=>{out=q.result;};
+      tx.oncomplete=()=>{if(!settled){settled=true;clearTimeout(guard);res(out);}};
+      tx.onerror=()=>{if(!settled){settled=true;clearTimeout(guard);rej(tx.error);}};
+      tx.onabort=()=>{if(!settled){settled=true;clearTimeout(guard);rej(tx.error||new Error('abort'));}};
+    }));
+  }
   return{
-    async put(row){const s=await store('readwrite');return req(s.put(row));},
-    async all(){const s=await store('readonly');return (await req(s.getAll()))||[];},
-    async del(id){const s=await store('readwrite');return req(s.delete(id));},
-    async count(){try{const s=await store('readonly');return (await req(s.count()))|0;}catch(_){return 0;}},
+    put(row){return _op('readwrite',st=>st.put(row));},
+    all(){return _op('readonly',st=>st.getAll()).then(r=>r||[]);},
+    del(id){return _op('readwrite',st=>st.delete(id));},
+    count(){return _op('readonly',st=>st.count()).then(r=>r|0).catch(()=>0);},
   };
 })();
 /** Mapea UNA fila de pesaje a formato nube — O(1), sin recorrer todo RT.pesajes.
@@ -12250,38 +12265,73 @@ function _tbMapPesajeRowForCloud(r){
     fecha:r.fecha||todayLocalYmd()
   };
 }
-/** Subida liviana de un pesaje: encola (durable) y sube directo esa única fila.
-   No usa _rowsForCloudPush → el costo NO crece con el total de registros. */
-async function _tbUploadPesajeRow(row){
+const _obxSkip=new Set(); // filas con error de DATOS persistente (no reintentar)
+function _obxIsDataError(err){
+  // Error que NO se arregla reintentando (constraint, columna, etc.) vs red.
+  if(!err||err._net)return false;
+  if(/^\d/.test(String(err.code||'')))return true;
+  return /violat|constraint|column|invalid input|duplicate key|not-null/.test(String(err.message||'').toLowerCase());
+}
+function _obxUpsertTimeout(row,ms){
+  // Sube una fila con timeout duro: una conexión colgada NUNCA bloquea.
+  return new Promise(resolve=>{
+    let done=false;
+    const t=setTimeout(()=>{if(!done){done=true;resolve({error:{message:'timeout',_net:true}});}},ms);
+    try{
+      _tbSb.from('pesajes').upsert([row],{onConflict:'id'}).then(r=>{
+        if(!done){done=true;clearTimeout(t);resolve(r||{});}
+      },e=>{if(!done){done=true;clearTimeout(t);resolve({error:{message:String((e&&e.message)||e),_net:true}});}});
+    }catch(e){if(!done){done=true;clearTimeout(t);resolve({error:{message:String(e),_net:true}});}}
+  });
+}
+/* Sube UNA fila ya encolada y, si la nube confirma, la saca del outbox. */
+async function _obxUploadOne(row){
+  if(!row||!_tbSb||!_tbUser)return false;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return false;
+  if(_obxSkip.has(String(row.id)))return false;
+  const{error}=await _obxUpsertTimeout(row,12000);
+  if(!error){try{await Outbox.del(row.id);}catch(_){}return true;}
+  if(_obxIsDataError(error))_obxSkip.add(String(row.id)); // dato malo: no reintentar
+  return false; // red: queda en outbox; lo levanta el drain de respaldo
+}
+/** Registrar un pesaje = encolar (durable) + subir en una CADENA serializada
+   (uno a la vez). Al pesar rápido NO se disparan N requests concurrentes que se
+   pisan con red floja: cada subida espera a la anterior. Si falla, queda en el
+   outbox y el drain de respaldo (online/foco/15 s) lo reintenta. */
+let _uploadChain=Promise.resolve();
+function _tbUploadPesajeRow(row){
   if(!row)return;
-  try{await Outbox.put(row);}catch(_){}                       // durabilidad primero
-  if(!_tbSb||!_tbUser||(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())){
-    try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
-    return;                                                   // queda en outbox; sube al reconectar
-  }
-  try{
-    const{error}=await _tbSb.from('pesajes').upsert([row],{onConflict:'id'});
-    if(!error){await Outbox.del(row.id);if(typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();}
-    // si hay error: permanece en outbox; los drainers reintentan en silencio
-  }catch(_){/* permanece en outbox */}
+  // SÍNCRONO: encadena sin await previo para que la asignación de la cadena sea
+  // atómica (si no, dos pesajes leen la misma cadena y corren en paralelo). El
+  // put va DENTRO de la cadena → subidas estrictamente de a una, en orden.
+  _uploadChain=_uploadChain.then(async()=>{
+    try{await Outbox.put(row);}catch(_){}
+    const ok=await _obxUploadOne(row);
+    if(ok&&typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();
+  }).catch(()=>{});
 }
 window._tbUploadPesajeRow=_tbUploadPesajeRow;
 async function _obxAck(id){try{await Outbox.del(id);}catch(_){}}
 window._obxAck=_obxAck;
+/* ── Drain de respaldo: una pasada secuencial sobre lo que quedó en el outbox
+   (reintenta tras fallos de red). Lo disparan online / volver a foco / cada 15 s.
+   Una pasada por invocación (sin while ni recursión): simple y sin colgar. */
 let _obxDraining=false;
 async function _obxDrain(){
   if(_obxDraining)return;
   if(!_tbSb||!_tbUser)return;
   if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
   _obxDraining=true;
+  let subidos=0;
   try{
-    const rows=(await Outbox.all()).sort((a,b)=>String(a.id).localeCompare(String(b.id))); // orden cronológico (id estable)
-    let subidos=0;
+    const rows=(await Outbox.all())
+      .filter(r=>r&&!_obxSkip.has(String(r.id)))
+      .sort((a,b)=>(((a&&a.id)||0)-((b&&b.id)||0)));
     for(const row of rows){
-      const {error}=await _tbSb.from('pesajes').upsert([row],{onConflict:'id'});
-      if(error){console.warn('[outbox drain] queda para reintento:',error.message);break;} // corta y conserva el resto
-      await Outbox.del(row.id);                                                              // solo borra tras ACK
-      subidos++;
+      const{error}=await _obxUpsertTimeout(row,12000);
+      if(!error){await Outbox.del(row.id);subidos++;continue;}
+      if(_obxIsDataError(error)){_obxSkip.add(String(row.id));continue;}
+      break; // red caída: corta; reintenta en el próximo disparo
     }
     if(subidos&&typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();
   }catch(e){console.warn('[outbox drain]',e&&e.message||e);}
@@ -12293,7 +12343,7 @@ if(!window._obxHooks){
   window._obxHooks=true;
   window.addEventListener('online',()=>{void _obxDrain();});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void _obxDrain();});
-  setInterval(()=>{void _obxDrain();},60000); // respaldo cada 60 s
+  setInterval(()=>{void _obxDrain();},15000); // respaldo cada 15 s
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
