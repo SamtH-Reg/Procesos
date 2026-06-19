@@ -8432,10 +8432,16 @@ function regPesaje(){
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
   _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg · '+rec.fecha);
-  void _tbCloudUpsertOperativoRow('pesajes',rec.id).then(cloud=>{
-    if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush();
-    else if(cloud&&cloud.ok===false&&typeof showToast==='function')showToast('Guardado en tablet; no se subió a Supabase: '+String(cloud.err||'error'),'error');
-  });
+  // Durabilidad: encolar en el outbox (IndexedDB) ANTES de intentar subir; así el
+  // pesaje sobrevive aunque el push inmediato falle o la pestaña muera. Tras el
+  // ACK confirmado se borra del outbox; si no, los drainers lo reintentan.
+  void _obxEnqueuePesaje(rec.id).then(()=>
+    _tbCloudUpsertOperativoRow('pesajes',rec.id).then(cloud=>{
+      if(cloud&&cloud.ok===true){void _obxAck(rec.id);}                                  // confirmado en nube → fuera del outbox
+      else if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush(); // queda en outbox; sube al reconectar
+      // ok===false → permanece en outbox; los drainers (online/foco/60s) reintentan en silencio
+    })
+  );
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;
 window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
@@ -12057,8 +12063,9 @@ function _tbNetInfo(){
   }catch(_){return null;}
 }
 let _tbHbLastOkAt=null,_tbHbInFlight=false,_tbHbTimer=null;
-function _tbHeartbeatPayload(){
-  let pend=0;try{pend=(typeof _tbPendingPushCount==='function')?_tbPendingPushCount():0;}catch(_){}
+function _tbHeartbeatPayload(pendOverride){
+  let pend=pendOverride;
+  if(pend==null){try{pend=(typeof _tbPendingPushCount==='function')?_tbPendingPushCount():0;}catch(_){pend=0;}}
   return{
     dev:_tbDeviceId(),
     nombre:(_tbUser&&_tbUser.nombre)||'',
@@ -12078,7 +12085,9 @@ async function _tbWriteHeartbeat(){
   if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return; // sin red: no malgastar
   _tbHbInFlight=true;
   try{
-    const value=_tbHeartbeatPayload();
+    // 'pend' autoritativo = pesajes sin confirmar en el outbox durable (real, no estimado).
+    let pend=null;try{pend=await Outbox.count();}catch(_){pend=null;}
+    const value=_tbHeartbeatPayload(pend);
     const{error}=await _tbSb.from('app_kv').upsert({key:'tb_hb:'+_tbDeviceId(),value},{onConflict:'key'});
     if(!error)_tbHbLastOkAt=new Date().toISOString();
     else console.warn('[tb heartbeat]',error.message);
@@ -12092,6 +12101,83 @@ function _tbStartHeartbeat(){
   _tbHbTimer=setInterval(()=>{void _tbWriteHeartbeat();},90000); // cada 90 s (liviano)
 }
 window._tbStartHeartbeat=_tbStartHeartbeat;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OUTBOX DURABLE DE PESAJES (IndexedDB)  ·  red de seguridad anti-pérdida
+   ══════════════════════════════════════════════════════════════════════════
+   Convive con el push inmediato y TBSync (no los reemplaza). Cada pesaje se
+   encola en IndexedDB con su fila ya en formato nube (PK estable = id). El push
+   inmediato sube y, al confirmar, hace ACK (borra del outbox). Si falla por red,
+   los drainers (online / volver a foco / cada 60 s) reintentan en orden y de
+   forma idempotente (upsert onConflict:id → reenviar = no-op, sin duplicados).
+   Sobrevive recargas y cierres del navegador, e independiente del blob RT: si
+   localStorage se corrompe o la pestaña muere, el pesaje sigue aquí hasta subir.
+   Degradación elegante: si IndexedDB no está disponible, todo lo demás sigue. */
+const Outbox=(()=>{
+  const DB='friosur_outbox',STORE='pesajes',VER=1;
+  let _db=null,_dead=false;
+  function open(){
+    if(_dead)return Promise.reject(new Error('idb no disponible'));
+    if(_db)return Promise.resolve(_db);
+    return new Promise((res,rej)=>{
+      let r;try{r=indexedDB.open(DB,VER);}catch(e){_dead=true;return rej(e);}
+      r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'id'});};
+      r.onsuccess=()=>{_db=r.result;res(_db);};
+      r.onerror=()=>{_dead=true;rej(r.error);};
+    });
+  }
+  const store=(mode)=>open().then(db=>db.transaction(STORE,mode).objectStore(STORE));
+  const req=(q)=>new Promise((res,rej)=>{q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+  return{
+    async put(row){const s=await store('readwrite');return req(s.put(row));},
+    async all(){const s=await store('readonly');return (await req(s.getAll()))||[];},
+    async del(id){const s=await store('readwrite');return req(s.delete(id));},
+    async count(){try{const s=await store('readonly');return (await req(s.count()))|0;}catch(_){return 0;}},
+  };
+})();
+/** Fila pesaje en formato nube (mismo lookup que _tbCloudUpsertOperativoRow). */
+function _tbCloudPesajeRow(id){
+  try{
+    if(!TBSync||typeof TBSync._rowsForCloudPush!=='function')return null;
+    const pack=TBSync._rowsForCloudPush();
+    return (pack.pesajesRows||[]).find(x=>String(x.id)===String(id))||null;
+  }catch(_){return null;}
+}
+async function _obxEnqueuePesaje(id){
+  try{
+    const row=_tbCloudPesajeRow(id);
+    if(row)await Outbox.put(row);
+  }catch(e){console.warn('[outbox enqueue]',e&&e.message||e);}
+}
+async function _obxAck(id){try{await Outbox.del(id);}catch(_){}}
+window._obxAck=_obxAck;
+let _obxDraining=false;
+async function _obxDrain(){
+  if(_obxDraining)return;
+  if(!_tbSb||!_tbUser)return;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
+  _obxDraining=true;
+  try{
+    const rows=(await Outbox.all()).sort((a,b)=>String(a.id).localeCompare(String(b.id))); // orden cronológico (id estable)
+    let subidos=0;
+    for(const row of rows){
+      const {error}=await _tbSb.from('pesajes').upsert([row],{onConflict:'id'});
+      if(error){console.warn('[outbox drain] queda para reintento:',error.message);break;} // corta y conserva el resto
+      await Outbox.del(row.id);                                                              // solo borra tras ACK
+      subidos++;
+    }
+    if(subidos&&typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();
+  }catch(e){console.warn('[outbox drain]',e&&e.message||e);}
+  finally{_obxDraining=false;}
+}
+window._obxDrain=_obxDrain;
+window._frioOutboxCount=async()=>{const n=await Outbox.count();console.log('[Friosur] Pesajes en outbox (sin confirmar en nube):',n);return n;};
+if(!window._obxHooks){
+  window._obxHooks=true;
+  window.addEventListener('online',()=>{void _obxDrain();});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void _obxDrain();});
+  setInterval(()=>{void _obxDrain();},60000); // respaldo cada 60 s
+}
 
 /** Opciones Auth: persistencia en localStorage; `storageKey` distinto al de admin para no compartir JWT entre páginas (evita signOut cruzado y parpadeo). */
 function _tbSbAuthOptions(){
@@ -13198,6 +13284,7 @@ async function tbApplySession(session){
   tbUpdateUserBadge();
   try{void tbStartTabletPresence();}catch(e){console.warn('[tb presence]',e);}
   try{_tbStartHeartbeat();}catch(e){console.warn('[tb heartbeat start]',e);}
+  try{void _obxDrain();}catch(e){console.warn('[outbox drain start]',e);} // vaciar pesajes pendientes tras login
   try{_tbLoadLastPushSigsFromStorage();}catch(_){}
   try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
 }
