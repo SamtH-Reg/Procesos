@@ -4788,12 +4788,29 @@ function _tbMaybeStoreArmadoBackupOnRtSave(){
   _armadoBackupRtThrottle=now;
   _tbTryStoreArmadoEmergencyBackup();
 }
-function _rtSaveLocal(){
+/** Escritura REAL e inmediata de RT a localStorage. */
+function _rtFlushLocalNow(){
+  _rtSaveDirty=false;_rtSaveLastWrite=Date.now();
+  if(_rtSaveTimer){clearTimeout(_rtSaveTimer);_rtSaveTimer=null;}
   try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}
   catch(e){
     console.warn('[rtSaveLocal]',e);
     if(typeof showToast==='function')showToast('No se pudo guardar en la tablet (almacenamiento lleno). Sincroniza con la nube o limpia datos antiguos.','error');
   }
+}
+window._rtFlushLocalNow=_rtFlushLocalNow;
+let _rtSaveTimer=null,_rtSaveLastWrite=0,_rtSaveDirty=false;
+/** Guarda RT en localStorage con throttle: la primera vez escribe ya; pesajes
+   seguidos se coalescen en una escritura final (~1.2 s). Evita serializar miles
+   de registros en CADA pesaje (con 6787 filas eso bloqueaba el hilo y atrasaba
+   los envíos). Seguro: los pesajes ya son durables en el outbox (IndexedDB), y
+   pagehide/segundo plano/auto-update fuerzan _rtFlushLocalNow(). */
+function _rtSaveLocal(){
+  const now=Date.now();
+  _rtSaveDirty=true;
+  if(now-_rtSaveLastWrite>=1200){_rtFlushLocalNow();return;}
+  if(_rtSaveTimer)return;
+  _rtSaveTimer=setTimeout(()=>{_rtSaveTimer=null;if(_rtSaveDirty)_rtFlushLocalNow();},1200-(now-_rtSaveLastWrite));
 }
 function rtSave(opts){
   _rtSaveLocal();
@@ -8432,16 +8449,11 @@ function regPesaje(){
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
   _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg · '+rec.fecha);
-  // Durabilidad: encolar en el outbox (IndexedDB) ANTES de intentar subir; así el
-  // pesaje sobrevive aunque el push inmediato falle o la pestaña muera. Tras el
-  // ACK confirmado se borra del outbox; si no, los drainers lo reintentan.
-  void _obxEnqueuePesaje(rec.id).then(()=>
-    _tbCloudUpsertOperativoRow('pesajes',rec.id).then(cloud=>{
-      if(cloud&&cloud.ok===true){void _obxAck(rec.id);}                                  // confirmado en nube → fuera del outbox
-      else if(cloud&&cloud.skipped&&(cloud.reason==='no_session'||cloud.reason==='offline'))TBSync.schedulePush(); // queda en outbox; sube al reconectar
-      // ok===false → permanece en outbox; los drainers (online/foco/60s) reintentan en silencio
-    })
-  );
+  // Subida LIVIANA (O(1)): mapea solo esta fila, la encola en el outbox durable y
+  // la sube directo. No recorre las miles de filas de RT.pesajes → registrar no se
+  // ralentiza al crecer el historial. Si falla/offline, queda en el outbox y los
+  // drainers (online/foco/60s) la reintentan idempotente (upsert onConflict:id).
+  void _tbUploadPesajeRow(_tbMapPesajeRowForCloud(rec));
 }
 window.regPesaje=regPesaje;window.onPRegTurnoChange=onPRegTurnoChange;window.onPRegTrabChange=onPRegTrabChange;
 window.onPRegFechaArmadoChange=onPRegFechaArmadoChange;
@@ -12135,20 +12147,41 @@ const Outbox=(()=>{
     async count(){try{const s=await store('readonly');return (await req(s.count()))|0;}catch(_){return 0;}},
   };
 })();
-/** Fila pesaje en formato nube (mismo lookup que _tbCloudUpsertOperativoRow). */
-function _tbCloudPesajeRow(id){
-  try{
-    if(!TBSync||typeof TBSync._rowsForCloudPush!=='function')return null;
-    const pack=TBSync._rowsForCloudPush();
-    return (pack.pesajesRows||[]).find(x=>String(x.id)===String(id))||null;
-  }catch(_){return null;}
+/** Mapea UNA fila de pesaje a formato nube — O(1), sin recorrer todo RT.pesajes.
+   Mismo shape/normalización que TBSync._rowsForCloudPush para los pesajes, pero
+   sobre un solo registro: clave para que registrar no se vuelva lento al crecer
+   el historial (con 6787 filas, mapear todas en cada pesaje saturaba la tablet). */
+function _tbMapPesajeRowForCloud(r){
+  if(!r)return null;
+  const _esp=v=>{const s=String(v==null?'':v).trim();return s?s.toUpperCase():null;};
+  const _tx=v=>{const s=String(v==null?'':v).trim();return s||null;};
+  const _ln=v=>{const s=String(v==null?'':v).trim().toUpperCase();return s||null;};
+  const tid=r.trabId!=null?r.trabId:r.trab_id;
+  let validTid=null;
+  try{validTid=(DB.data.trabajadores||[]).some(t=>t.id===tid)?tid:null;}catch(_){validTid=tid;}
+  return{
+    id:r.id,hora:r.hora,turno:r.turno||null,linea:_ln(r.linea),
+    trab_id:validTid,codigo:r.codigo||null,nombre:r.nombre||null,ficha:r.ficha||null,
+    especie:_esp(r.especie),tipo:_tx(r.tipo),kg:r.kg!=null?r.kg:null,guia:_tx(r.guia),
+    fecha:r.fecha||todayLocalYmd()
+  };
 }
-async function _obxEnqueuePesaje(id){
+/** Subida liviana de un pesaje: encola (durable) y sube directo esa única fila.
+   No usa _rowsForCloudPush → el costo NO crece con el total de registros. */
+async function _tbUploadPesajeRow(row){
+  if(!row)return;
+  try{await Outbox.put(row);}catch(_){}                       // durabilidad primero
+  if(!_tbSb||!_tbUser||(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())){
+    try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+    return;                                                   // queda en outbox; sube al reconectar
+  }
   try{
-    const row=_tbCloudPesajeRow(id);
-    if(row)await Outbox.put(row);
-  }catch(e){console.warn('[outbox enqueue]',e&&e.message||e);}
+    const{error}=await _tbSb.from('pesajes').upsert([row],{onConflict:'id'});
+    if(!error){await Outbox.del(row.id);if(typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();}
+    // si hay error: permanece en outbox; los drainers reintentan en silencio
+  }catch(_){/* permanece en outbox */}
 }
+window._tbUploadPesajeRow=_tbUploadPesajeRow;
 async function _obxAck(id){try{await Outbox.del(id);}catch(_){}}
 window._obxAck=_obxAck;
 let _obxDraining=false;
@@ -12224,7 +12257,7 @@ async function _updApply(force){
   if(!force&&_updBusy())return;
   _updReloading=true;
   try{
-    if(typeof _rtSaveLocal==='function')_rtSaveLocal();                 // persistir RT (síncrono, crítico)
+    if(typeof _rtFlushLocalNow==='function')_rtFlushLocalNow();         // persistir RT YA (flush inmediato, no throttled)
     try{if(typeof _obxDrain==='function')await _obxDrain();}catch(_){}  // vaciar outbox (best-effort)
     try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();}catch(_){}
     try{if(typeof _tbWriteHeartbeat==='function')await _tbWriteHeartbeat();}catch(_){}
@@ -13466,7 +13499,8 @@ window._frioDiagSync=function(){
     const now=Date.now();
     if(now-_lastFlush<400)return;        // anti-rebote: varias señales seguidas
     _lastFlush=now;
-    try{if(typeof _rtSaveLocal==='function')_rtSaveLocal();}catch(_){}
+    // Flush INMEDIATO (no el throttled): la pestaña se va, hay que persistir ya.
+    try{if(typeof _rtFlushLocalNow==='function')_rtFlushLocalNow();else if(typeof _rtSaveLocal==='function')_rtSaveLocal();}catch(_){}
   }
   // pagehide cubre el cierre/descarte real de la pestaña en móvil mejor que unload.
   window.addEventListener('pagehide',_flushLocal,{capture:true});
