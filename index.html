@@ -3624,7 +3624,7 @@ function setPesTab(el,id){
   }
   try{if(typeof closeIosPicker==='function')closeIosPicker();}catch(_){}
   if(id==='pResumen'&&typeof renderPResumen==='function')renderPResumen();
-  if(id==='pConsol'&&typeof renderPConsol==='function')renderPConsol();
+  if(id==='pConsol'&&typeof renderPConsol==='function'){window._pConsolForcePin=true;renderPConsol();}
   if(id==='pArmado'&&typeof renderPArmado==='function')renderPArmado();
   if(id==='pVer'&&typeof renderPesajeTable==='function')renderPesajeTable();
   if(id==='pRegistrar'){
@@ -8746,12 +8746,17 @@ function renderPResumen(){
     const tipoLab=String(r&&r.tipo||'').trim()||'—';
     const espLab=r.especie||'—';
     const key=(r.trabId||r.nombre)+'||'+espLab+'||'+tipoLab;
-    if(!map[key])map[key]={nombre:r.nombre||'—',tipo:tipoLab,especie:espLab,byHour:{},tot:0};
+    if(!map[key])map[key]={nombre:r.nombre||'—',ficha:r.ficha||'',tipo:tipoLab,especie:espLab,byHour:{},tot:0};
+    else if(!map[key].ficha&&r.ficha)map[key].ficha=r.ficha;
     const h=(r.hora||'').match(/^(\d{1,2}):/);const hh=h?parseInt(h[1]):null;
     if(hh!=null){map[key].byHour[hh]=(map[key].byHour[hh]||0)+(r.kg||0);}
     map[key].tot+=(r.kg||0);
   });
+  // Orden por N° de ficha ascendente (1, 2, 3…); ficha vacía/no numérica al final.
+  const _fichaNum=v=>{const n=parseInt(String(v==null?'':v).replace(/[^\d]/g,''),10);return isNaN(n)?Number.POSITIVE_INFINITY:n;};
   const rows=Object.values(map).sort((a,b)=>{
+    const fa=_fichaNum(a.ficha),fb=_fichaNum(b.ficha);
+    if(fa!==fb)return fa-fb;
     const c1=String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'});
     if(c1)return c1;
     const c2=String(a.especie||'').localeCompare(String(b.especie||''),'es',{sensitivity:'base'});
@@ -8762,10 +8767,11 @@ function renderPResumen(){
   const totCol={};let totGrand=0;
   rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byHour[h]||0);});totGrand+=r.tot;});
   const filtroSub=_resumenFiltroTurnoSub(filtro);
-  const hdr='<thead><tr><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th><th style="min-width:100px;">TIPO</th>'+
+  const hdr='<thead><tr><th class="num" style="min-width:60px;">FICHA</th><th style="min-width:180px;">NOMBRE</th><th style="min-width:140px;">ESPECIE</th><th style="min-width:100px;">TIPO</th>'+
     hours.map(h=>`<th class="num" style="min-width:72px;">${esc(_fmtHoraResumenTh(h))}</th>`).join('')+
     '<th class="num" style="min-width:100px;">SUMA TOTAL</th></tr></thead>';
   const body='<tbody>'+rows.map(r=>`<tr>
+    <td class="num mono" style="font-weight:700;color:var(--safety-red,#dc2626);">${esc(r.ficha||'—')}</td>
     <td style="font-weight:700;">${esc(r.nombre)}</td>
     <td style="color:var(--text-2);">${esc(r.especie)}</td>
     <td style="color:var(--text-2);">${esc(r.tipo)}</td>
@@ -8774,7 +8780,7 @@ function renderPResumen(){
   </tr>`).join('')+'</tbody>';
   const foot=`<tfoot>
     <tr>
-      <td colspan="3">Total <span style="font-weight:600;">${esc(hoyStr)}</span> · ${esc(filtroSub)}${lineaVal?' · '+esc(lineaVal):''}</td>
+      <td colspan="4">Total <span style="font-weight:600;">${esc(hoyStr)}</span> · ${esc(filtroSub)}${lineaVal?' · '+esc(lineaVal):''}</td>
       ${hours.map(h=>`<td class="num">${fmt(totCol[h])}</td>`).join('')}
       <td class="num" style="font-weight:700;">${fmt(totGrand)}</td>
     </tr>
@@ -8787,16 +8793,47 @@ function renderPResumen(){
 }
 
 /* ═══ PESAJE — Consolidado por Especie (pivot) ═════════════════════ */
+/* Fecha de inicio FIJADA: el usuario "fija" una fecha+turno de inicio y el
+   Consolidado siempre arranca el filtro ahí (persistente en localStorage), sin
+   tener que re-seleccionarla. El "Hasta" sigue en el ciclo más reciente. */
+const _PCONSOL_PIN_KEY='friosur_pconsol_pin';
+function _pConsolReadPin(){
+  try{const j=JSON.parse(localStorage.getItem(_PCONSOL_PIN_KEY)||'null');if(j&&j.fecha)return{fecha:String(j.fecha),turno:j.turno==='noche'?'noche':'dia'};}catch(_){}
+  return null;
+}
+function _pConsolPinActual(){
+  const f=(document.getElementById('pConsolDesdeFecha')||{}).value;
+  const t=(document.getElementById('pConsolDesdeTurno')||{}).value;
+  if(!f){if(typeof showToast==='function')showToast('Elegí una fecha de inicio primero','warn');return;}
+  try{localStorage.setItem(_PCONSOL_PIN_KEY,JSON.stringify({fecha:f,turno:t==='noche'?'noche':'dia'}));}catch(_){}
+  if(typeof showToast==='function')showToast('Inicio fijado: '+_cycleDateLabel(f)+' '+(t==='noche'?'Noche':'Día'),'success');
+  window._pConsolForcePin=true;renderPConsol();
+}
+function _pConsolQuitarPin(){
+  try{localStorage.removeItem(_PCONSOL_PIN_KEY);}catch(_){}
+  if(typeof showToast==='function')showToast('Inicio fijo quitado','info');
+  window._pConsolForcePin=false;renderPConsol();
+}
+window._pConsolPinActual=_pConsolPinActual;window._pConsolQuitarPin=_pConsolQuitarPin;
 function renderPConsol(){
   const wrap=document.getElementById('pConsolWrap');if(!wrap)return;
   const sub=document.getElementById('pConsolSub');
   const allPes=RT.pesajes||[];
   if(!allPes.length){wrap.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes registrados aún.</div>';if(sub)sub.textContent='0 pesajes';return;}
   const availableDates=_collectCycleDates(allPes,_recordCycleForPesaje);
-  const fd=availableDates[0]||nowDate(),td=availableDates[availableDates.length-1]||fd;
-  const fallback={fromDate:fd,fromTurno:'dia',toDate:td,toTurno:'noche',idxFrom:_cycleIndex(fd,'dia'),idxTo:_cycleIndex(td,'noche')};
-  const r=_consolKeepRangeFromDom('pConsol',fallback);
-  const toolbar=_consolCycleToolbar({prefix:'pConsol',onChange:'renderPConsol',availableDates,fromDate:r.fromDate,fromTurno:r.fromTurno,toDate:r.toDate,toTurno:r.toTurno});
+  const _pin=_pConsolReadPin();
+  const _pinValid=_pin&&availableDates.includes(_pin.fecha);
+  const td=availableDates[availableDates.length-1]||nowDate();
+  const fd=_pinValid?_pin.fecha:(availableDates[0]||nowDate());
+  const ft=_pinValid?_pin.turno:'dia';
+  const fallback={fromDate:fd,fromTurno:ft,toDate:td,toTurno:'noche',idxFrom:_cycleIndex(fd,ft),idxTo:_cycleIndex(td,'noche')};
+  // Al abrir la pestaña (o tras fijar) forzamos el inicio fijado, ignorando selects previos.
+  let r;
+  if(window._pConsolForcePin&&_pinValid){r={...fallback};window._pConsolForcePin=false;}
+  else r=_consolKeepRangeFromDom('pConsol',fallback);
+  const _pinHtml='<button type="button" class="btn sm ghost" onclick="_pConsolPinActual()" title="Fijar esta fecha+turno de inicio como predeterminada">📌 Fijar inicio</button>'+
+    (_pin?'<span style="font-size:11px;color:var(--text-2);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px 8px;white-space:nowrap;">Inicio fijo: <strong>'+esc(_cycleDateLabel(_pin.fecha))+' '+(_pin.turno==='noche'?'Noche':'Día')+'</strong> <span style="cursor:pointer;color:var(--safety-red,#dc2626);font-weight:700;" title="Quitar inicio fijo" onclick="_pConsolQuitarPin()">✕</span></span>':'');
+  const toolbar=_consolCycleToolbar({prefix:'pConsol',onChange:'renderPConsol',availableDates,fromDate:r.fromDate,fromTurno:r.fromTurno,toDate:r.toDate,toTurno:r.toTurno,pinHtml:_pinHtml});
   const pes=allPes.filter(x=>{const c=_recordCycleForPesaje(x);return c.idx>=r.idxFrom&&c.idx<=r.idxTo;});
   if(!pes.length){wrap.innerHTML=toolbar+'<div style="padding:40px;text-align:center;color:var(--text-3);">Sin pesajes en ese rango de ciclos.</div>';if(sub)sub.textContent='0 pesajes · rango vacío';return;}
   const espSet=new Set();pes.forEach(r=>espSet.add(r.especie||'—'));
@@ -8938,6 +8975,7 @@ function _consolCycleToolbar(cfg){
       <option value="dia" ${cfg.toTurno==='dia'?'selected':''}>Día</option>
       <option value="noche" ${cfg.toTurno==='noche'?'selected':''}>Noche</option>
     </select>
+    ${cfg.pinHtml||''}
     <span style="font-size:11px;color:var(--text-3);max-width:520px;">Filtro por <strong>ciclos de turno</strong> (fecha+turno), ideal para cortes desde/hasta.</span>
     ${extra}
   </div>`;
