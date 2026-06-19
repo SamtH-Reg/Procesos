@@ -8559,7 +8559,9 @@ function renderPesajeTable(){
   }
   const badge=document.getElementById('pesVerTabBadge');
   const tot=(RT.pesajes||[]).length;
-  if(badge)badge.textContent=String(tot);
+  // El badge contará los registros del FILTRO (turno+fecha+línea), no el total
+  // histórico. Se fija más abajo, tras filtrar. (tot se conserva para el mensaje
+  // de vacío "Total: N en otras fechas/turnos".)
   const mount=document.getElementById('pVerFiltrosMount');
   const state=_readPesajeListaFiltrosFromDom();
   if(mount){
@@ -8570,11 +8572,13 @@ function renderPesajeTable(){
   }
   const tf=document.getElementById('tfPesaje');
   if(!RT.pesajes.length){
+    if(badge)badge.textContent='0';
     tb.innerHTML='<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-3);">Sin pesajes registrados.</td></tr>';
     if(tf)tf.innerHTML='';
     return;
   }
   const rows=_filterPesajesPorListaFiltros(RT.pesajes,state);
+  if(badge)badge.textContent=String(rows.length); // contador = registros del turno/fecha/línea seleccionados
   if(!rows.length){
     const hoyStr=state.fechaTurno.split('-').reverse().join('/');
     const filtroSub=_resumenFiltroTurnoSub(state.filtro);
