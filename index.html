@@ -8272,7 +8272,7 @@ function _pRegFichaDeRegistrosPrevios(id,nombre){
   return scan(RT.pesajes)||scan(RT.moldes)||'';
 }
 window._pRegFichaDeRegistrosPrevios=_pRegFichaDeRegistrosPrevios;
-function onPRegTrabChange(){
+function onPRegTrabChange(_skipHeal){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const badge=document.getElementById('pRegWorkerBadge');
   const fichaInp=document.getElementById('pRegFicha');
@@ -8336,11 +8336,43 @@ function onPRegTrabChange(){
       const fichaVal=(fichaDisp||'').toString().trim();
       fichaInp.value=fichaVal;
       fichaInp.classList.add('ficha-fixed');
+      // Blindaje: si un trabajador SELECCIONADO quedó sin ficha, el catálogo local
+      // puede estar atrasado → pull de 'trabajadores' al instante y reintento.
+      const esManual=val==='__manual__'||String(val).startsWith('__m');
+      if(!fichaVal&&!_skipHeal&&val&&!esManual)_pRegSelfHealFichaCatalog();
     }
   }finally{
     if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
   }
 }
+/** Auto-sanación del catálogo local de trabajadores cuando una ficha viene vacía.
+   Trae 'trabajadores' desde Supabase (catálogo fresco con las fichas) y reintenta
+   resolver la ficha del trabajador seleccionado. Rate-limited a 1 cada 30 s. */
+let _pRegFichaHealAt=0,_pRegFichaHealing=false;
+async function _pRegSelfHealFichaCatalog(){
+  if(_pRegFichaHealing)return;
+  if(typeof _tbSb==='undefined'||!_tbSb||!_tbUser)return;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
+  const now=Date.now();
+  if(now-_pRegFichaHealAt<30000)return; // máx 1 pull cada 30 s
+  _pRegFichaHealAt=now;_pRegFichaHealing=true;
+  try{
+    const{data,error}=await _tbSb.from('trabajadores').select('*');
+    if(!error&&Array.isArray(data)&&data.length){
+      DB.data.trabajadores=data;
+      try{if(DB.save)DB.save();}catch(_){}
+      // NO reconstruir el <select> (deseleccionaría al trabajador). Solo re-resolver
+      // la ficha: el fallback t.ficha ya lee el catálogo fresco. _skipHeal=true evita bucle.
+      onPRegTrabChange(true);
+      if(typeof showToast==='function'){
+        const f=(document.getElementById('pRegFicha')||{}).value||'';
+        if(f)showToast('Ficha actualizada desde la nube: '+f,'success');
+      }
+    }
+  }catch(e){console.warn('[pReg self-heal ficha]',e&&e.message||e);}
+  finally{_pRegFichaHealing=false;}
+}
+window._pRegSelfHealFichaCatalog=_pRegSelfHealFichaCatalog;
 const PREG_KG_NUMPAD_KEY='friosur_pRegKg_numPad';
 function pRegHasWorkerSelected(){
   const sel=document.getElementById('pRegTrab');
