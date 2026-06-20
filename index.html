@@ -1827,6 +1827,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
   color:#b91c1c;font-size:12px;font-weight:900;letter-spacing:.02em;
 }
 .fs-combo-val-name{font-weight:700;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Ficha del trabajador (pesaje) destacada en rojo al final del nombre — único realce. */
+.fs-combo-ficha-hl{flex-shrink:0;margin-left:6px;color:#dc2626;font-weight:900;font-size:14px;letter-spacing:.02em;}
 .fs-combo-chevron{width:16px;height:16px;flex-shrink:0;opacity:.55;color:var(--navy-700);}
 .fs-combo-panel{
   position:fixed;z-index:100050;display:flex;flex-direction:column;
@@ -2427,7 +2429,10 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
               </div>
-              <div class="form-field">
+              <!-- Campo N° Ficha OCULTO: el input se conserva (lo leen/escriben regPesaje,
+                   autocompletado, fallback y auto-sanación) pero ya no se muestra; la ficha
+                   se ve en rojo al final del nombre del trabajador. No quitar el input. -->
+              <div class="form-field" id="pRegFichaField" style="display:none;">
                 <label class="form-label">N° Ficha <span class="required">*</span></label>
                 <input class="input ficha-fixed" id="pRegFicha" type="text" inputmode="numeric" placeholder="—" autocomplete="off" readonly>
               </div>
@@ -8336,6 +8341,9 @@ function onPRegTrabChange(_skipHeal){
       const fichaVal=(fichaDisp||'').toString().trim();
       fichaInp.value=fichaVal;
       fichaInp.classList.add('ficha-fixed');
+      // Refresca el picker para mostrar la ficha resuelta en rojo al final del nombre
+      // (cubre también el caso de la auto-sanación, que re-resuelve la ficha).
+      try{_updateRegPickerDisplay('pRegTrab',nombreDisp);}catch(_){}
       // Blindaje: si un trabajador SELECCIONADO quedó sin ficha, el catálogo local
       // puede estar atrasado → pull de 'trabajadores' al instante y reintento.
       const esManual=val==='__manual__'||String(val).startsWith('__m');
@@ -11223,9 +11231,19 @@ function _updateRegPickerDisplay(selectId,nombre,codigo){
   if(val){
     val.hidden=false;
     const sel=document.getElementById(selectId);
-    const tDb=DB.data.trabajadores.find(x=>String(x.id)===String(sel&&sel.value));
-    const code=_fsComboCodeBadge(tDb||{codigo:codigo});
-    val.innerHTML='<span class="fs-combo-code">'+esc(code)+'</span><span class="fs-combo-val-name">'+esc(nombre)+'</span>';
+    if(selectId==='pRegTrab'){
+      // Trabajador de pesaje: nombre + FICHA en rojo al final (único texto destacado).
+      // Sin pill de código. La ficha sale de la opción seleccionada (la resuelve el
+      // picker/onPRegTrabChange) o del input oculto pRegFicha como respaldo.
+      const opt=sel&&sel.options&&sel.options[sel.selectedIndex];
+      let ficha=(opt&&opt.dataset&&String(opt.dataset.ficha||'').trim())||'';
+      if(!ficha){const fi=document.getElementById('pRegFicha');ficha=(fi&&String(fi.value||'').trim())||'';}
+      val.innerHTML='<span class="fs-combo-val-name">'+esc(nombre)+'</span>'+(ficha?' <span class="fs-combo-ficha-hl">'+esc(ficha)+'</span>':'');
+    }else{
+      const tDb=DB.data.trabajadores.find(x=>String(x.id)===String(sel&&sel.value));
+      const code=_fsComboCodeBadge(tDb||{codigo:codigo});
+      val.innerHTML='<span class="fs-combo-code">'+esc(code)+'</span><span class="fs-combo-val-name">'+esc(nombre)+'</span>';
+    }
   }
 }
 function clearRegPicker(selectId,changeFnName){
