@@ -2410,7 +2410,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
                 <div class="form-field span-2">
                   <label class="form-label">Trabajador <span class="required">*</span> <span id="pRegArmadoInfo" style="font-size:10px;font-weight:600;color:#0369a1;background:#dbeafe;border-radius:10px;padding:1px 7px;margin-left:4px;display:none;"></span></label>
                   <div class="fs-combo">
-                  <button class="fs-combo-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',true,_getPRegPickerWorkers)">
+                  <button class="fs-combo-trigger" type="button" id="pRegTrabPicker" onclick="openRegPicker('pRegTrab','Seleccionar Trabajador','onPRegTrabChange',false,_getPRegPickerWorkers)">
                     <span class="fs-combo-ph">Seleccionar trabajador…</span>
                     <span class="fs-combo-val" hidden></span>
                     <svg class="fs-combo-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
@@ -8151,21 +8151,29 @@ function _getPRegPickerWorkers(){
   if(!RT.armadoPesaje||!linea)return null;
   const data=_pArmGetEntry(linea,_pArmRegTurno(),_pArmRegFecha());
   if(!data)return null;
-  const workers=[];
+  const workers=[];const seen=new Set();
+  // UNA opción por FICHA del armado (no deduplicar por persona): si el mismo
+  // trabajador está en dos fichas, deben aparecer las dos. id compuesto
+  // "realId|ficha" para que cada ficha sea seleccionable de forma independiente.
   (data.trabajadores||[]).forEach(entry=>{
-    if(entry.trabId){
-      const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
-      if(t&&!workers.find(w=>w.id===t.id)){
-        workers.push({
-          ...t,
-          // En pesaje debe prevalecer la ficha del armado de línea.
-          ficha:(entry.ficha!=null&&String(entry.ficha).trim()!=='')?entry.ficha:(t.ficha||'')
-        });
-      }
-    }
+    if(!entry||entry.trabId==null)return;
+    const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
+    const realId=t?t.id:entry.trabId;
+    const ficha=(entry.ficha!=null&&String(entry.ficha).trim()!=='')?String(entry.ficha).trim():((t&&t.ficha)||'');
+    const uid=String(realId)+'|'+ficha;
+    if(seen.has(uid))return;seen.add(uid);
+    workers.push({
+      ...(t||{}),
+      id:uid,                 // id compuesto (única por ficha) para el combo/<select>
+      trabId:realId,
+      nombre:t?t.nombre:(entry.nombre||''),
+      codigo:t?t.codigo:'',
+      ficha
+    });
   });
   if(!workers.length)return null; // null → fallback a todos (igual que moldes)
-  return workers.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  workers.sort((a,b)=>(_fsFichaNum(a)-_fsFichaNum(b))||String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+  return workers;
 }
 function _pRegPlanilleroDisplayMeta(w){
   const tDb=(typeof w.id==='number'||/^\d+$/.test(String(w.id)))?DB.data.trabajadores.find(x=>x.id===parseInt(String(w.id),10)):null;
@@ -8216,10 +8224,14 @@ function renderPRegTrab(){
         const t=DB.data.trabajadores.find(x=>x.id===entry.trabId);
         const nom=t?t.nombre:(entry.nombre||'');
         const id=t?t.id:entry.trabId;
-        if(nom&&!fromArmado.find(w=>w.id===id)){
-          const fichArm=(entry.ficha!=null&&String(entry.ficha).trim()!=='')?String(entry.ficha).trim():'';
-          const fichDb=(t&&t.ficha!=null&&String(t.ficha).trim()!=='')?String(t.ficha).trim():'';
-          fromArmado.push({id,nombre:nom,ficha:fichArm||fichDb,__fromArmado:true});
+        const fichArm=(entry.ficha!=null&&String(entry.ficha).trim()!=='')?String(entry.ficha).trim():'';
+        const fichDb=(t&&t.ficha!=null&&String(t.ficha).trim()!=='')?String(t.ficha).trim():'';
+        const ficha=fichArm||fichDb;
+        // UNA opción por FICHA (uid compuesto): si el mismo trabajador está en dos
+        // fichas, aparecen las dos. Dedup solo por uid exacto (misma persona+ficha).
+        const uid=String(id)+'|'+ficha;
+        if(nom&&!fromArmado.find(w=>w.uid===uid)){
+          fromArmado.push({id,uid,nombre:nom,ficha,__fromArmado:true});
         }
       }
     });
@@ -8238,7 +8250,7 @@ function renderPRegTrab(){
     :(fromArmado.length?'— Selecciona trabajador —':'— Selecciona línea primero —');
   sel.innerHTML=`<option value="">${esc(placeholder)}</option>`
     +'<option value="__manual__">+ Ingresar manualmente</option>'
-    +fromArmado.map(t=>`<option value="${t.id||'n_'+esc(t.nombre)}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
+    +fromArmado.map(t=>`<option value="${esc(t.uid||t.id||('n_'+t.nombre))}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}" data-trabid="${esc(String(t.id||''))}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
   // Restaurar la selección si el trabajador sigue en la lista (refresh de fondo).
   // Si ya no está (p.ej. cambió la línea), queda deseleccionado a propósito.
   if(_prevTrabVal&&Array.from(sel.options).some(o=>o.value===_prevTrabVal)){
@@ -11182,31 +11194,42 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
     }
     const sel=document.getElementById(selectId);
     let displayMeta=codigo;
+    // id puede venir compuesto "realId|ficha" (picker de trabajador por ficha).
+    const _isComp=String(id).includes('|');
+    const _realId=_isComp?String(id).split('|')[0]:String(id);
+    const _fichaComp=_isComp?String(id).split('|').slice(1).join('|'):'';
     if(sel){
-      // Ensure option exists in the hidden select
+      // Ensure option exists in the hidden select (clave = id, compuesto o no)
       let opt=Array.from(sel.options).find(o=>String(o.value)===String(id));
-      let tDb=DB.data.trabajadores.find(t=>String(t.id)===String(id));
+      let tDb=DB.data.trabajadores.find(t=>String(t.id)===String(_realId));
       if(!opt){
         opt=document.createElement('option');
         opt.value=String(id);
         opt.textContent=nombre;
         opt.dataset.nombre=nombre;
-        opt.dataset.ficha=(tDb&&tDb.ficha)||'';
+        opt.dataset.ficha=_fichaComp||((tDb&&tDb.ficha)||'');
+        if(_isComp)opt.dataset.trabid=_realId;
         sel.appendChild(opt);
       }
-      if(!tDb)tDb=DB.data.trabajadores.find(t=>String(t.id)===String(id));
+      if(!tDb)tDb=DB.data.trabajadores.find(t=>String(t.id)===String(_realId));
       if(selectId==='pRegTrab'){
-        const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
-        const arm=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
-        const entryArm=arm?(arm.trabajadores||[]).find(e=>String(e.trabId)===String(id)):null;
-        const fichArm=(entryArm&&entryArm.ficha!=null&&String(entryArm.ficha).trim()!=='')?String(entryArm.ficha).trim():'';
-        const fichOpt=(opt&&opt.dataset&&String(opt.dataset.ficha||'').trim())||'';
-        const fichDb=(tDb&&tDb.ficha!=null&&String(tDb.ficha).trim()!=='')?String(tDb.ficha).trim():'';
-        // Fallback: ficha en CUALQUIER línea del turno + código del trabajador.
-        const fichAny=(typeof _pArmFichaDeTrab==='function')?(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha())||''):'';
-        const fichPrev=(typeof _pRegFichaDeRegistrosPrevios==='function')?(_pRegFichaDeRegistrosPrevios(id,nombre)||''):''; // última ficha usada
-        const fichCod=(tDb&&tDb.codigo!=null&&String(tDb.codigo).trim()!=='')?String(tDb.codigo).trim():'';
-        const fichaTxt=fichArm||fichOpt||fichAny||fichDb||fichPrev||fichCod;
+        let fichaTxt;
+        if(_isComp){
+          // Ficha YA elegida en el picker (una opción por ficha del armado): respetarla.
+          fichaTxt=_fichaComp;
+        }else{
+          const lineaSel=(document.getElementById('pRegLinea')||{}).value||'';
+          const arm=lineaSel?_pArmGetEntry(lineaSel,_pArmRegTurno(),_pArmRegFecha()):null;
+          const entryArm=arm?(arm.trabajadores||[]).find(e=>String(e.trabId)===String(_realId)):null;
+          const fichArm=(entryArm&&entryArm.ficha!=null&&String(entryArm.ficha).trim()!=='')?String(entryArm.ficha).trim():'';
+          const fichOpt=(opt&&opt.dataset&&String(opt.dataset.ficha||'').trim())||'';
+          const fichDb=(tDb&&tDb.ficha!=null&&String(tDb.ficha).trim()!=='')?String(tDb.ficha).trim():'';
+          // Fallback: ficha en CUALQUIER línea del turno → registros previos → código.
+          const fichAny=(typeof _pArmFichaDeTrab==='function')?(_pArmFichaDeTrab(_realId,_pArmRegTurno(),_pArmRegFecha())||''):'';
+          const fichPrev=(typeof _pRegFichaDeRegistrosPrevios==='function')?(_pRegFichaDeRegistrosPrevios(_realId,nombre)||''):'';
+          const fichCod=(tDb&&tDb.codigo!=null&&String(tDb.codigo).trim()!=='')?String(tDb.codigo).trim():'';
+          fichaTxt=fichArm||fichOpt||fichAny||fichDb||fichPrev||fichCod;
+        }
         if(opt)opt.dataset.ficha=fichaTxt;
         displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
       }else if(selectId==='pRegPlanillero'){
