@@ -8201,6 +8201,11 @@ function renderPRegPlanilleros(){
 function renderPRegTrab(){
   // Copia de renderMRegTrab adaptada a pesaje (con ficha)
   const sel=document.getElementById('pRegTrab');if(!sel)return;
+  // Preservar la selección actual: este render se dispara también por eventos de
+  // fondo (Realtime de armado, pull de catálogo). Sin esto, reconstruir el <select>
+  // dejaba sel.value='' en silencio → al guardar "no hay trabajador" y se perdía el
+  // registro en curso. Restauramos abajo si el trabajador sigue disponible.
+  const _prevTrabVal=sel.value;
   const linea=document.getElementById('pRegLinea')?document.getElementById('pRegLinea').value:'';
   const armLinea=linea?_pArmGetEntry(linea,_pArmRegTurno(),_pArmRegFecha()):null;
   let fromArmado=[];
@@ -8234,6 +8239,11 @@ function renderPRegTrab(){
   sel.innerHTML=`<option value="">${esc(placeholder)}</option>`
     +'<option value="__manual__">+ Ingresar manualmente</option>'
     +fromArmado.map(t=>`<option value="${t.id||'n_'+esc(t.nombre)}" data-nombre="${esc(t.nombre)}" data-ficha="${esc(t.ficha||'')}">${esc(t.nombre)}${t.ficha?' · F'+esc(t.ficha):''}</option>`).join('');
+  // Restaurar la selección si el trabajador sigue en la lista (refresh de fondo).
+  // Si ya no está (p.ej. cambió la línea), queda deseleccionado a propósito.
+  if(_prevTrabVal&&Array.from(sel.options).some(o=>o.value===_prevTrabVal)){
+    sel.value=_prevTrabVal;
+  }
   // Badge con cantidad en armado
   const info=document.getElementById('pRegArmadoInfo');
   if(info){
