@@ -8251,6 +8251,27 @@ function onPRegTurnoChange(){
   else _pRegEnsureFechaDefault();
   renderPRegLinea();
 }
+/** Última ficha conocida de un trabajador a partir de sus registros previos
+   (pesajes y moldes). RT.pesajes está ordenado con el más reciente primero
+   (unshift), así que el primer match es el más actual. Recupera la ficha cuando
+   el armado/catálogo la perdieron (era la causa de "se pierde la ficha"). */
+function _pRegFichaDeRegistrosPrevios(id,nombre){
+  const tid=(id==null)?'':String(id);
+  const nm=String(nombre||'').trim().toLowerCase();
+  const hit=f=>f!=null&&String(f).trim()!=='';
+  const scan=arr=>{
+    if(!Array.isArray(arr))return'';
+    for(const r of arr){
+      if(!r||!hit(r.ficha))continue;
+      const sameId=tid&&r.trabId!=null&&String(r.trabId)===tid;
+      const sameNom=nm&&String(r.nombre||'').trim().toLowerCase()===nm;
+      if(sameId||sameNom)return String(r.ficha).trim();
+    }
+    return'';
+  };
+  return scan(RT.pesajes)||scan(RT.moldes)||'';
+}
+window._pRegFichaDeRegistrosPrevios=_pRegFichaDeRegistrosPrevios;
 function onPRegTrabChange(){
   const sel=document.getElementById('pRegTrab');if(!sel)return;
   const badge=document.getElementById('pRegWorkerBadge');
@@ -8302,7 +8323,8 @@ function onPRegTrabChange(){
     // Cadena robusta: opción → armado de la línea seleccionada → armado de CUALQUIER
     // línea del turno (la persona puede estar armada en otra línea) → ficha catálogo → código.
     const fichaCualquierLinea=_nfF(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha()));
-    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)||_nfF(entryArmado&&entryArmado.ficha)||fichaCualquierLinea||_nfF(t&&t.ficha)||_nfF(t&&t.codigo);
+    const fichaPrev=_nfF(_pRegFichaDeRegistrosPrevios(id,nombreDisp)); // recupera la última ficha usada
+    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)||_nfF(entryArmado&&entryArmado.ficha)||fichaCualquierLinea||_nfF(t&&t.ficha)||fichaPrev||_nfF(t&&t.codigo);
     badge.style.display='';
     const ini=(nombreDisp||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     document.getElementById('pRegWorkerInit').textContent=ini;
@@ -11132,8 +11154,9 @@ function openRegPicker(selectId, title, changeFnName, allowManual, workersFn){
         const fichDb=(tDb&&tDb.ficha!=null&&String(tDb.ficha).trim()!=='')?String(tDb.ficha).trim():'';
         // Fallback: ficha en CUALQUIER línea del turno + código del trabajador.
         const fichAny=(typeof _pArmFichaDeTrab==='function')?(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha())||''):'';
+        const fichPrev=(typeof _pRegFichaDeRegistrosPrevios==='function')?(_pRegFichaDeRegistrosPrevios(id,nombre)||''):''; // última ficha usada
         const fichCod=(tDb&&tDb.codigo!=null&&String(tDb.codigo).trim()!=='')?String(tDb.codigo).trim():'';
-        const fichaTxt=fichArm||fichOpt||fichAny||fichDb||fichCod;
+        const fichaTxt=fichArm||fichOpt||fichAny||fichDb||fichPrev||fichCod;
         if(opt)opt.dataset.ficha=fichaTxt;
         displayMeta=fichaTxt?('Ficha '+fichaTxt):'';
       }else if(selectId==='pRegPlanillero'){
