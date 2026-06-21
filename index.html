@@ -8442,7 +8442,9 @@ function pRegKgPadApplyMode(){
   const hint=document.getElementById('pRegKgPadHint');
   const btn=document.getElementById('pRegKgPadToggleBtn');
   if(!inp)return;
-  const custom=pRegKgPadIsCustom();
+  // En modo concentración no hay teclado propio → forzar teclado del sistema (editable),
+  // sin cambiar la preferencia guardada del usuario.
+  const custom=pRegKgPadIsCustom()&&!window._pRegFocusActive;
   const lineaOk=typeof _pRegHasLineaSeleccionada==='function'?_pRegHasLineaSeleccionada():true;
   const ok=lineaOk&&pRegHasWorkerSelected();
   if(inp._pRegKgFocusTrap){
@@ -8610,7 +8612,9 @@ window._ensureArmadoPesaje=_ensureArmadoPesaje;window._pArmGetEntry=_pArmGetEntr
    full-screen, conservando ids/handlers (picker, kg, regPesaje siguen igual). Al
    salir, los devuelve a su lugar EXACTO con placeholders. El picker (z-index
    100050) y el aviso de sesión (100000) quedan por encima del overlay (9000). */
-const _PREG_FOCUS_IDS=['pRegIndivCard','pRegSaveBtn','pRegKgPadCard'];
+// En concentración mostramos SOLO la tarjeta de pesaje + Guardar (sin el teclado
+// numérico propio: se usa el teclado del sistema al tocar Kilos procesados).
+const _PREG_FOCUS_IDS=['pRegIndivCard','pRegSaveBtn'];
 let _pregFocusPH=null;
 function _pregFocusEnsureOverlay(){
   let ov=document.getElementById('pRegFocusOverlay');
@@ -8641,22 +8645,13 @@ function _pRegFlashSaveOk(){
   btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},1100);
 }
 window._pRegFlashSaveOk=_pRegFlashSaveOk;
-/** Datos de Contexto que faltan para poder pesar (no visibles en concentración). */
-function _pRegFocusMissingCtx(){
-  const g=id=>{const e=document.getElementById(id);return e?String(e.value||'').trim():'';};
-  const miss=[];
-  if(!g('pRegLinea'))miss.push('línea');
-  if(!g('pRegGuia'))miss.push('N° guía');
-  if(!g('pRegEspecie'))miss.push('especie');
-  if(!g('pRegTipo'))miss.push('tipo');
-  return miss;
-}
 function pRegFocusEnter(){
-  // No entrar con contexto incompleto: en concentración esos campos no se ven, así
-  // que avisamos para completarlos primero (la guía es el caso típico).
-  const miss=_pRegFocusMissingCtx();
-  if(miss.length){
-    if(typeof showToast==='function')showToast('Completá en Contexto: '+miss.join(', ')+' — luego entrá al modo concentración.','warn');
+  // Aviso SOLO por la guía (es el dato manual que se suele olvidar y no se ve en
+  // concentración). Línea/especie/tipo vienen del armado/contexto; si faltaran, la
+  // validación al Guardar lo avisa (el toast ya se ve en concentración).
+  const guia=(document.getElementById('pRegGuia')||{}).value;
+  if(!String(guia||'').trim()){
+    if(typeof showToast==='function')showToast('Falta ingresar el N° de guía antes del modo concentración.','warn');
     return;
   }
   const ov=_pregFocusEnsureOverlay();
@@ -8673,6 +8668,8 @@ function pRegFocusEnter(){
   });
   const ctx=document.getElementById('pRegFocusCtx');if(ctx)ctx.textContent=_pregFocusCtxText();
   document.body.classList.add('preg-focus-on');
+  window._pRegFocusActive=true;
+  try{if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();}catch(_){} // kilos editable (teclado del sistema)
   ov.hidden=false;ov.scrollTop=0;
 }
 function pRegFocusExit(){
@@ -8686,6 +8683,8 @@ function pRegFocusExit(){
     _pregFocusPH=null;
   }
   document.body.classList.remove('preg-focus-on');
+  window._pRegFocusActive=false;
+  try{if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();}catch(_){} // restaurar preferencia del teclado
   if(ov)ov.hidden=true;
 }
 window.pRegFocusEnter=pRegFocusEnter;window.pRegFocusExit=pRegFocusExit;
