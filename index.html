@@ -1307,6 +1307,10 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 }
 /* Botón Guardar pesaje → verde "¡Guardado!" al confirmar (feedback inmediato). */
 .p-reg-save-pesaje.p-reg-save-ok{background:#16a34a!important;border-color:#16a34a!important;color:#fff!important;box-shadow:0 8px 24px rgba(22,163,74,.35)!important;}
+/* Botón "Modo concentración" destacado en verde (acceso rápido en planta). */
+.preg-focus-enter-btn{background:#16a34a!important;border:1px solid #15803d!important;color:#fff!important;font-weight:700;}
+.preg-focus-enter-btn:hover{background:#15803d!important;}
+.preg-focus-enter-btn:active{background:#166534!important;transform:scale(.97);}
 .toast{
   padding:14px 20px;
   background:var(--brand);
@@ -8655,7 +8659,7 @@ function _pRegFlashSaveOk(){
   btn.classList.add('p-reg-save-ok');
   btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg> ¡Guardado!';
   clearTimeout(btn._okT);
-  btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},2500);
+  btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},1500);
 }
 window._pRegFlashSaveOk=_pRegFlashSaveOk;
 function pRegFocusEnter(){
