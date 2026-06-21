@@ -13639,6 +13639,57 @@ async function tbApplySession(session){
   try{if(_rtPruneLocalPesajes()>0)_rtFlushLocalNow();}catch(e){console.warn('[prune tras sig]',e);}
   try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   KEEPALIVE / RECUPERACIÓN DE SESIÓN
+   ══════════════════════════════════════════════════════════════════════════
+   En tablets que corren horas, el token de Supabase vence y el refresco
+   automático a veces falla (HTTP 400). Con la sesión muerta, el servidor RECHAZA
+   las subidas aunque el internet esté perfecto → "Por subir" pegado, datos sin
+   subir. Aquí: si la sesión está vencida/ausente, intenta refrescarla; si lo
+   logra, vacía la cola enseguida; si no, muestra un aviso visible para reingresar
+   (los datos quedan guardados en outbox/RT y suben al reingresar). */
+function _tbSessionBanner(show){
+  let b=document.getElementById('tbSessionExpiredBanner');
+  if(!show){if(b)b.remove();return;}
+  if(b)return;
+  b=document.createElement('div');
+  b.id='tbSessionExpiredBanner';
+  b.setAttribute('style','position:fixed;left:0;right:0;top:0;z-index:100000;background:#b91c1c;color:#fff;padding:11px 16px;text-align:center;font-size:14px;font-weight:800;box-shadow:0 2px 12px rgba(0,0,0,.35);cursor:pointer;');
+  b.textContent='⚠ Sesión vencida — toca aquí para reingresar. Tus datos están guardados y se subirán al reingresar.';
+  b.onclick=()=>{try{tbShowAuth();}catch(_){}};
+  document.body.appendChild(b);
+}
+let _tbSessChecking=false;
+async function _tbEnsureSession(){
+  if(_tbSessChecking||!_tbSb||!_tbUser)return;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return; // sin red ≠ sesión muerta
+  _tbSessChecking=true;
+  try{
+    const{data,error}=await _tbSb.auth.getSession();
+    const sess=data&&data.session;
+    const now=Math.floor(Date.now()/1000);
+    if(!error&&sess&&(sess.expires_at||0)>now){_tbSessionBanner(false);return;} // sesión OK → no tocar (evita carreras de rotación)
+    // Sesión vencida/ausente (el auto-refresh ya falló): intentar recuperar UNA vez.
+    let ok=false;
+    try{const r=await _tbSb.auth.refreshSession();ok=!!(r&&r.data&&r.data.session&&(r.data.session.expires_at||0)>now);}catch(_){ok=false;}
+    if(ok){
+      _tbSessionBanner(false);
+      try{void _obxDrain();}catch(_){}
+      try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+      console.log('[Friosur] Sesión recuperada; subiendo pendientes.');
+    }else{
+      _tbSessionBanner(true);
+    }
+  }catch(e){/* red u otro: reintenta en el próximo tick */}
+  finally{_tbSessChecking=false;}
+}
+window._tbEnsureSession=_tbEnsureSession;
+if(!window._tbSessHooks){
+  window._tbSessHooks=true;
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_tbEnsureSession();});
+  window.addEventListener('online',()=>{_tbEnsureSession();});
+  setInterval(()=>{_tbEnsureSession();},5*60000); // cada 5 min
+}
 async function tbDoLogin(){
   const email=document.getElementById('tbAuthEmail').value.trim();
   const pass=document.getElementById('tbAuthPass').value;
