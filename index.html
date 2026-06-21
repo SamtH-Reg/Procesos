@@ -1301,10 +1301,12 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
   position:fixed;
   bottom:calc(var(--tabbar-h) + 16px);
   left:50%;transform:translateX(-50%);
-  z-index:100;
+  z-index:100075; /* por encima del overlay de concentración (9000), picker (100050) y aviso de sesión: las notificaciones SIEMPRE se ven */
   display:flex;flex-direction:column;gap:8px;
   pointer-events:none;
 }
+/* Botón Guardar pesaje → verde "¡Guardado!" al confirmar (feedback inmediato). */
+.p-reg-save-pesaje.p-reg-save-ok{background:#16a34a!important;border-color:#16a34a!important;color:#fff!important;box-shadow:0 8px 24px rgba(22,163,74,.35)!important;}
 .toast{
   padding:14px 20px;
   background:var(--brand);
@@ -8590,6 +8592,7 @@ function regPesaje(){
   document.getElementById('pRegKg').value='';
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
+  if(typeof _pRegFlashSaveOk==='function')_pRegFlashSaveOk(); // botón verde "¡Guardado!"
   _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg · '+rec.fecha);
   // Subida LIVIANA (O(1)): mapea solo esta fila, la encola en el outbox durable y
   // la sube directo. No recorre las miles de filas de RT.pesajes → registrar no se
@@ -8627,7 +8630,35 @@ function _pregFocusCtxText(){
   const guia=g('pRegGuia');
   return [linea,g('pRegEspecie'),guia?('Guía '+guia):''].filter(Boolean).join(' · ');
 }
+/* Verde "¡Guardado!" en el botón Guardar pesaje al confirmar (también en concentración). */
+function _pRegFlashSaveOk(){
+  const btn=document.getElementById('pRegSaveBtn');
+  if(!btn)return;
+  if(!btn._okHtml)btn._okHtml=btn.innerHTML;
+  btn.classList.add('p-reg-save-ok');
+  btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg> ¡Guardado!';
+  clearTimeout(btn._okT);
+  btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},1100);
+}
+window._pRegFlashSaveOk=_pRegFlashSaveOk;
+/** Datos de Contexto que faltan para poder pesar (no visibles en concentración). */
+function _pRegFocusMissingCtx(){
+  const g=id=>{const e=document.getElementById(id);return e?String(e.value||'').trim():'';};
+  const miss=[];
+  if(!g('pRegLinea'))miss.push('línea');
+  if(!g('pRegGuia'))miss.push('N° guía');
+  if(!g('pRegEspecie'))miss.push('especie');
+  if(!g('pRegTipo'))miss.push('tipo');
+  return miss;
+}
 function pRegFocusEnter(){
+  // No entrar con contexto incompleto: en concentración esos campos no se ven, así
+  // que avisamos para completarlos primero (la guía es el caso típico).
+  const miss=_pRegFocusMissingCtx();
+  if(miss.length){
+    if(typeof showToast==='function')showToast('Completá en Contexto: '+miss.join(', ')+' — luego entrá al modo concentración.','warn');
+    return;
+  }
   const ov=_pregFocusEnsureOverlay();
   const body=ov.querySelector('#pRegFocusBody');
   if(!body)return;
