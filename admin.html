@@ -7679,27 +7679,48 @@ function sbRerenderCurrent(tbl){
     _doRender(dirty);
   },100);
 }
-/* ── Polling respaldo: consulta Supabase cada 30s (menos carga; Realtime ya avisa de cambios) ── */
+/* ── Polling respaldo: consulta Supabase cada 30s (menos carga; Realtime ya avisa de cambios) ──
+   Ahorro de EGRESS: al detectar cambios trae SOLO las filas nuevas (created_at >
+   último visto), no todo el historial. Full-fetch solo si bajó el count (hubo
+   borrado) o en la reconciliación periódica (cada ~15 min). */
 let _pollCounts={moldes:0,pesajes:0,generales:0};
+let _pollSince={moldes:null,pesajes:null,generales:null};
+let _pollTick=0;
 async function _pollFresh(){
   if(!_sb||!_currentUser)return;
   let changed=false;
+  _pollTick++;
+  const forceFull=(_pollTick%30===0); // reconciliación completa cada ~15 min (capta ediciones/borrados)
   for(const t of['moldes','pesajes','generales']){
     try{
-      // Pedir count total de filas
       const{count,error}=await _sb.from(t).select('*',{count:'exact',head:true});
       if(error){sbLog('poll '+t+' error: '+error.message,false);continue;}
       const n=count||0;
-      if(n!==_pollCounts[t]){
-        _pollCounts[t]=n;
-        // Descarga datos frescos (todas las filas, paginado)
+      const prev=_pollCounts[t];
+      if(n===prev&&!forceFull)continue;          // sin cambios → no descarga
+      _pollCounts[t]=n;
+      const puedeIncremental=_pollSince[t]&&n>prev&&!forceFull; // solo creció → incremental
+      if(puedeIncremental){
+        const sinceMargin=new Date(Date.parse(_pollSince[t])-5000).toISOString();
+        const{data:rows,error:e2}=await _sb.from(t).select('*').gt('created_at',sinceMargin).order('created_at',{ascending:true});
+        if(!e2&&Array.isArray(rows)&&rows.length){
+          if(!RT.data)RT.data={};
+          const arr=Array.isArray(RT.data[t])?RT.data[t]:(RT.data[t]=[]);
+          const ex=new Set(arr.map(r=>String(r&&r.id)));
+          const parsed=_sbParse(t,rows);let mx=_pollSince[t];
+          parsed.forEach((m,i)=>{const c=rows[i]&&rows[i].created_at;if(c&&c>mx)mx=c;if(m&&m.id!=null&&!ex.has(String(m.id))){arr.push(m);ex.add(String(m.id));}});
+          _pollSince[t]=mx;RT._ensureShape();changed=true;
+          sbLog('↺ poll '+t+': +'+parsed.length+' nuevas (incremental)');
+        }
+      }else{
+        // primera vez / bajó el count / reconciliación → full (paginado)
         const{data:rows,error:e2}=await _sbFetchAllRows(t);
         if(!e2&&rows){
           if(!RT.data)RT.data={};
           RT.data[t]=_sbParse(t,rows);
-          RT._ensureShape();
-          changed=true;
-          sbLog('↺ poll '+t+': '+n+' filas (cambio detectado)');
+          let mx='';rows.forEach(r=>{const c=r&&r.created_at;if(c&&c>mx)mx=c;});_pollSince[t]=mx||_pollSince[t];
+          RT._ensureShape();changed=true;
+          sbLog('↺ poll '+t+': '+n+' filas (full)');
         }
       }
     }catch(ex){sbLog('poll ex: '+ex.message,false);}
