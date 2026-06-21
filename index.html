@@ -11172,6 +11172,16 @@ function openFsCombo(cfg){
   document.body.appendChild(panel);
   const list=panel.querySelector('.fs-combo-list');
   const searchInp=panel.querySelector('.fs-combo-search-inp');
+  // En MODO CONCENTRACIÓN: el picker de trabajador busca SOLO por número de ficha →
+  // teclado numérico del sistema. Misma forma que el campo de kilos (inputmode=decimal,
+  // pero para ficha basta numeric). Solo aplica al picker pRegTrab del pesaje.
+  try{
+    if(window._pRegFocusActive&&anchor&&anchor.id==='pRegTrabPicker'){
+      searchInp.setAttribute('inputmode','numeric');
+      searchInp.setAttribute('pattern','[0-9]*');
+      searchInp.placeholder='N° de ficha…';
+    }
+  }catch(_){}
   const renderOpts={allowManual,emptyMsg:cfg.emptyMsg};
   list.innerHTML=_fsComboRenderList(allTrabs,'',renderOpts);
   list.addEventListener('click',_fsComboOnListClick);
