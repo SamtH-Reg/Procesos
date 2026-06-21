@@ -8401,6 +8401,20 @@ function onPRegTrabChange(_skipHeal){
     }
   }finally{
     if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();
+    // En MODO CONCENTRACIÓN: al elegir trabajador, foco automático en Kilos
+    // procesados → el teclado numérico abre solo y el operador escribe el peso
+    // de inmediato, sin tocar el campo. Acelera el pesaje en serie.
+    if(window._pRegFocusActive){
+      const _v=document.getElementById('pRegTrab');
+      if(_v&&_v.value&&_v.value!=='__manual__'){
+        setTimeout(()=>{
+          try{
+            const kg=document.getElementById('pRegKg');
+            if(kg&&!kg.hasAttribute('readonly')){kg.focus();kg.scrollIntoView({block:'center',behavior:'smooth'});}
+          }catch(_){}
+        },120); // pequeño delay para que el picker cierre y el DOM se asiente
+      }
+    }
   }
 }
 /** Auto-sanación del catálogo local de trabajadores cuando una ficha viene vacía.
