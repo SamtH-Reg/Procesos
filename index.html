@@ -8367,9 +8367,15 @@ function onPRegTrabChange(_skipHeal){
     const _nfF=v=>(v==null||String(v).trim()==='')?'':String(v).trim();
     // Cadena robusta: opción → armado de la línea seleccionada → armado de CUALQUIER
     // línea del turno (la persona puede estar armada en otra línea) → ficha catálogo → código.
-    const fichaCualquierLinea=_nfF(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha()));
-    const fichaPrev=_nfF(_pRegFichaDeRegistrosPrevios(id,nombreDisp)); // recupera la última ficha usada
-    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)||_nfF(entryArmado&&entryArmado.ficha)||fichaCualquierLinea||_nfF(t&&t.ficha)||fichaPrev||_nfF(t&&t.codigo);
+    // Cadena LAZY: cada fuente se evalúa solo si la anterior vino vacía. Antes
+    // _pRegFichaDeRegistrosPrevios escaneaba RT.pesajes (7000+ filas) en CADA
+    // selección, ralentizando la selección de trabajadores.
+    const fichaDisp=_nfF(opt&&opt.dataset&&opt.dataset.ficha)
+      ||_nfF(entryArmado&&entryArmado.ficha)
+      ||_nfF(_pArmFichaDeTrab(id,_pArmRegTurno(),_pArmRegFecha()))
+      ||_nfF(t&&t.ficha)
+      ||_nfF(_pRegFichaDeRegistrosPrevios(id,nombreDisp)) // solo si todo lo anterior vino vacío
+      ||_nfF(t&&t.codigo);
     badge.style.display='';
     const ini=(nombreDisp||'').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
     document.getElementById('pRegWorkerInit').textContent=ini;
@@ -8523,7 +8529,9 @@ function pRegKgPadKey(key){
   if(v==='0'&&parts.length===1)v='';
   inp.value=v+key;
 }
+let _regPesajeBusy=false;
 function regPesaje(){
+  if(_regPesajeBusy)return;                                // anti doble-tap: ignora taps repetidos durante el guardado
   if(!_pRegHasLineaSeleccionada()){
     showToast('No hay línea armada para este turno/fecha. Configura armado primero.','error');
     const ln=document.getElementById('pRegLinea');if(ln)ln.focus();
@@ -8531,6 +8539,7 @@ function regPesaje(){
   }
   const selT=document.getElementById('pRegTrab');const valT=selT.value;
   if(!valT||valT==='__manual__'){showToast('Selecciona un trabajador','error');selT.focus();return;}
+  _regPesajeBusy=true; setTimeout(()=>{_regPesajeBusy=false;},700); // libera ~0,7 s después
   let nombreTrab='',codigoTrab='',fichaTrab='',trabIdResolved=null;
   const trabId=parseInt(valT);
   if(!isNaN(trabId)){
@@ -8585,8 +8594,11 @@ function regPesaje(){
   const fr=document.getElementById('pResumenFechaTurno');
   if(fv)fv.value=rec.fecha;
   if(fr)fr.value=rec.fecha;
-  renderPesajeTable();
+  // Diferir TODOS los renders pesados: con 7000+ filas, renderPesajeTable bloquea el
+  // hilo y se notaba "lento al guardar". El operador no los está mirando ahora; ya
+  // los verá al cambiar de pestaña.
   _tbDefer(()=>{
+    try{if(typeof renderPesajeTable==='function')renderPesajeTable();}catch(_){}
     if(document.getElementById('panelAnalisis')?.classList.contains('active')&&typeof renderAnalisis==='function')renderAnalisis();
     if(window.renderPResumen)renderPResumen();
     if(window.renderPConsol)renderPConsol();
@@ -8594,8 +8606,9 @@ function regPesaje(){
   document.getElementById('pRegKg').value='';
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
-  if(typeof _pRegFlashSaveOk==='function')_pRegFlashSaveOk(); // botón verde "¡Guardado!"
-  _tbToastAfterOperativoSave('Pesaje guardado · '+kg.toString().replace('.',',')+' kg · '+rec.fecha);
+  if(typeof _pRegFlashSaveOk==='function')_pRegFlashSaveOk(); // único feedback: botón verde "¡Guardado!"
+  // Toast verde "Pesaje guardado ..." removido a pedido — el botón verde basta y
+  // ahorra el costo del toast (es ruido cuando se pesa rápido en serie).
   // Subida LIVIANA (O(1)): mapea solo esta fila, la encola en el outbox durable y
   // la sube directo. No recorre las miles de filas de RT.pesajes → registrar no se
   // ralentiza al crecer el historial. Si falla/offline, queda en el outbox y los
