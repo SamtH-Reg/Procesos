@@ -5048,6 +5048,8 @@ function idxRefreshMoldesKpis(){
   set('idxKpiOpVal',String(op));
   set('idxKpiOpSub','Con registros');
 }
+/* created_at más reciente traído por tabla → base del pull incremental (ahorro egress). */
+let _tbPullSince={moldes:null,pesajes:null,generales:null};
 async function tbManualPullMoldesPesajes(opts){
   opts=opts||{};
   const silent=!!opts.silent;
@@ -5079,6 +5081,9 @@ async function tbManualPullMoldesPesajes(opts){
       if(gotErr){console.warn('[tb pull]',t,gotErr);if(!silent&&typeof showToast==='function')showToast(t+': '+gotErr.message,'error');continue;}
       const lastSig=(typeof TBSync!=='undefined'&&TBSync._lastSig)?TBSync._lastSig[t]:'';
       RT[t]=_tbMergeRtByIdForPull(localBefore,allData,mapFor(t),{lastPushedSig:lastSig});
+      // Marca el created_at más reciente visto → base del pull INCREMENTAL (solo
+      // filas nuevas), que ahorra egress. ISO 8601 compara lexicográficamente bien.
+      try{let mx=_tbPullSince[t]||'';for(const r of allData){const c=r&&r.created_at;if(c&&c>mx)mx=c;}if(mx)_tbPullSince[t]=mx;}catch(_){}
     }
     _rtPurgeDemoFromRt();
     // El pull re-trae TODO el historial de la nube; poda los pesajes a lo reciente
@@ -5137,6 +5142,65 @@ async function tbPullCloudMultiDevice(opts){
   finally{_tbCloudPullMultiInFlight=false;}
 }
 window.tbPullCloudMultiDevice=tbPullCloudMultiDevice;
+/* ══ Pull INCREMENTAL de operativos (ahorro de egress) ══
+   Trae SOLO las filas nuevas (created_at > último visto) en vez de todo el
+   historial. created_at lo pone el servidor → sin desfase de reloj entre tablets.
+   Margen de 5 s hacia atrás para no perder inserts del mismo segundo (los repetidos
+   se descartan por id). Realtime maneja ediciones/borrados en vivo; una
+   reconciliación completa periódica (cada ~30 min) capta lo que Realtime perdió. */
+async function _tbIncrementalPullOperativos(silent){
+  if(!_tbSb||!_tbUser||!tbNavigatorOnline())return false;
+  const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
+  let changed=false;
+  for(const t of['moldes','pesajes','generales']){
+    const since=_tbPullSince[t];
+    if(!since){ // sin base aún → no hay pull completo previo; saltar (lo hará el completo)
+      continue;
+    }
+    try{
+      const sinceMargin=new Date(Date.parse(since)-5000).toISOString(); // -5 s de seguridad
+      const map=mapFor(t);
+      const arr=Array.isArray(RT[t])?RT[t]:(RT[t]=[]);
+      const existing=new Set(arr.map(r=>String(r&&r.id)));
+      let from=0;const CHUNK=1000;let mx=since;
+      while(true){
+        const{data,error}=await _tbSb.from(t).select('*').gt('created_at',sinceMargin).order('created_at',{ascending:true}).range(from,from+CHUNK-1);
+        if(error){console.warn('[tb incr pull]',t,error.message);break;}
+        const chunk=Array.isArray(data)?data:[];
+        if(!chunk.length)break;
+        chunk.forEach(row=>{
+          const c=row&&row.created_at;if(c&&c>mx)mx=c;
+          const m=map(row);
+          if(m&&m.id!=null&&!existing.has(String(m.id))){arr.unshift(m);existing.add(String(m.id));changed=true;}
+        });
+        if(chunk.length<CHUNK)break;
+        from+=CHUNK;
+      }
+      _tbPullSince[t]=mx;
+    }catch(e){console.warn('[tb incr pull]',t,e&&e.message||e);}
+  }
+  if(changed){
+    try{_rtPruneLocalPesajes();}catch(_){}
+    try{rtSave({skipCloudSchedule:true});}catch(_){}
+    try{if(typeof idxRefreshMoldesKpis==='function')idxRefreshMoldesKpis();}catch(_){}
+    try{const pv=document.getElementById('pVer');if(pv&&!pv.classList.contains('hidden')&&typeof renderPesajeTable==='function')renderPesajeTable();}catch(_){}
+  }
+  return changed;
+}
+window._tbIncrementalPullOperativos=_tbIncrementalPullOperativos;
+/* Tick periódico liviano: incremental casi siempre; reconciliación completa +
+   catálogos cada ~30 min (1 de cada 15 ticks de 2 min). */
+let _tbPeriodicCount=0;
+async function _tbPeriodicPull(){
+  if(!navigator.onLine||!_tbSb||!_tbUser)return;
+  _tbPeriodicCount++;
+  if(_tbPeriodicCount%15===0||!_tbPullSince.pesajes){
+    try{await tbPullCloudMultiDevice({silent:true});}catch(e){console.warn('[periodic full]',e);}
+  }else{
+    try{await _tbIncrementalPullOperativos(true);}catch(e){console.warn('[periodic incr]',e);}
+  }
+}
+window._tbPeriodicPull=_tbPeriodicPull;
 function idxFsActive(){
   return !!(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement);
 }
@@ -13875,7 +13939,7 @@ window.addEventListener('offline',()=>{
   _tbMarkPendingPush(_tbIsPendingPush());
 });
 /* Tablet: la nube es la fuente entre dispositivos — pull periódico con sesión (además del push cada 3 min). */
-setInterval(()=>{try{if(!navigator.onLine||!_tbSb||!_tbUser)return;void tbPullCloudMultiDevice({silent:true});}catch(e){console.warn('[tb periodic cloud pull]',e);}},120000);
+setInterval(()=>{try{void _tbPeriodicPull();}catch(e){console.warn('[tb periodic cloud pull]',e);}},120000); // incremental (egress mínimo); completo+catálogos cada ~30 min
 /* Respaldo periódico a la nube (varios dispositivos / pestañas en segundo plano). */
 setInterval(()=>{
   try{
