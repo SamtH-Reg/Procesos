@@ -8655,7 +8655,7 @@ function _pRegFlashSaveOk(){
   btn.classList.add('p-reg-save-ok');
   btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg> ¡Guardado!';
   clearTimeout(btn._okT);
-  btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},1100);
+  btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},2500);
 }
 window._pRegFlashSaveOk=_pRegFlashSaveOk;
 function pRegFocusEnter(){
