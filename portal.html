@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0b1220">
+<title>Portal del Trabajador · Friosur</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<style>
+:root{
+  --bg:#0b1220; --bg2:#0f172a; --card:#111c33; --card2:#16233f;
+  --line:#1e2d4d; --txt:#e8eefb; --mut:#93a3c4; --mut2:#6b7ca3;
+  --acc:#3b82f6; --acc2:#22d3ee; --grad:linear-gradient(135deg,#3b82f6,#22d3ee);
+  --ok:#16a34a; --okg:linear-gradient(135deg,#16a34a,#34d399);
+  --warn:#f59e0b; --bad:#ef4444; --r:18px; --sh:0 18px 40px -18px rgba(0,0,0,.65);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:radial-gradient(1200px 700px at 80% -10%,#16306a44,transparent),
+             radial-gradient(900px 600px at -10% 110%,#0e7c8a33,transparent),var(--bg);
+  color:var(--txt);min-height:100%;overflow-x:hidden;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
+.hide{display:none!important}
+button{font-family:inherit;cursor:pointer;border:0}
+input,select{font-family:inherit}
+.center-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+
+/* Brand */
+.brand{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:18px}
+.brand .logo{width:46px;height:46px;border-radius:14px;background:var(--grad);
+  display:grid;place-items:center;font-size:24px;box-shadow:var(--sh)}
+.brand h1{font-size:18px;margin:0;letter-spacing:.3px}
+.brand p{margin:0;font-size:12px;color:var(--mut)}
+
+/* Login card */
+.login-card{width:100%;max-width:380px;background:linear-gradient(180deg,var(--card),var(--bg2));
+  border:1px solid var(--line);border-radius:24px;padding:26px 22px 22px;box-shadow:var(--sh)}
+.login-card h2{margin:0 0 4px;font-size:20px}
+.login-card .sub{margin:0 0 20px;font-size:13px;color:var(--mut)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--mut);margin:0 0 6px 2px;font-weight:600;letter-spacing:.2px}
+.field input{width:100%;padding:14px 14px;font-size:17px;border-radius:14px;background:#0c1730;
+  border:1px solid var(--line);color:var(--txt);outline:none;transition:border .15s,box-shadow .15s}
+.field input:focus{border-color:var(--acc);box-shadow:0 0 0 4px #3b82f633}
+.btn{width:100%;padding:14px;font-size:16px;font-weight:700;border-radius:14px;color:#fff;
+  background:var(--grad);box-shadow:0 12px 26px -12px #3b82f6aa;transition:transform .08s,filter .15s}
+.btn:active{transform:translateY(1px) scale(.995)}
+.btn[disabled]{filter:grayscale(.4) brightness(.8);cursor:default}
+.btn-ghost{background:transparent;color:var(--mut);box-shadow:none;font-weight:600;font-size:13px}
+.btn-ghost:hover{color:var(--txt)}
+.msg{font-size:13px;margin-top:12px;text-align:center;min-height:18px}
+.msg.err{color:#fca5a5}
+.msg.ok{color:#86efac}
+.login-foot{margin-top:16px;text-align:center}
+
+/* Top bar (dashboard) */
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.avatar{width:48px;height:48px;border-radius:14px;background:var(--grad);display:grid;place-items:center;
+  font-weight:800;font-size:18px;flex:0 0 auto;box-shadow:var(--sh)}
+.who{flex:1;min-width:0}
+.who .nm{font-weight:800;font-size:17px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who .fi{font-size:12px;color:var(--mut)}
+.who .fi b{color:var(--acc2)}
+.logout{padding:9px 14px;border-radius:12px;background:#16233f;border:1px solid var(--line);
+  color:var(--mut);font-weight:700;font-size:13px}
+.logout:hover{color:var(--txt)}
+
+/* Range filter */
+.rangebar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.chip{padding:9px 14px;border-radius:999px;background:#142244;border:1px solid var(--line);
+  color:var(--mut);font-weight:700;font-size:13px;transition:.12s}
+.chip.on{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 8px 18px -10px #3b82f6}
+.chip:hover{color:var(--txt)}
+.daterange{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.daterange input{padding:9px 10px;border-radius:11px;background:#0c1730;border:1px solid var(--line);
+  color:var(--txt);font-size:13px}
+.daterange .lbl{font-size:12px;color:var(--mut2)}
+
+/* KPI grid */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);
+  border-radius:var(--r);padding:16px;position:relative;overflow:hidden}
+.kpi .ico{position:absolute;right:10px;top:8px;font-size:26px;opacity:.18}
+.kpi .lab{font-size:12px;color:var(--mut);font-weight:700;letter-spacing:.3px}
+.kpi .val{font-size:26px;font-weight:800;margin-top:4px;line-height:1.1}
+.kpi .val small{font-size:14px;color:var(--mut);font-weight:700}
+.kpi .sub{font-size:11px;color:var(--mut2);margin-top:2px}
+.kpi.lead{background:var(--okg);border-color:transparent}
+.kpi.lead .lab,.kpi.lead .sub{color:#eafff3}
+.kpi.lead .val{color:#fff}
+
+/* Cards / charts */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.panel{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);
+  border-radius:var(--r);padding:16px}
+.panel h3{margin:0 0 14px;font-size:14px;display:flex;align-items:center;gap:8px}
+.panel h3 .t{flex:1}
+.panel h3 .hint{font-size:11px;color:var(--mut2);font-weight:600}
+.empty{color:var(--mut2);font-size:13px;text-align:center;padding:24px 0}
+
+/* SVG chart helpers */
+.chart{width:100%;display:block}
+.bar-row{display:flex;align-items:center;gap:10px;margin:9px 0}
+.bar-row .nm{width:96px;font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}
+.bar-track{flex:1;height:14px;background:#0c1730;border-radius:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:8px;background:var(--grad);min-width:3px;transition:width .5s}
+.bar-fill.alt{background:linear-gradient(90deg,#22d3ee,#34d399)}
+.bar-row .vl{width:70px;text-align:right;font-size:12px;font-weight:700;flex:0 0 auto}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;color:var(--mut);font-weight:700;font-size:11px;letter-spacing:.4px;
+  padding:8px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card)}
+.tbl td{padding:9px 8px;border-bottom:1px solid #16233f55}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .kgc{text-align:right;font-weight:700;color:var(--acc2)}
+.tbl-wrap{max-height:340px;overflow:auto;border-radius:12px}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;
+  background:#16233f;color:var(--mut)}
+
+/* Admin */
+.admin-tag{position:fixed;right:14px;bottom:14px;font-size:11px;color:var(--mut2);
+  background:#0c1730cc;border:1px solid var(--line);padding:7px 11px;border-radius:999px;z-index:50}
+.admin-tag:hover{color:var(--txt)}
+.adm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.adm-grid{grid-template-columns:1fr}}
+.search-in{width:100%;padding:12px;border-radius:12px;background:#0c1730;border:1px solid var(--line);
+  color:var(--txt);font-size:15px;margin-bottom:10px}
+.wlist{max-height:380px;overflow:auto;display:flex;flex-direction:column;gap:7px}
+.wrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#0e1a35;
+  border:1px solid var(--line);cursor:pointer;transition:.12s}
+.wrow:hover{border-color:var(--acc);background:#122347}
+.wrow .nm{flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wrow .meta{font-size:11px;color:var(--mut2)}
+.wrow .tot{font-size:12px;font-weight:800;color:var(--acc2)}
+.perfil-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;
+  background:#0e1a35;border:1px solid var(--line);margin-bottom:8px}
+.perfil-row .nm{flex:1;min-width:0}
+.perfil-row .nm b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.perfil-row .nm span{font-size:11px;color:var(--mut2)}
+.keytag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:800;color:#fde68a;
+  background:#1c1303;border:1px solid #3a2a06;padding:4px 10px;border-radius:9px;letter-spacing:1px}
+.mini{padding:7px 10px;border-radius:10px;font-size:12px;font-weight:700;border:1px solid var(--line);
+  background:#16233f;color:var(--mut)}
+.mini:hover{color:var(--txt)}
+.mini.danger{color:#fca5a5;border-color:#5b1d1d;background:#260d0d}
+.mini.go{color:#fff;background:var(--grad);border-color:transparent}
+.frow{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:6px}
+.frow .field{flex:1;margin:0;min-width:120px}
+.note{font-size:12px;color:var(--mut);background:#0c1730;border:1px solid var(--line);
+  border-radius:12px;padding:11px 12px;line-height:1.5}
+.note b{color:var(--acc2)}
+.linkbox{display:flex;gap:8px;margin-top:8px}
+.linkbox input{flex:1;padding:10px;border-radius:11px;background:#0c1730;border:1px solid var(--line);
+  color:var(--mut);font-size:12px}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid #ffffff55;border-top-color:#fff;
+  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
+  background:#0f1d3a;border:1px solid var(--line);color:var(--txt);padding:12px 18px;border-radius:14px;
+  box-shadow:var(--sh);font-size:14px;z-index:200;transition:.25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ok{border-color:#1f7a45;background:#0e2a1b}
+.toast.err{border-color:#7a2020;background:#2a0e0e}
+.fadein{animation:fi .4s ease}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN TRABAJADOR ============ -->
+<div id="viewLogin" class="center-screen">
+  <div class="login-card fadein">
+    <div class="brand" style="margin-bottom:22px">
+      <div class="logo">🐟</div>
+      <div style="text-align:left">
+        <h1>Portal del Trabajador</h1>
+        <p>Friosur SpA · Producción</p>
+      </div>
+    </div>
+    <h2>Ingresa tus kilos</h2>
+    <p class="sub">Usa tu número de ficha y tu clave personal.</p>
+    <div class="field">
+      <label>N° de ficha</label>
+      <input id="inFicha" inputmode="numeric" autocomplete="off" placeholder="Ej: 12">
+    </div>
+    <div class="field">
+      <label>Clave</label>
+      <input id="inPin" type="password" inputmode="text" autocomplete="off" placeholder="Tu clave">
+    </div>
+    <button class="btn" id="btnLogin">Entrar</button>
+    <div class="msg" id="loginMsg"></div>
+    <div class="login-foot">
+      <button class="btn-ghost" id="btnForgot">¿No tienes clave? Pídela al supervisor</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DASHBOARD TRABAJADOR ============ -->
+<div id="viewDash" class="wrap hide">
+  <div class="topbar">
+    <div class="avatar" id="dAvatar">·</div>
+    <div class="who">
+      <div class="nm" id="dNombre">—</div>
+      <div class="fi">Ficha <b id="dFicha">—</b></div>
+    </div>
+    <button class="logout" id="btnLogout">Salir</button>
+  </div>
+
+  <div class="rangebar">
+    <button class="chip" data-r="hoy">Hoy</button>
+    <button class="chip" data-r="sem">7 días</button>
+    <button class="chip on" data-r="mes">Este mes</button>
+    <button class="chip" data-r="todo">Todo</button>
+    <div class="daterange">
+      <span class="lbl">Desde</span><input type="date" id="dDesde">
+      <span class="lbl">Hasta</span><input type="date" id="dHasta">
+      <button class="chip" id="btnAplicar">Aplicar</button>
+    </div>
+  </div>
+
+  <div id="dashBody">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="panel">
+        <h3><span class="t">📅 Kilos por día</span><span class="hint" id="hintDia"></span></h3>
+        <div id="chartDia"></div>
+      </div>
+      <div class="panel">
+        <h3><span class="t">🐟 Kilos por especie</span></h3>
+        <div id="chartEsp"></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h3><span class="t">⚖️ Distribución por rango de kilos</span><span class="hint">tamaño de cada pesaje</span></h3>
+        <div id="chartRango"></div>
+      </div>
+      <div class="panel">
+        <h3><span class="t">📋 Pesajes recientes</span><span class="hint" id="hintTotal"></span></h3>
+        <div class="tbl-wrap"><table class="tbl" id="tblPes"></table></div>
+      </div>
+    </div>
+  </div>
+  <div id="dashLoading" class="empty" style="padding:60px 0"><span class="spin"></span> Cargando tus datos…</div>
+</div>
+
+<!-- ============ LOGIN ADMIN ============ -->
+<div id="viewAdminLogin" class="center-screen hide">
+  <div class="login-card fadein">
+    <div class="brand" style="margin-bottom:22px">
+      <div class="logo" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">🔐</div>
+      <div style="text-align:left">
+        <h1>Administración</h1>
+        <p>Gestión de claves del portal</p>
+      </div>
+    </div>
+    <h2>Acceso de supervisor</h2>
+    <p class="sub">Inicia sesión con tu cuenta del sistema.</p>
+    <div class="field"><label>Correo</label><input id="aEmail" type="email" autocomplete="username" placeholder="correo@friosur.cl"></div>
+    <div class="field"><label>Contraseña</label><input id="aPass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+    <button class="btn" id="btnAdminLogin">Entrar</button>
+    <div class="msg" id="adminMsg"></div>
+    <div class="login-foot"><button class="btn-ghost" id="btnAdminBack">← Volver al portal</button></div>
+  </div>
+</div>
+
+<!-- ============ PANEL ADMIN ============ -->
+<div id="viewAdmin" class="wrap hide">
+  <div class="topbar">
+    <div class="avatar" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">🔐</div>
+    <div class="who"><div class="nm">Administración del portal</div><div class="fi" id="aWho">—</div></div>
+    <button class="logout" id="btnAdminLogout">Salir</button>
+  </div>
+
+  <div class="note" style="margin-bottom:14px">
+    Comparte este enlace con cada trabajador. Cada uno entra con <b>su ficha</b> y la <b>clave</b> que le creaste aquí.
+    <div class="linkbox">
+      <input id="portalLink" readonly>
+      <button class="mini go" id="btnCopyLink">Copiar enlace</button>
+    </div>
+  </div>
+
+  <div class="adm-grid">
+    <!-- Buscar trabajador -->
+    <div class="panel">
+      <h3><span class="t">👷 Agregar trabajador</span></h3>
+      <input class="search-in" id="aBuscar" placeholder="Buscar por nombre o ficha…">
+      <div class="wlist" id="aWlist"><div class="empty">Escribe para buscar trabajadores de los pesajes.</div></div>
+    </div>
+
+    <!-- Perfiles existentes -->
+    <div class="panel">
+      <h3><span class="t">🔑 Claves creadas</span><span class="hint" id="aCount"></span></h3>
+      <div id="aPerfiles"><div class="empty">Aún no has creado claves.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal crear clave -->
+<div id="modalCrear" class="center-screen hide" style="position:fixed;inset:0;background:#05070ecc;z-index:300;backdrop-filter:blur(3px)">
+  <div class="login-card fadein" style="max-width:420px">
+    <h2 id="mcTitle">Crear clave</h2>
+    <p class="sub" id="mcSub">—</p>
+    <div class="frow">
+      <div class="field"><label>N° de ficha</label><input id="mcFicha"></div>
+      <div class="field"><label>Clave personal</label><input id="mcPin" placeholder="4+ caracteres"></div>
+    </div>
+    <button class="mini" id="mcGen" style="margin:2px 0 14px">🎲 Generar clave</button>
+    <button class="btn" id="mcSave">Guardar clave</button>
+    <div class="msg" id="mcMsg"></div>
+    <div class="login-foot"><button class="btn-ghost" id="mcCancel">Cancelar</button></div>
+  </div>
+</div>
+
+<button class="admin-tag" id="adminTag">⚙️ Soy supervisor</button>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+"use strict";
+const SB_URL='https://etiltewnmupnifedhyld.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
+const PORTAL_URL='https://samth-reg.github.io/Procesos/portal.html';
+let sb=null;
+try{ sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true}}); }
+catch(e){ console.error('SB init',e); }
+
+const $=id=>document.getElementById(id);
+const views={login:$('viewLogin'),dash:$('viewDash'),adminLogin:$('viewAdminLogin'),admin:$('viewAdmin')};
+function show(v){ for(const k in views) views[k].classList.toggle('hide',k!==v); }
+function toast(msg,kind){ const t=$('toast'); t.textContent=msg; t.className='toast show '+(kind||''); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2600); }
+
+/* ===== helpers ===== */
+const fmt=n=>{ n=Number(n)||0; return n.toLocaleString('es-CL',{maximumFractionDigits:1}); };
+const initials=s=>{ s=String(s||'').trim(); const p=s.split(/[ ,]+/).filter(Boolean); return ((p[0]||'·')[0]+(p[1]||'')[0]||'').toUpperCase(); };
+function fechaISO(d){ return d.toISOString().slice(0,10); }
+function hoyISO(){ return fechaISO(new Date()); }
+function nombreBonito(s){ s=String(s||'').trim(); if(s.includes(',')){ const[ap,no]=s.split(','); return ((no||'').trim()+' '+(ap||'').trim()).trim(); } return s; }
+
+/* ============================================================
+   PORTAL DEL TRABAJADOR
+   ============================================================ */
+let WK=null;            // {ficha,pin,nombre,trab_id}
+let WK_RANGO='mes';
+
+function setRangoInputs(r){
+  const hoy=new Date(); let d=new Date(hoy);
+  if(r==='hoy') d=new Date(hoy);
+  else if(r==='sem'){ d=new Date(hoy); d.setDate(d.getDate()-6); }
+  else if(r==='mes'){ d=new Date(hoy.getFullYear(),hoy.getMonth(),1); }
+  else if(r==='todo'){ d=new Date(2024,0,1); }
+  $('dDesde').value=fechaISO(d);
+  $('dHasta').value=hoyISO();
+}
+
+async function doWorkerLogin(){
+  const ficha=$('inFicha').value.trim(), pin=$('inPin').value;
+  const msg=$('loginMsg');
+  if(!ficha||!pin){ msg.className='msg err'; msg.textContent='Completa ficha y clave.'; return; }
+  const btn=$('btnLogin'); btn.disabled=true; const orig=btn.textContent; btn.innerHTML='<span class="spin"></span>';
+  msg.textContent='';
+  try{
+    const {data,error}=await sb.rpc('portal_login',{p_ficha:ficha,p_pin:pin});
+    if(error) throw error;
+    if(!data||!data.length){ msg.className='msg err'; msg.textContent='Ficha o clave incorrecta.'; return; }
+    const row=data[0];
+    WK={ficha:row.ficha,pin,nombre:row.nombre,trab_id:row.trab_id};
+    try{ sessionStorage.setItem('wk',JSON.stringify(WK)); }catch(_){}
+    enterDash();
+  }catch(e){
+    console.error(e); msg.className='msg err';
+    msg.textContent='No se pudo conectar. Revisa tu internet.';
+  }finally{ btn.disabled=false; btn.textContent=orig; }
+}
+
+function enterDash(){
+  show('dash');
+  $('dNombre').textContent=nombreBonito(WK.nombre);
+  $('dFicha').textContent=WK.ficha;
+  $('dAvatar').textContent=initials(WK.nombre);
+  WK_RANGO='mes'; setRangoInputs('mes');
+  document.querySelectorAll('.rangebar .chip[data-r]').forEach(c=>c.classList.toggle('on',c.dataset.r==='mes'));
+  loadDash();
+}
+
+async function loadDash(){
+  $('dashBody').style.display='none'; $('dashLoading').classList.remove('hide');
+  const desde=$('dDesde').value||null, hasta=$('dHasta').value||null;
+  try{
+    const {data,error}=await sb.rpc('portal_pesajes',{p_ficha:WK.ficha,p_pin:WK.pin,p_desde:desde,p_hasta:hasta});
+    if(error) throw error;
+    renderDash(data||[]);
+  }catch(e){
+    console.error(e); toast('No se pudieron cargar los datos','err');
+    renderDash([]);
+  }finally{
+    $('dashLoading').classList.add('hide'); $('dashBody').style.display='';
+  }
+}
+
+function renderDash(rows){
+  const total=rows.reduce((a,r)=>a+(Number(r.kg)||0),0);
+  const n=rows.length;
+  const prom=n?total/n:0;
+  // por día
+  const byDia={};
+  rows.forEach(r=>{ const k=r.fecha||'?'; byDia[k]=(byDia[k]||0)+(Number(r.kg)||0); });
+  const dias=Object.keys(byDia).sort();
+  let mejorDia=null,mejorKg=-1;
+  dias.forEach(d=>{ if(byDia[d]>mejorKg){mejorKg=byDia[d];mejorDia=d;} });
+  const hoy=hoyISO(); const kgHoy=byDia[hoy]||0;
+  // por especie
+  const byEsp={};
+  rows.forEach(r=>{ const k=(r.especie||'—').toString().trim()||'—'; byEsp[k]=(byEsp[k]||0)+(Number(r.kg)||0); });
+
+  // KPIs
+  $('kpis').innerHTML=`
+    <div class="kpi lead"><div class="ico">⚖️</div><div class="lab">TOTAL KILOS</div>
+      <div class="val">${fmt(total)} <small>kg</small></div><div class="sub">en el período</div></div>
+    <div class="kpi"><div class="ico">📦</div><div class="lab">PESAJES</div>
+      <div class="val">${fmt(n)}</div><div class="sub">registros</div></div>
+    <div class="kpi"><div class="ico">📈</div><div class="lab">PROMEDIO</div>
+      <div class="val">${fmt(prom)} <small>kg</small></div><div class="sub">por pesaje</div></div>
+    <div class="kpi"><div class="ico">🏆</div><div class="lab">MEJOR DÍA</div>
+      <div class="val">${mejorDia?fmt(mejorKg):'—'} <small>kg</small></div>
+      <div class="sub">${mejorDia?fmtFechaCorta(mejorDia):'sin datos'}</div></div>
+    <div class="kpi"><div class="ico">☀️</div><div class="lab">HOY</div>
+      <div class="val">${fmt(kgHoy)} <small>kg</small></div><div class="sub">${fmtFechaCorta(hoy)}</div></div>`;
+
+  $('hintDia').textContent=dias.length?dias.length+' días':'';
+  $('hintTotal').textContent=n?n+' pesajes':'';
+
+  // chart por día (barras verticales SVG)
+  $('chartDia').innerHTML = dias.length? svgBars(dias.map(d=>({label:fmtDiaCorto(d),value:byDia[d]}))) : emptyMsg();
+  // chart especie (barras horizontales)
+  const espArr=Object.entries(byEsp).map(([k,v])=>({label:k,value:v})).sort((a,b)=>b.value-a.value);
+  $('chartEsp').innerHTML = espArr.length? hbars(espArr,total) : emptyMsg();
+  // chart rango de kilos (histograma del tamaño de cada pesaje)
+  $('chartRango').innerHTML = n? rangoChart(rows) : emptyMsg();
+  // tabla
+  $('tblPes').innerHTML = renderTabla(rows);
+}
+
+function emptyMsg(){ return '<div class="empty">Sin pesajes en este período.</div>'; }
+function fmtFechaCorta(iso){ if(!iso)return''; const[a,m,d]=iso.split('-'); return `${d}/${m}/${a}`; }
+function fmtDiaCorto(iso){ const[a,m,d]=iso.split('-'); return `${d}/${m}`; }
+
+/* SVG barras verticales */
+function svgBars(items){
+  const max=Math.max(...items.map(i=>i.value),1);
+  const W=Math.max(items.length*44,260), H=180, pad=26, bw=Math.min(30,(W-pad)/items.length-8);
+  let bars='',labels='';
+  items.forEach((it,i)=>{
+    const x=pad+i*((W-pad)/items.length);
+    const h=Math.max(3,(it.value/max)*(H-44));
+    const y=H-22-h;
+    bars+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" fill="url(#g1)"></rect>
+           <text x="${x+bw/2}" y="${y-4}" text-anchor="middle" font-size="9" fill="#93a3c4">${fmt(it.value)}</text>`;
+    if(items.length<=16||i%Math.ceil(items.length/16)===0)
+      labels+=`<text x="${x+bw/2}" y="${H-7}" text-anchor="middle" font-size="9" fill="#6b7ca3">${it.label}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="min-width:100%;${items.length>10?'':''}">
+    <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>
+    ${bars}${labels}</svg>`;
+}
+
+/* barras horizontales */
+function hbars(items,total){
+  const max=Math.max(...items.map(i=>i.value),1);
+  return items.slice(0,8).map((it,idx)=>{
+    const pct=(it.value/max)*100;
+    const sh=total?Math.round(it.value/total*100):0;
+    return `<div class="bar-row"><div class="nm" title="${it.label}">${it.label}</div>
+      <div class="bar-track"><div class="bar-fill ${idx%2?'alt':''}" style="width:${pct}%"></div></div>
+      <div class="vl">${fmt(it.value)}<span style="color:#6b7ca3;font-weight:600"> ${sh}%</span></div></div>`;
+  }).join('');
+}
+
+/* histograma rangos de kilos (tamaño de pesaje) */
+function rangoChart(rows){
+  const buckets=[[0,2],[2,4],[4,6],[6,8],[8,10],[10,1e9]];
+  const labels=['0–2','2–4','4–6','6–8','8–10','10+'];
+  const cnt=buckets.map(()=>0);
+  rows.forEach(r=>{ const k=Number(r.kg)||0; for(let i=0;i<buckets.length;i++){ if(k>=buckets[i][0]&&k<buckets[i][1]){cnt[i]++;break;} } });
+  const items=labels.map((l,i)=>({label:l+' kg',value:cnt[i]}));
+  const max=Math.max(...cnt,1);
+  return items.map((it,idx)=>`<div class="bar-row"><div class="nm">${it.label}</div>
+    <div class="bar-track"><div class="bar-fill ${idx%2?'alt':''}" style="width:${(it.value/max)*100}%"></div></div>
+    <div class="vl">${it.value}</div></div>`).join('');
+}
+
+function renderTabla(rows){
+  const sorted=rows.slice().sort((a,b)=>{
+    const ka=(a.fecha||'')+(a.hora||''), kb=(b.fecha||'')+(b.hora||''); return ka<kb?1:-1;
+  }).slice(0,150);
+  let h='<thead><tr><th>Fecha</th><th>Hora</th><th>Especie</th><th>Tipo</th><th style="text-align:right">Kg</th></tr></thead><tbody>';
+  if(!sorted.length) return '<tbody><tr><td colspan="5" class="empty">Sin pesajes.</td></tr></tbody>';
+  sorted.forEach(r=>{
+    h+=`<tr><td>${fmtFechaCorta(r.fecha)}</td><td>${(r.hora||'').slice(0,5)}</td>
+      <td><span class="pill">${r.especie||'—'}</span></td><td style="color:#93a3c4">${r.tipo||'—'}</td>
+      <td class="kgc">${fmt(r.kg)}</td></tr>`;
+  });
+  return h+'</tbody>';
+}
+
+/* ============================================================
+   ADMIN
+   ============================================================ */
+let AD_PERFILES=[];
+let AD_SEL=null;
+
+async function checkAdminSession(){
+  if(!sb) return false;
+  try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(_){ return false; }
+}
+
+async function doAdminLogin(){
+  const email=$('aEmail').value.trim(), pass=$('aPass').value;
+  const msg=$('adminMsg');
+  if(!email||!pass){ msg.className='msg err'; msg.textContent='Completa correo y contraseña.'; return; }
+  const btn=$('btnAdminLogin'); btn.disabled=true; const o=btn.textContent; btn.innerHTML='<span class="spin"></span>'; msg.textContent='';
+  try{
+    const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error) throw error;
+    enterAdmin(data.user);
+  }catch(e){
+    console.error(e); msg.className='msg err';
+    msg.textContent=(e&&e.message&&/invalid/i.test(e.message))?'Correo o contraseña incorrectos.':'No se pudo iniciar sesión.';
+  }finally{ btn.disabled=false; btn.textContent=o; }
+}
+
+async function enterAdmin(user){
+  show('admin');
+  $('aWho').textContent=(user&&user.email)||'sesión activa';
+  $('portalLink').value=PORTAL_URL;
+  await loadPerfiles();
+}
+
+async function loadPerfiles(){
+  try{
+    const {data,error}=await sb.from('portal_perfiles').select('*').order('created_at',{ascending:false});
+    if(error) throw error;
+    AD_PERFILES=data||[];
+    renderPerfiles();
+  }catch(e){ console.error(e); toast('No se pudieron cargar las claves','err'); }
+}
+
+function renderPerfiles(){
+  $('aCount').textContent=AD_PERFILES.length?AD_PERFILES.length+' activas':'';
+  if(!AD_PERFILES.length){ $('aPerfiles').innerHTML='<div class="empty">Aún no has creado claves.</div>'; return; }
+  $('aPerfiles').innerHTML=AD_PERFILES.map(p=>`
+    <div class="perfil-row">
+      <div class="nm"><b title="${p.nombre}">${nombreBonito(p.nombre)}</b><span>Ficha ${p.ficha}${p.activo?'':' · INACTIVA'}</span></div>
+      <span class="keytag">${p.pin}</span>
+      <button class="mini" data-act="toggle" data-id="${p.id}">${p.activo?'Pausar':'Activar'}</button>
+      <button class="mini danger" data-act="del" data-id="${p.id}">✕</button>
+    </div>`).join('');
+}
+
+let _buscarT=null;
+async function buscarTrabajadores(){
+  const q=$('aBuscar').value.trim();
+  const box=$('aWlist');
+  box.innerHTML='<div class="empty"><span class="spin"></span> Buscando…</div>';
+  try{
+    const {data,error}=await sb.rpc('portal_admin_trabajadores',{p_busca:q||null});
+    if(error) throw error;
+    const rows=data||[];
+    if(!rows.length){ box.innerHTML='<div class="empty">Sin coincidencias.</div>'; return; }
+    box.innerHTML=rows.map(r=>{
+      const yaTiene=AD_PERFILES.some(p=>p.trab_id===r.trab_id);
+      return `<div class="wrow" data-tid="${r.trab_id}" data-nombre="${encodeURIComponent(r.nombre)}" data-ficha="${r.ficha||''}">
+        <div class="nm" title="${r.nombre}">${nombreBonito(r.nombre)}</div>
+        <div class="meta">F.${r.ficha||'—'} · ${fmt(r.n)} pes.</div>
+        <div class="tot">${fmt(r.total)} kg</div>
+        ${yaTiene?'<span class="pill" style="color:#86efac">✓ con clave</span>':'<button class="mini go">+ Clave</button>'}
+      </div>`;
+    }).join('');
+  }catch(e){ console.error(e); box.innerHTML='<div class="empty">Error al buscar.</div>'; }
+}
+
+function abrirCrear(tid,nombre,ficha){
+  AD_SEL={trab_id:Number(tid),nombre,ficha:ficha||''};
+  $('mcTitle').textContent='Crear clave';
+  $('mcSub').textContent=nombreBonito(nombre);
+  $('mcFicha').value=ficha||'';
+  $('mcPin').value=genPin();
+  $('mcMsg').textContent='';
+  $('modalCrear').classList.remove('hide');
+}
+function genPin(){ const n=Math.floor(1000+Math.random()*9000); return String(n); }
+
+async function guardarClave(){
+  const ficha=$('mcFicha').value.trim(), pin=$('mcPin').value.trim();
+  const msg=$('mcMsg');
+  if(!ficha){ msg.className='msg err'; msg.textContent='Falta la ficha.'; return; }
+  if(!pin||pin.length<3){ msg.className='msg err'; msg.textContent='La clave debe tener al menos 3 caracteres.'; return; }
+  const btn=$('mcSave'); btn.disabled=true; const o=btn.textContent; btn.innerHTML='<span class="spin"></span>'; msg.textContent='';
+  try{
+    // ¿ya existe perfil para este trab_id? -> update
+    const exist=AD_PERFILES.find(p=>p.trab_id===AD_SEL.trab_id);
+    let error;
+    if(exist){
+      ({error}=await sb.from('portal_perfiles').update({ficha,pin,activo:true,nombre:AD_SEL.nombre}).eq('id',exist.id));
+    }else{
+      ({error}=await sb.from('portal_perfiles').insert({
+        trab_id:AD_SEL.trab_id,nombre:AD_SEL.nombre,ficha,pin,activo:true,
+        creado_por:(await sb.auth.getUser()).data.user?.email||'admin'
+      }));
+    }
+    if(error) throw error;
+    $('modalCrear').classList.add('hide');
+    toast('Clave guardada ✓','ok');
+    await loadPerfiles();
+    if($('aBuscar').value.trim()) buscarTrabajadores();
+  }catch(e){
+    console.error(e); msg.className='msg err'; msg.textContent='No se pudo guardar: '+(e.message||'error');
+  }finally{ btn.disabled=false; btn.textContent=o; }
+}
+
+async function perfilAccion(act,id){
+  const p=AD_PERFILES.find(x=>String(x.id)===String(id)); if(!p) return;
+  try{
+    if(act==='toggle'){
+      const {error}=await sb.from('portal_perfiles').update({activo:!p.activo}).eq('id',id);
+      if(error) throw error; toast(p.activo?'Clave pausada':'Clave activada','ok');
+    }else if(act==='del'){
+      if(!confirm('¿Eliminar la clave de '+nombreBonito(p.nombre)+'?')) return;
+      const {error}=await sb.from('portal_perfiles').delete().eq('id',id);
+      if(error) throw error; toast('Clave eliminada','ok');
+    }
+    await loadPerfiles();
+    if($('aBuscar').value.trim()) buscarTrabajadores();
+  }catch(e){ console.error(e); toast('No se pudo actualizar','err'); }
+}
+
+/* ============================================================
+   EVENTOS
+   ============================================================ */
+$('btnLogin').onclick=doWorkerLogin;
+$('inPin').addEventListener('keydown',e=>{ if(e.key==='Enter') doWorkerLogin(); });
+$('inFicha').addEventListener('keydown',e=>{ if(e.key==='Enter') $('inPin').focus(); });
+$('btnForgot').onclick=()=>toast('Pídele tu clave al supervisor 🙂');
+$('btnLogout').onclick=()=>{ WK=null; try{sessionStorage.removeItem('wk');}catch(_){} $('inFicha').value='';$('inPin').value='';$('loginMsg').textContent=''; show('login'); };
+
+document.querySelectorAll('.rangebar .chip[data-r]').forEach(c=>{
+  c.onclick=()=>{ document.querySelectorAll('.rangebar .chip[data-r]').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on'); WK_RANGO=c.dataset.r; setRangoInputs(WK_RANGO); loadDash(); };
+});
+$('btnAplicar').onclick=()=>{ document.querySelectorAll('.rangebar .chip[data-r]').forEach(x=>x.classList.remove('on')); loadDash(); };
+
+// admin
+$('adminTag').onclick=async ()=>{ if(await checkAdminSession()){ const {data}=await sb.auth.getUser(); enterAdmin(data.user); } else { show('adminLogin'); } };
+$('btnAdminBack').onclick=()=>show('login');
+$('btnAdminLogin').onclick=doAdminLogin;
+$('aPass').addEventListener('keydown',e=>{ if(e.key==='Enter') doAdminLogin(); });
+$('btnAdminLogout').onclick=async ()=>{ try{await sb.auth.signOut();}catch(_){}; show('login'); };
+$('btnCopyLink').onclick=()=>{ const i=$('portalLink'); i.select(); try{navigator.clipboard.writeText(i.value);}catch(_){document.execCommand('copy');} toast('Enlace copiado ✓','ok'); };
+$('aBuscar').addEventListener('input',()=>{ clearTimeout(_buscarT); _buscarT=setTimeout(buscarTrabajadores,320); });
+$('aWlist').addEventListener('click',e=>{ const row=e.target.closest('.wrow'); if(!row) return;
+  if(row.querySelector('.pill')) { /* ya tiene clave: editar */ }
+  abrirCrear(row.dataset.tid,decodeURIComponent(row.dataset.nombre),row.dataset.ficha); });
+$('aPerfiles').addEventListener('click',e=>{ const b=e.target.closest('button[data-act]'); if(!b) return; perfilAccion(b.dataset.act,b.dataset.id); });
+$('mcGen').onclick=()=>{ $('mcPin').value=genPin(); };
+$('mcSave').onclick=guardarClave;
+$('mcCancel').onclick=()=>$('modalCrear').classList.add('hide');
+
+/* init */
+(function init(){
+  $('portalLink')&&($('portalLink').value=PORTAL_URL);
+  // restaurar sesión de trabajador en esta pestaña
+  try{ const s=sessionStorage.getItem('wk'); if(s){ WK=JSON.parse(s); if(WK&&WK.ficha&&WK.pin){ enterDash(); return; } } }catch(_){}
+  show('login');
+  setTimeout(()=>{ const f=$('inFicha'); if(f) f.focus(); },200);
+})();
+</script>
+</body>
+</html>
