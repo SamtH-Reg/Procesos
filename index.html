@@ -5307,6 +5307,48 @@ function _armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoCod){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return f;
   return _addDaysLocalYmd(f,-1);
 }
+/** Último fecha (AAAA-MM-DD) con datos reales en RT.armadoPesaje para linea+turno, estrictamente antes de fechaRef. Fallback: día anterior. */
+function _pArmUltimaFechaConDatos(linea,turno,fechaRef){
+  const fallback=_addDaysLocalYmd(fechaRef,-1);
+  if(!linea||!RT.armadoPesaje)return fallback;
+  const lineaN=String(linea).trim().toUpperCase();
+  const tScope=_tbNormTurnoKey(turno);
+  let best=null;
+  Object.entries(RT.armadoPesaje).forEach(([k,d])=>{
+    const meta=_armParseKey(k);
+    if(!meta.scoped)return;
+    if(meta.linea!==lineaN)return;
+    if(_tbNormTurnoKey(meta.turno||d&&d.turno||'dia')!==tScope)return;
+    const f=_tbNormYmd(meta.fecha||(d&&d.fecha)||'')||String(meta.fecha||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||f>=fechaRef)return;
+    const nTrab=(d&&d.trabajadores||[]).length;
+    const hasP=d&&d.planillero&&(d.planillero.trabId||String(d.planillero.nombre||'').trim());
+    if(!hasP&&nTrab===0)return;
+    if(!best||f>best)best=f;
+  });
+  return best||fallback;
+}
+/** Último fecha (AAAA-MM-DD) con datos reales en RT.armadoMolde para linea+turno, estrictamente antes de fechaRef. Fallback: día anterior. */
+function _armUltimaFechaConDatos(linea,turno,fechaRef){
+  const fallback=_addDaysLocalYmd(fechaRef,-1);
+  if(!linea||!RT.armadoMolde)return fallback;
+  const lineaN=String(linea).trim().toUpperCase();
+  const tScope=_tbNormTurnoKey(turno);
+  let best=null;
+  Object.entries(RT.armadoMolde).forEach(([k,d])=>{
+    const meta=_armParseKey(k);
+    if(!meta.scoped)return;
+    if(meta.linea!==lineaN)return;
+    if(_tbNormTurnoKey(meta.turno||d&&d.turno||'dia')!==tScope)return;
+    const f=_tbNormYmd(meta.fecha||(d&&d.fecha)||'')||String(meta.fecha||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||f>=fechaRef)return;
+    const nTrab=(d&&d.trabajadores||[]).length;
+    const hasP=d&&d.planillero&&(d.planillero.trabId||String(d.planillero.nombre||'').trim());
+    if(!hasP&&nTrab===0)return;
+    if(!best||f>best)best=f;
+  });
+  return best||fallback;
+}
 /**
  * Fecha de armado / registro según turno:
  * - Día: calendario actual (jornada 07:00–antes de 19:00 = hasta ~18 h).
@@ -10364,9 +10406,13 @@ function _armModalUpdateCopySourceHint(mod){
   }
   const fechaRef=fe.value.trim();
   const turnoRaw=(turnoEl&&String(turnoEl.value||'').trim())||'dia';
-  const prev=_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
+  const linea=mod==='m'?_editMLn:_editPLn;
+  const prev=linea
+    ?(mod==='m'?_armUltimaFechaConDatos(linea,turnoRaw,fechaRef):_pArmUltimaFechaConDatos(linea,turnoRaw,fechaRef))
+    :_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
   const tLbl=String(turnoRaw).toLowerCase()==='noche'?'Noche':'Día';
-  dateEl.textContent=prev.split('-').reverse().join('/')+' · '+tLbl+' anterior';
+  const esAnterior=prev===_addDaysLocalYmd(fechaRef,-1);
+  dateEl.textContent=prev.split('-').reverse().join('/')+(esAnterior?' · '+tLbl+' anterior':' · último con datos');
 }
 /** Desde el modal: copia planillero + trabajadores del turno homólogo anterior (misma línea, mismo código día/noche). No cambia la fecha de inicio del armado que editas. */
 function copiarPArmadoModalDiaAnterior(){
@@ -10377,7 +10423,7 @@ function copiarPArmadoModalDiaAnterior(){
   const fe=document.getElementById('pArmFecha');
   const fechaRef=String((fe&&fe.value)||_editPArmado.fecha||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)){showToast('Indica una fecha de inicio válida (AAAA-MM-DD)','error');if(fe)fe.focus();return;}
-  const fechaPrev=_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
+  const fechaPrev=_pArmUltimaFechaConDatos(_editPLn,turnoRaw,fechaRef);
   _ensureArmadoPesaje();
   const src=_pArmGetEntry(_editPLn,turnoRaw,fechaPrev);
   const nTrab=src&&(src.trabajadores||[]).length||0;
@@ -10416,7 +10462,7 @@ function copiarMArmadoModalDiaAnterior(){
   const fe=document.getElementById('mArmFecha');
   const fechaRef=String((fe&&fe.value)||_editMArmado.fecha||'').trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)){showToast('Indica una fecha de inicio válida (AAAA-MM-DD)','error');if(fe)fe.focus();return;}
-  const fechaPrev=_armFechaOrigenCopiaTurnoAnterior(fechaRef,turnoRaw);
+  const fechaPrev=_armUltimaFechaConDatos(_editMLn,turnoRaw,fechaRef);
   _ensureArmadoMolde();
   const src=_armGetEntry(_editMLn,turnoRaw,fechaPrev);
   const nTrab=src&&(src.trabajadores||[]).length||0;
