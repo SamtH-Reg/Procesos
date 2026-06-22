@@ -411,8 +411,17 @@ async function loadConfig(){
 }
 
 /* ===================== CÁLCULO + RENDER DASHBOARD ===================== */
+// Turno real del pesaje: usa el campo turno; si falta, lo deriva del rango de hora (día 07:00–18:59, noche resto)
+function turnoDe(r){
+  let t=String(r.turno||'').trim().toLowerCase();
+  if(t==='dia'||t==='día') return 'dia';
+  if(t==='noche') return 'noche';
+  const h=parseInt(String(r.hora||'').slice(0,2),10);
+  if(!isNaN(h)) return (h>=7&&h<19)?'dia':'noche';
+  return 'noche';
+}
 function computeStats(rows){
-  const s={total:0,n:rows.length,byDia:{},byEsp:{},byTurno:{},byCiclo:{},byTipo:{},byLinea:{},mejorPesaje:0};
+  const s={total:0,n:rows.length,byDia:{},byDiaTurno:{},byEsp:{},byTurno:{},byCiclo:{},byTipo:{},byLinea:{},mejorPesaje:0};
   const hoy=hoyISO(); const now=new Date();
   const ini7=fechaISO(new Date(now.getFullYear(),now.getMonth(),now.getDate()-6));
   const iniMes=fechaISO(new Date(now.getFullYear(),now.getMonth(),1));
@@ -421,6 +430,7 @@ function computeStats(rows){
     const k=Number(r.kg)||0; s.total+=k; if(k>s.mejorPesaje) s.mejorPesaje=k;
     const f=r.fecha||'?';
     s.byDia[f]=(s.byDia[f]||0)+k;
+    const td=turnoDe(r); if(!s.byDiaTurno[f]) s.byDiaTurno[f]={dia:0,noche:0}; s.byDiaTurno[f][td]+=k;
     if(f===hoy) s.kgHoy+=k; if(f>=ini7) s.kg7+=k; if(f>=iniMes) s.kgMes+=k;
     const e=(r.especie||'—').toString().trim()||'—'; s.byEsp[e]=(s.byEsp[e]||0)+k;
     s.byTurno[capTurno(r.turno)]=(s.byTurno[capTurno(r.turno)]||0)+k;
@@ -461,8 +471,8 @@ function dashboardHTML(rows){
   // Charts
   let ph='';
   if(indOn('ch_dia')){
-    const inner=s.dias.length? svgBars(s.dias.map(d=>({label:fmtDiaCorto(d),value:s.byDia[d]}))) : emptyMsg();
-    ph+=panel('📅 Kilos por día', s.dias.length?s.dias.length+' días':'', inner);
+    const inner=s.dias.length? (turnoLegend()+svgStackedTurno(s.dias.map(d=>({label:fmtDiaCorto(d),dia:(s.byDiaTurno[d]||{}).dia||0,noche:(s.byDiaTurno[d]||{}).noche||0})))) : emptyMsg();
+    ph+=panel('📅 Kilos por día y turno', s.dias.length?s.dias.length+' días':'', inner);
   }
   if(indOn('ch_especie')){
     const arr=sortArr(s.byEsp); ph+=panel('🐟 Kilos por especie','', arr.length?hbars(arr,s.total):emptyMsg());
@@ -506,6 +516,34 @@ function svgBars(items){
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
     <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>
     ${bars}${labels}</svg>`;
+}
+function turnoLegend(){
+  return `<div style="display:flex;gap:16px;margin-bottom:10px;font-size:11px;color:var(--mut);font-weight:600">
+    <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f59e0b;vertical-align:-1px"></span> Día (07–19h)</span>
+    <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#3b82f6;vertical-align:-1px"></span> Noche (19–07h)</span></div>`;
+}
+function svgStackedTurno(items){
+  const max=Math.max(...items.map(i=>i.dia+i.noche),1);
+  const W=Math.max(items.length*46,260), H=190, pad=26, bw=Math.min(30,(W-pad)/items.length-8);
+  let bars='',labels='';
+  items.forEach((it,i)=>{
+    const x=pad+i*((W-pad)/items.length);
+    const tot=it.dia+it.noche;
+    const hTot=Math.max(tot>0?3:0,(tot/max)*(H-46));
+    const hN=tot? (it.noche/tot)*hTot : 0;
+    const hD=hTot-hN;
+    const base=H-22;
+    if(it.noche>0) bars+=`<rect x="${x}" y="${base-hN}" width="${bw}" height="${hN}" fill="url(#gN)"></rect>`;
+    if(it.dia>0)   bars+=`<rect x="${x}" y="${base-hN-hD}" width="${bw}" height="${hD}" rx="4" fill="url(#gD)"></rect>`;
+    if(tot>0) bars+=`<text x="${x+bw/2}" y="${base-hTot-4}" text-anchor="middle" font-size="9" fill="#cdd8ef">${fmt(tot)}</text>`;
+    if(items.length<=16||i%Math.ceil(items.length/16)===0)
+      labels+=`<text x="${x+bw/2}" y="${H-7}" text-anchor="middle" font-size="9" fill="#6b7ca3">${it.label}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <linearGradient id="gD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+      <linearGradient id="gN" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
+    </defs>${bars}${labels}</svg>`;
 }
 function hbars(items,total){
   const max=Math.max(...items.map(i=>i.value),1);
