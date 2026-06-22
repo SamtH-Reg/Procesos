@@ -587,7 +587,11 @@ function renderTabla(rows){
 }
 
 /* ===================== PORTAL DEL TRABAJADOR ===================== */
-let WK=null, WK_RANGO='mes';
+let WK=null, WK_RANGO='mes', WK_ALL=null;   // WK_ALL: histórico del trabajador cacheado en la sesión (se baja UNA vez)
+// Filtra filas ya cacheadas por rango de fecha (mismo criterio que usaba la RPC: fecha de calendario inclusiva)
+function filtrarRango(rows,desde,hasta){
+  return rows.filter(r=>{ const f=r.fecha||''; if(!f) return false; if(desde&&f<desde) return false; if(hasta&&f>hasta) return false; return true; });
+}
 function rangeFromMode(r){
   const hoy=new Date(); let d=new Date(hoy);
   if(r==='hoy') d=new Date(hoy);
@@ -628,14 +632,18 @@ function enterDash(){
   applyDefaultRange();
   loadDash();
 }
-async function loadDash(){
-  $('dashWrap').style.display='none'; $('dashLoading').classList.remove('hide');
+// Baja TODO el histórico del trabajador una sola vez; los cambios de rango se filtran en memoria (cero tráfico extra).
+async function loadDash(force){
   const desde=$('dDesde').value||null, hasta=$('dHasta').value||null;
+  // Si ya está en caché y no se fuerza, solo re-filtramos y renderizamos sin pedir red.
+  if(WK_ALL&&!force){ $('dashWrap').innerHTML=dashboardHTML(filtrarRango(WK_ALL,desde,hasta)); return; }
+  $('dashWrap').style.display='none'; $('dashLoading').classList.remove('hide');
   try{
-    const {data,error}=await sb.rpc('portal_pesajes',{p_codigo:WK.codigo,p_pin:WK.pin,p_desde:desde,p_hasta:hasta});
+    const {data,error}=await sb.rpc('portal_pesajes',{p_codigo:WK.codigo,p_pin:WK.pin,p_desde:null,p_hasta:null});
     if(error) throw error;
-    $('dashWrap').innerHTML=dashboardHTML(data||[]);
-  }catch(e){ console.error(e); toast('No se pudieron cargar los datos','err'); $('dashWrap').innerHTML=dashboardHTML([]); }
+    WK_ALL=data||[];
+    $('dashWrap').innerHTML=dashboardHTML(filtrarRango(WK_ALL,desde,hasta));
+  }catch(e){ console.error(e); toast('No se pudieron cargar los datos','err'); $('dashWrap').innerHTML=dashboardHTML(WK_ALL?filtrarRango(WK_ALL,desde,hasta):[]); }
   finally{ $('dashLoading').classList.add('hide'); $('dashWrap').style.display=''; }
 }
 
@@ -791,7 +799,7 @@ $('btnLogin').onclick=doWorkerLogin;
 $('inPin').addEventListener('keydown',e=>{ if(e.key==='Enter') doWorkerLogin(); });
 $('inCodigo').addEventListener('keydown',e=>{ if(e.key==='Enter') $('inPin').focus(); });
 $('btnForgot').onclick=()=>toast('Pídele tu clave al supervisor 🙂');
-$('btnLogout').onclick=()=>{ WK=null; try{sessionStorage.removeItem('wk');}catch(_){} $('inCodigo').value='';$('inPin').value='';$('loginMsg').textContent=''; show('login'); };
+$('btnLogout').onclick=()=>{ WK=null; WK_ALL=null; try{sessionStorage.removeItem('wk');}catch(_){} $('inCodigo').value='';$('inPin').value='';$('loginMsg').textContent=''; show('login'); };
 
 document.querySelectorAll('#dRangebar .chip[data-r]').forEach(c=>{ c.onclick=()=>{ markChips('dRangebar',c.dataset.r); WK_RANGO=c.dataset.r; const r=rangeFromMode(WK_RANGO); $('dDesde').value=r.desde; $('dHasta').value=r.hasta; loadDash(); }; });
 $('btnAplicar').onclick=()=>{ markChips('dRangebar',''); loadDash(); };
