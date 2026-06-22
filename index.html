@@ -5064,11 +5064,17 @@ async function tbManualPullMoldesPesajes(opts){
     const mapFor=t=>(t==='moldes'?_tbParseSbMolde:t==='pesajes'?_tbParseSbPesaje:_tbParseSbGeneral);
     const CHUNK=1000;
     const PULL_SAFETY=500000;
+    // La tablet solo conserva los pesajes recientes (cap). No tiene sentido bajar
+    // TODO el historial para luego podarlo → bajamos como mucho el cap (las N más
+    // recientes por id). Ahorra ~40% de egress en cada pull completo. Moldes y
+    // generales son chicos → se bajan completos.
+    const capFor=t=>(t==='pesajes'?(typeof TB_PESAJES_LOCAL_CAP!=='undefined'?TB_PESAJES_LOCAL_CAP:4000):PULL_SAFETY);
     for(const t of['moldes','pesajes','generales']){
       const localBefore=Array.isArray(RT[t])?[...RT[t]]:[];
       let allData=[];
       let from=0,gotErr=null;
-      while(allData.length<PULL_SAFETY){
+      const _cap=capFor(t);
+      while(allData.length<_cap){
         const to=from+CHUNK-1;
         const{data,error}=await _tbSb.from(t).select('*').order('id',{ascending:false}).range(from,to);
         if(error){gotErr=error;break;}
