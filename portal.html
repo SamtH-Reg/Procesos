@@ -237,6 +237,16 @@ input,select{font-family:inherit}
     </div>
     <div class="grid2">
       <div class="panel">
+        <h3><span class="t">🌓 Kilos por turno</span></h3>
+        <div id="chartTurno"></div>
+      </div>
+      <div class="panel">
+        <h3><span class="t">🔁 Kilos por ciclo</span><span class="hint">cada jornada de producción</span></h3>
+        <div id="chartCiclo"></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
         <h3><span class="t">⚖️ Distribución por rango de kilos</span><span class="hint">tamaño de cada pesaje</span></h3>
         <div id="chartRango"></div>
       </div>
@@ -417,6 +427,12 @@ function renderDash(rows){
   // por especie
   const byEsp={};
   rows.forEach(r=>{ const k=(r.especie||'—').toString().trim()||'—'; byEsp[k]=(byEsp[k]||0)+(Number(r.kg)||0); });
+  // por turno (día / noche)
+  const byTurno={};
+  rows.forEach(r=>{ const k=capTurno(r.turno); byTurno[k]=(byTurno[k]||0)+(Number(r.kg)||0); });
+  // por ciclo (jornada = fecha + turno)
+  const byCiclo={};
+  rows.forEach(r=>{ const k=(r.fecha||'?')+'|'+(r.turno||''); byCiclo[k]=(byCiclo[k]||0)+(Number(r.kg)||0); });
 
   // KPIs
   $('kpis').innerHTML=`
@@ -440,6 +456,14 @@ function renderDash(rows){
   // chart especie (barras horizontales)
   const espArr=Object.entries(byEsp).map(([k,v])=>({label:k,value:v})).sort((a,b)=>b.value-a.value);
   $('chartEsp').innerHTML = espArr.length? hbars(espArr,total) : emptyMsg();
+  // chart por turno (barras horizontales)
+  const turnoArr=Object.entries(byTurno).map(([k,v])=>({label:k,value:v})).sort((a,b)=>b.value-a.value);
+  $('chartTurno').innerHTML = turnoArr.length? hbars(turnoArr,total) : emptyMsg();
+  // chart por ciclo (barras verticales: fecha + turno, ordenado por fecha)
+  const ciclos=Object.keys(byCiclo).sort();
+  $('chartCiclo').innerHTML = ciclos.length? svgBars(ciclos.map(k=>{
+    const [f,t]=k.split('|'); return {label:fmtDiaCorto(f)+' '+abrevTurno(t),value:byCiclo[k]};
+  })) : emptyMsg();
   // chart rango de kilos (histograma del tamaño de cada pesaje)
   $('chartRango').innerHTML = n? rangoChart(rows) : emptyMsg();
   // tabla
@@ -449,6 +473,8 @@ function renderDash(rows){
 function emptyMsg(){ return '<div class="empty">Sin pesajes en este período.</div>'; }
 function fmtFechaCorta(iso){ if(!iso)return''; const[a,m,d]=iso.split('-'); return `${d}/${m}/${a}`; }
 function fmtDiaCorto(iso){ const[a,m,d]=iso.split('-'); return `${d}/${m}`; }
+function capTurno(t){ t=String(t||'').trim().toLowerCase(); if(!t) return 'Sin turno'; if(t==='dia'||t==='día') return 'Día'; if(t==='noche') return 'Noche'; return t.charAt(0).toUpperCase()+t.slice(1); }
+function abrevTurno(t){ t=String(t||'').trim().toLowerCase(); if(t.startsWith('d')) return 'D'; if(t.startsWith('n')) return 'N'; return ''; }
 
 /* SVG barras verticales */
 function svgBars(items){
