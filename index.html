@@ -4556,6 +4556,8 @@ const TB_EQ_CLOUD_KEY='friosur_eq_runtime';
 const TB_PLANILLEROS_CLOUD_KEY='friosur_planilleros_catalog';
 /** `app_kv.key`: catálogo `{ especies: [{nombre,color}] }` editado en admin. */
 const TB_ESPECIES_CLOUD_KEY='friosur_especies_catalog';
+/** `app_kv.key`: orden remota del admin para forzar subida de pendientes. value={at:<ms>,by:<email>} */
+const TB_FORCE_SYNC_KEY='friosur_force_sync';
 /** Aplica valor remoto de `app_kv` planilleros (misma forma que sube admin). */
 function _tbApplyPlanillerosFromCloudValue(val){
   if(!val||typeof val!=='object'||!Array.isArray(val.planilleros))return false;
@@ -5205,6 +5207,7 @@ async function _tbPeriodicPull(){
   }else{
     try{await _tbIncrementalPullOperativos(true);}catch(e){console.warn('[periodic incr]',e);}
   }
+  try{await _tbCheckForceSync();}catch(_){}  // atiende orden remota de subida forzada del admin
 }
 window._tbPeriodicPull=_tbPeriodicPull;
 function idxFsActive(){
@@ -12563,6 +12566,36 @@ function _tbStartHeartbeat(){
 }
 window._tbStartHeartbeat=_tbStartHeartbeat;
 
+/* ── Orden remota de subida forzada (admin → tablets) ──
+   El admin escribe app_kv[friosur_force_sync]={at,by}. Cada tablet la atiende UNA vez:
+   por Realtime (instantáneo si está encendida) o al reconectar / pull periódico /
+   volver al frente. Asegura sesión, vacía el outbox durable y sube TODOS los pendientes.
+   `_tbForceSyncSeen` se persiste para no repetir la misma orden tras recargar. */
+let _tbForceSyncSeen=(()=>{try{return +localStorage.getItem('tb_force_sync_seen')||0;}catch(_){return 0;}})();
+let _tbForceSyncInFlight=false;
+async function _tbHandleForceSync(value){
+  try{
+    const at=value&&typeof value==='object'?(+value.at||0):0;
+    if(!at||at<=_tbForceSyncSeen||_tbForceSyncInFlight)return; // ya atendida / sin timestamp / en curso
+    _tbForceSyncInFlight=true;
+    _tbForceSyncSeen=at;try{localStorage.setItem('tb_force_sync_seen',String(at));}catch(_){}
+    if(typeof showToast==='function')showToast('Subida forzada desde el panel…','info');
+    try{if(typeof _tbEnsureSession==='function')await _tbEnsureSession();}catch(_){}      // re-autentica si la sesión venció
+    try{if(typeof _obxDrain==='function')await _obxDrain();}catch(_){}                      // vacía outbox durable de pesajes
+    try{if(typeof tbFlushPendingCloudSync==='function')await tbFlushPendingCloudSync({silent:false});}catch(_){} // sube moldes/pesajes/generales/armado
+    try{if(typeof _tbWriteHeartbeat==='function')await _tbWriteHeartbeat();}catch(_){}      // reporta 'pend' actualizado al admin
+  }catch(e){console.warn('[tb force-sync]',e);}
+  finally{_tbForceSyncInFlight=false;}
+}
+async function _tbCheckForceSync(){
+  if(!_tbSb||!_tbUser||(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline()))return;
+  try{
+    const{data,error}=await _tbSb.from('app_kv').select('value').eq('key',TB_FORCE_SYNC_KEY).maybeSingle();
+    if(!error&&data&&data.value)await _tbHandleForceSync(data.value);
+  }catch(_){}
+}
+window._tbCheckForceSync=_tbCheckForceSync;
+
 /* ══════════════════════════════════════════════════════════════════════════
    OUTBOX DURABLE DE PESAJES (IndexedDB)  ·  red de seguridad anti-pérdida
    ══════════════════════════════════════════════════════════════════════════
@@ -13756,6 +13789,12 @@ const TBSync={
         if(String(row.key||'')!==TB_ESPECIES_CLOUD_KEY)return;
         if(p.eventType==='DELETE')return;
         _tbApplyEspeciesFromCloudValue(row.value);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+TB_FORCE_SYNC_KEY},(p)=>{
+        const row=p.new||p.old;if(!row)return;
+        if(String(row.key||'')!==TB_FORCE_SYNC_KEY)return;
+        if(p.eventType==='DELETE')return;
+        _tbHandleForceSync(row.value);
       }).subscribe();
   }
 };
@@ -13945,8 +13984,8 @@ async function _tbEnsureSession(){
 window._tbEnsureSession=_tbEnsureSession;
 if(!window._tbSessHooks){
   window._tbSessHooks=true;
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_tbEnsureSession();});
-  window.addEventListener('online',()=>{_tbEnsureSession();});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){_tbEnsureSession();try{_tbCheckForceSync();}catch(_){}}});
+  window.addEventListener('online',()=>{_tbEnsureSession();try{_tbCheckForceSync();}catch(_){}});
   setInterval(()=>{_tbEnsureSession();},5*60000); // cada 5 min
 }
 async function tbDoLogin(){

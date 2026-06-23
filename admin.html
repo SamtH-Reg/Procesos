@@ -1150,7 +1150,10 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="card" style="margin-top:16px;">
     <div class="card-hdr">
       <div class="card-title">📡 Sincronización de tablets (red)</div>
-      <button class="btn sm ghost" type="button" onclick="adminRefreshTabletHealth(true)">↻</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn sm" type="button" onclick="adminForzarSubidaTablets()" title="Ordena a todas las tablets subir sus pendientes ahora. Las encendidas reaccionan al instante; las desconectadas, al reconectar.">🔄 Forzar subida</button>
+        <button class="btn sm ghost" type="button" onclick="adminRefreshTabletHealth(true)">↻</button>
+      </div>
     </div>
     <p style="margin:0 0 12px;font-size:12px;color:var(--text-3);">Latido persistente de cada tablet: <strong>pendientes sin subir</strong>, calidad de red y antigüedad de la última señal. Si una tablet no aparece o su señal es vieja, su conexión está fallando — útil para decidir mejoras físicas (WiFi/AP).</p>
     <div id="adminTabletHealthAlert"></div>
@@ -7505,6 +7508,21 @@ function adminStartTabletHealthWatch(){
   adminRefreshTabletHealth(false);
   _adminTabletHealthTimer=setInterval(()=>adminRefreshTabletHealth(false),60000); // refresca cada 60 s
 }
+/** Orden remota: escribe app_kv[friosur_force_sync] para que las tablets suban sus pendientes.
+ *  Las encendidas reaccionan al instante (Realtime); las desconectadas, al reconectar. */
+async function adminForzarSubidaTablets(){
+  if(!_sb){if(typeof toast==='function')toast('Conecta a Supabase primero','warn');return;}
+  try{
+    const email=(_currentUser&&_currentUser.email)||'admin';
+    const{error}=await _sb.from('app_kv').upsert({key:'friosur_force_sync',value:{at:Date.now(),by:email},updated_at:new Date().toISOString()},{onConflict:'key'});
+    if(error)throw error;
+    if(typeof toast==='function')toast('Orden enviada: las tablets encendidas suben ahora; las desconectadas, al reconectar.','success');
+    setTimeout(()=>adminRefreshTabletHealth(false),6000); // refresca estado tras unos segundos
+  }catch(e){
+    if(typeof toast==='function')toast('No se pudo enviar la orden: '+(e&&e.message||e),'err');
+  }
+}
+window.adminForzarSubidaTablets=adminForzarSubidaTablets;
 
 let _sbChannels=[];
 function sbSubscribeRealtime(){
