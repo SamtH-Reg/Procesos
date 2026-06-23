@@ -12744,7 +12744,7 @@ if(!window._obxHooks){
   window._obxHooks=true;
   window.addEventListener('online',()=>{void _obxDrain();});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void _obxDrain();});
-  setInterval(()=>{void _obxDrain();},15000); // respaldo cada 15 s
+  setInterval(()=>{void _obxDrain();},10000); // respaldo cada 10 s (prioriza subir a la nube)
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -14034,13 +14034,15 @@ window.addEventListener('offline',()=>{
 });
 /* Tablet: la nube es la fuente entre dispositivos — pull periódico con sesión (además del push cada 3 min). */
 setInterval(()=>{try{void _tbPeriodicPull();}catch(e){console.warn('[tb periodic cloud pull]',e);}},120000); // incremental (egress mínimo); completo+catálogos cada ~30 min
-/* Respaldo periódico a la nube (varios dispositivos / pestañas en segundo plano). */
+/* Respaldo periódico a la nube (varios dispositivos / pestañas en segundo plano).
+   Prioriza subir: cada 60 s (antes 180 s). El push solo sube si hay cambios (firma),
+   así que más frecuencia = datos en la nube antes, sin re-subir lo ya sincronizado. */
 setInterval(()=>{
   try{
     if(!navigator.onLine||!_tbSb||!_tbUser)return;
     if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();
   }catch(e){console.warn('[tb periodic cloud push]',e);}
-},180000);
+},60000);
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible'||!_tbSb||!_tbUser)return;
   if(!tbNavigatorOnline())return;
