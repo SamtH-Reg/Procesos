@@ -3408,27 +3408,48 @@ function drawTableWidget(w,moldes,pesajes){
         <td class="num" style="${fs}">${locKg(totGrandKg)}</td>
       </tr></tfoot></table>`;
     }else{
-      let gt=0;
-      rows.forEach(r=>{hours.forEach(h=>{totCol[h]=(totCol[h]||0)+(r.byH[h]||0);});gt+=r.tot;});
-      html=`<table>
-      <thead><tr>
-        <th>Operario</th><th>Especie</th>
-        ${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}
-        <th class="num">Total kg</th>
-      </tr></thead>
-      <tbody>`+
-      rows.map(r=>`<tr>
-        <td><strong>${esc(r.nom)}</strong></td>
-        <td style="color:var(--text-2);">${esc(r.esp)}</td>
-        ${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}
-        <td class="num"><strong>${_fmt(r.tot)}</strong></td>
-      </tr>`).join('')+
-      `</tbody>
-      <tfoot><tr>
-        <td colspan="2">TOTAL</td>
-        ${hours.map(h=>`<td class="num">${_fmt(totCol[h])}</td>`).join('')}
-        <td class="num">${_fmt(gt)}</td>
-      </tr></tfoot></table>`;
+      // PESAJE: separar en sub-tablas por TIPO (Filete / Porción / Ovas / …). Se ignora el map global
+      // (construido arriba) y se reagrupa por tipo desde src. Cada tipo es su propio bloque.
+      const _normTipo=t=>{t=String(t||'').trim();return t||'Sin tipo';};
+      const _TIPO_ORDER=['Filete','Porción','Ovas'];
+      const _TIPO_COLOR={'Filete':'#2563eb','Porción':'#16a34a','Ovas':'#d97706','Sin tipo':'#64748b'};
+      const byTipo={};
+      src.forEach(r=>{const t=_normTipo(r.tipo);(byTipo[t]||(byTipo[t]=[])).push(r);});
+      const tipos=Object.keys(byTipo).sort((a,b)=>{
+        const ia=_TIPO_ORDER.indexOf(a),ib=_TIPO_ORDER.indexOf(b);
+        if(ia!==-1||ib!==-1)return (ia===-1?99:ia)-(ib===-1?99:ib);
+        if(a==='Sin tipo')return 1; if(b==='Sin tipo')return -1;
+        return a.localeCompare(b);
+      });
+      const buildPesTabla=recs=>{
+        const m={};
+        recs.forEach(r=>{
+          const nom=r.nombre||'—';
+          const hm=(r.hora||'').match(/^(\d{1,2}):/);const hh=hm?parseInt(hm[1],10):null;
+          const esp=String(r.especie||'—').trim()||'—';
+          const k=String(r.trabId||nom)+''+esp;
+          if(!m[k])m[k]={nom,esp,byH:{},tot:0};
+          const kg=+r.kg||0;
+          if(hh!=null)m[k].byH[hh]=(m[k].byH[hh]||0)+kg;
+          m[k].tot+=kg;
+        });
+        const rs=Object.values(m).sort((a,b)=>(b.tot-a.tot)||a.nom.localeCompare(b.nom)||a.esp.localeCompare(b.esp));
+        const tc={};let g=0;
+        rs.forEach(r=>{hours.forEach(h=>{tc[h]=(tc[h]||0)+(r.byH[h]||0);});g+=r.tot;});
+        return `<table>
+        <thead><tr><th>Operario</th><th>Especie</th>${hours.map(h=>`<th class="num">${esc(_adminFmtHoraResumenTh(h))}</th>`).join('')}<th class="num">Total kg</th></tr></thead>
+        <tbody>`+rs.map(r=>`<tr><td><strong>${esc(r.nom)}</strong></td><td style="color:var(--text-2);">${esc(r.esp)}</td>${hours.map(h=>`<td class="num">${r.byH[h]?_fmt(r.byH[h]):'—'}</td>`).join('')}<td class="num"><strong>${_fmt(r.tot)}</strong></td></tr>`).join('')+
+        `</tbody><tfoot><tr><td colspan="2">TOTAL</td>${hours.map(h=>`<td class="num">${_fmt(tc[h])}</td>`).join('')}<td class="num">${_fmt(g)}</td></tr></tfoot></table>`;
+      };
+      html=tipos.map(t=>{
+        const col=_TIPO_COLOR[t]||'#64748b';
+        const totT=byTipo[t].reduce((s,r)=>s+(+r.kg||0),0);
+        return `<div style="margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-weight:800;font-size:13px;">
+            <span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${col};"></span>
+            ${esc(t.toUpperCase())} <span style="color:var(--text-3);font-weight:600;">· ${_fmt(totT)} kg · ${byTipo[t].length} pesajes</span>
+          </div>${buildPesTabla(byTipo[t])}</div>`;
+      }).join('');
     }
   } else if(w.type==='pv-consol-mol'){
     if(!moldes.length){host.innerHTML='<div style="padding:20px;color:var(--text-3);text-align:center;">Sin moldes</div>';return;}
