@@ -8481,6 +8481,86 @@ function ieExDeleteMolPesBucket(mod,anchorYmd,turnoCod){
   ieRenderExplorer();
   toast(toRemove.length+' registro(s) eliminado(s)','success');
 }
+/* ─────────────────────────────────────────────────────────────────────────
+   Ver / editar / eliminar REGISTROS INDIVIDUALES de un bloque (turno+fecha).
+   Edita y borra también en Supabase (_sb, supervisor autenticado con can_write).
+   ───────────────────────────────────────────────────────────────────────── */
+function _ieBucketRecords(mod,anchor,turno){
+  return (_ieSrc(mod)||[]).filter(r=>_ieRecordInMolPesBucket(r,mod,anchor,turno))
+    .slice().sort((a,b)=>String(a.hora||'').localeCompare(String(b.hora||'')));
+}
+function _ieFindRec(mod,id){ return (_ieSrc(mod)||[]).find(x=>String(x.id)===String(id)); }
+function _ieFindTr(box,id){ return [...box.querySelectorAll('tr[data-rec-id]')].find(tr=>tr.getAttribute('data-rec-id')===String(id)); }
+function _ieToggleRecords(tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  if(!box.hidden){ box.hidden=true; box.innerHTML=''; return; }
+  _ieRenderRecordsInto(box.dataset.mod,box.dataset.anchor,box.dataset.turno,tgt);
+}
+function _ieRenderRecordsInto(mod,anchor,turno,tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  box.dataset.mod=mod; box.dataset.anchor=anchor; box.dataset.turno=turno; box.hidden=false;
+  const recs=_ieBucketRecords(mod,anchor,turno);
+  if(!recs.length){ box.innerHTML='<div style="padding:8px 12px;color:var(--text-3);font-size:12px;">Sin registros.</div>'; return; }
+  const isMol=mod==='moldes';
+  const head=isMol?'<th>Hora</th><th>Operario</th><th>Producto</th><th>Especie</th><th class="num">Cant</th><th class="num">Kg</th><th></th>'
+                  :'<th>Hora</th><th>Operario</th><th>Especie</th><th>Tipo</th><th class="num">Kg</th><th></th>';
+  const body=recs.map(r=>{
+    const id=esc(String(r.id));
+    const cells=isMol
+      ?`<td>${esc((r.hora||'').slice(0,5))}</td><td>${esc(r.nombre||'—')}</td><td>${esc(r.producto||'—')}</td><td>${esc(r.especie||'—')}</td><td class="num">${r.cant!=null?esc(String(r.cant)):'—'}</td><td class="num">${r.kg!=null?_fmt(r.kg):'—'}</td>`
+      :`<td>${esc((r.hora||'').slice(0,5))}</td><td>${esc(r.nombre||'—')}</td><td>${esc(r.especie||'—')}</td><td>${esc(r.tipo||'—')}</td><td class="num">${r.kg!=null?_fmt(r.kg):'—'}</td>`;
+    return `<tr data-rec-id="${id}">${cells}<td class="num" style="white-space:nowrap">`+
+      `<button type="button" class="btn ghost sm" data-ie-act="edit-rec" data-mod="${esc(mod)}" data-id="${id}" data-tgt="${esc(tgt)}" title="Editar">✏️</button> `+
+      `<button type="button" class="btn ghost sm danger" data-ie-act="del-rec" data-mod="${esc(mod)}" data-id="${id}" data-tgt="${esc(tgt)}" title="Eliminar">✕</button></td></tr>`;
+  }).join('');
+  box.innerHTML=`<div style="overflow:auto;max-height:360px;margin:2px 8px 12px;border:1px solid var(--border);border-radius:8px;">`+
+    `<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="position:sticky;top:0;background:#f8fafc;">${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function _ieEditRecordForm(mod,id,tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const tr=_ieFindTr(box,id), r=_ieFindRec(mod,id); if(!tr||!r)return;
+  const isMol=mod==='moldes';
+  const inp=(name,val,extra='')=>`<input data-f="${name}" value="${esc(val==null?'':String(val).replace(/"/g,'&quot;'))}" ${extra} style="width:100%;min-width:58px;font-size:12px;padding:3px 5px;box-sizing:border-box;">`;
+  const cells=isMol
+    ?`<td>${inp('hora',(r.hora||'').slice(0,5))}</td><td>${inp('nombre',r.nombre)}</td><td>${inp('producto',r.producto)}</td><td>${inp('especie',r.especie)}</td><td>${inp('cant',r.cant,'type="number" step="1"')}</td><td>${inp('kg',r.kg,'type="number" step="0.01"')}</td>`
+    :`<td>${inp('hora',(r.hora||'').slice(0,5))}</td><td>${inp('nombre',r.nombre)}</td><td>${inp('especie',r.especie)}</td><td>${inp('tipo',r.tipo)}</td><td>${inp('kg',r.kg,'type="number" step="0.01"')}</td>`;
+  tr.innerHTML=cells+`<td class="num" style="white-space:nowrap"><button type="button" class="btn sm" data-ie-act="save-rec" data-mod="${esc(mod)}" data-id="${esc(String(id))}" data-tgt="${esc(tgt)}">Guardar</button> <button type="button" class="btn ghost sm" data-ie-act="cancel-rec" data-tgt="${esc(tgt)}">✕</button></td>`;
+}
+async function _ieSaveRecord(mod,id,tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const tr=_ieFindTr(box,id), rec=_ieFindRec(mod,id); if(!tr||!rec)return;
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  const patch={};
+  tr.querySelectorAll('[data-f]').forEach(inp=>{
+    const f=inp.getAttribute('data-f'); let v=inp.value;
+    if(f==='kg'||f==='cant'){ const n=v===''?null:Number(v); v=(n!=null&&!isNaN(n))?n:null; }
+    else { v=String(v).trim()||null; }
+    patch[f]=v;
+  });
+  try{
+    const {error}=await _sb.from(mod).update(patch).eq('id',rec.id);
+    if(error)throw error;
+    Object.assign(rec,patch);
+    RT.save();
+    _ieRenderRecordsInto(box.dataset.mod,box.dataset.anchor,box.dataset.turno,tgt);
+    toast('Registro actualizado en Supabase ✓','success');
+  }catch(e){ console.error(e); toast('No se pudo guardar: '+(e&&e.message||e),'err'); }
+}
+async function _ieDeleteRecord(mod,id,tgt){
+  const box=document.getElementById(tgt), rec=_ieFindRec(mod,id); if(!rec)return;
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  if(!confirm('¿Eliminar este registro de forma permanente?\n\nHora '+((rec.hora||'').slice(0,5))+' · '+(rec.nombre||'—')+(rec.kg!=null?' · '+rec.kg+' kg':'')+'\n\nSe borra también de Supabase. No se puede deshacer.'))return;
+  try{
+    const {error}=await _sb.from(mod).delete().eq('id',rec.id);
+    if(error)throw error;
+    RT.data[mod]=(RT.data[mod]||[]).filter(x=>String(x.id)!==String(id));
+    if(RT._ensureShape)RT._ensureShape();
+    RT.save();
+    if(box)_ieRenderRecordsInto(box.dataset.mod,box.dataset.anchor,box.dataset.turno,tgt);
+    toast('Registro eliminado de Supabase ✓','success');
+  }catch(e){ console.error(e); toast('No se pudo eliminar: '+(e&&e.message||e),'err'); }
+}
+window._ieToggleRecords=_ieToggleRecords;
 function ieExApplyMolPes(mod,anchorYmd,turnoCod,alsoExport){
   const modEl=document.getElementById('ieModulo');
   const rh=document.getElementById('ieRangoHora');
@@ -8526,6 +8606,11 @@ function ieExplorerClickDelegate(ev){
   const act=b.getAttribute('data-ie-act');
   if(act==='export-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',true);return;}
   if(act==='delete-molpes'){ieExDeleteMolPesBucket(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'');return;}
+  if(act==='show-records'){_ieToggleRecords(b.dataset.tgt);return;}
+  if(act==='edit-rec'){_ieEditRecordForm(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
+  if(act==='save-rec'){_ieSaveRecord(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
+  if(act==='del-rec'){_ieDeleteRecord(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
+  if(act==='cancel-rec'){const bx=document.getElementById(b.dataset.tgt);if(bx)_ieRenderRecordsInto(bx.dataset.mod,bx.dataset.anchor,bx.dataset.turno,b.dataset.tgt);return;}
   if(act==='export-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',true);return;}
   if(act==='month-all'){ieExApplyMonth(b.dataset.mod,b.dataset.month);return;}
 }
@@ -8562,9 +8647,12 @@ function ieRenderExplorer(){
         const kg=o.kg?` · <strong>${(Math.round(o.kg*10)/10).toLocaleString('es-CL')} kg</strong>`:'';
         const ventana=_ieFmtVentanaTurnoHtml(o.anchor,o.turno);
         const refLine='Fecha referencia (inicio turno en calendario): <span class="ie-ex-dt">'+_ieFmtDdMmYyyy(o.anchor)+'</span>';
+        const recId='ierecs_'+esc(mod)+'_'+String(o.turno).replace(/[^a-z0-9]/gi,'')+'_'+String(o.anchor).replace(/[^0-9]/g,'');
         html+=`<div class="ie-ex-row"><div class="ie-ex-meta"><strong>${tn}</strong><br>${refLine} · ${o.count} reg.${kg}${ventana?'<br>'+ventana:''}</div><div class="ie-ex-actions">`+
+          `<button type="button" class="btn ghost sm" data-ie-act="show-records" data-tgt="${recId}" title="Ver, editar o eliminar registros individuales">📋 Ver registros</button>`+
           `<button type="button" class="btn sm" data-ie-act="export-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Exportar Excel</button>`+
-          `<button type="button" class="btn ghost sm danger" data-ie-act="delete-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" title="Quita del sistema los registros de este turno y fecha">Eliminar…</button></div></div>`;
+          `<button type="button" class="btn ghost sm danger" data-ie-act="delete-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" title="Quita del sistema los registros de este turno y fecha">Eliminar…</button></div></div>`+
+          `<div class="ie-recs" id="${recId}" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" hidden></div>`;
       });
       html+=`</div></details>`;
     });
