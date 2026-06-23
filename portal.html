@@ -481,36 +481,54 @@ function dashboardHTML(rows){
   if(indOn('kpi_mes'))        kp+=kpiCard(false,'📆','ESTE MES',fmt(s.kgMes),'kg','mes en curso');
   if(indOn('kpi_dias'))       kp+=kpiCard(false,'📅','DÍAS TRABAJADOS',fmt(s.diasTrab),'','con pesajes');
   if(indOn('kpi_mejorpesaje'))kp+=kpiCard(false,'💪','MEJOR PESAJE',fmt(s.mejorPesaje),'kg','el más alto');
-  // Charts
-  let ph='';
-  if(indOn('ch_dia')){
-    const inner=s.dias.length? (turnoLegend()+svgStackedTurno(s.dias.map(d=>({label:fmtDiaCorto(d),dia:(s.byDiaTurno[d]||{}).dia||0,noche:(s.byDiaTurno[d]||{}).noche||0})))) : emptyMsg();
-    ph+=panel('📅 Kilos por día y turno', s.dias.length?s.dias.length+' días':'', inner);
+  // Gráficos por panel (reutilizable por tipo). NO incluye la tabla (esa va global al final).
+  function chartPanels(st,rws){
+    let ph='';
+    if(indOn('ch_dia')){
+      const inner=st.dias.length? (turnoLegend()+svgStackedTurno(st.dias.map(d=>({label:fmtDiaCorto(d),dia:(st.byDiaTurno[d]||{}).dia||0,noche:(st.byDiaTurno[d]||{}).noche||0})))) : emptyMsg();
+      ph+=panel('📅 Kilos por día y turno', st.dias.length?st.dias.length+' días':'', inner);
+    }
+    if(indOn('ch_especie')){ const arr=sortArr(st.byEsp); ph+=panel('🐟 Kilos por especie','', arr.length?hbars(arr,st.total):emptyMsg()); }
+    if(indOn('ch_turno')){ const arr=sortArr(st.byTurno); ph+=panel('🌓 Kilos por turno','', arr.length?hbars(arr,st.total):emptyMsg()); }
+    if(indOn('ch_ciclo')){
+      const ciclos=Object.keys(st.byCiclo).sort();
+      const inner=ciclos.length? svgBars(ciclos.map(k=>{const[f,t]=k.split('|');return{label:fmtDiaCorto(f)+' '+abrevTurno(t),value:st.byCiclo[k]};})):emptyMsg();
+      ph+=panel('🔁 Kilos por ciclo','cada jornada',inner);
+    }
+    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por rango de kilos','tamaño de cada pesaje', rws.length?rangoChart(rws):emptyMsg()); }
+    if(indOn('ch_linea')){ const arr=sortArr(st.byLinea); ph+=panel('🏭 Kilos por línea','', arr.length?hbars(arr,st.total):emptyMsg()); }
+    return ph;
   }
-  if(indOn('ch_especie')){
-    const arr=sortArr(s.byEsp); ph+=panel('🐟 Kilos por especie','', arr.length?hbars(arr,s.total):emptyMsg());
+  // Separar los gráficos en una SECCIÓN POR TIPO (Filete / Porción / Ovas / …)
+  const _normTipo=t=>{ t=String(t||'').trim(); return t||'Sin tipo'; };
+  const _TIPO_ORDER=['Filete','Porción','Ovas'];
+  const _TIPO_COLOR={'Filete':'#3b82f6','Porción':'#16a34a','Ovas':'#f59e0b','Sin tipo':'#6b7ca3'};
+  const byTipo={};
+  rows.forEach(r=>{ const t=_normTipo(r.tipo); (byTipo[t]||(byTipo[t]=[])).push(r); });
+  const tipos=Object.keys(byTipo).sort((a,b)=>{
+    const ia=_TIPO_ORDER.indexOf(a),ib=_TIPO_ORDER.indexOf(b);
+    if(ia!==-1||ib!==-1) return (ia===-1?99:ia)-(ib===-1?99:ib);
+    if(a==='Sin tipo') return 1; if(b==='Sin tipo') return -1;
+    return a.localeCompare(b);
+  });
+  let secHtml='';
+  if(tipos.length<=1){
+    secHtml=`<div class="panels">${chartPanels(s,rows)}</div>`;
+  }else{
+    secHtml=tipos.map(t=>{
+      const rsub=byTipo[t], ssub=computeStats(rsub), col=_TIPO_COLOR[t]||'#6b7ca3';
+      return `<div style="margin-top:4px">
+        <div style="display:flex;align-items:center;gap:9px;margin:20px 2px 10px;font-size:15px;font-weight:800;letter-spacing:.3px">
+          <span style="display:inline-block;width:13px;height:13px;border-radius:4px;background:${col}"></span>
+          ${t.toUpperCase()} <span style="font-size:12px;color:var(--mut);font-weight:600">· ${fmt(ssub.total)} kg · ${rsub.length} pesajes</span>
+        </div>
+        <div class="panels">${chartPanels(ssub,rsub)}</div></div>`;
+    }).join('');
   }
-  if(indOn('ch_turno')){
-    const arr=sortArr(s.byTurno); ph+=panel('🌓 Kilos por turno','', arr.length?hbars(arr,s.total):emptyMsg());
-  }
-  if(indOn('ch_ciclo')){
-    const ciclos=Object.keys(s.byCiclo).sort();
-    const inner=ciclos.length? svgBars(ciclos.map(k=>{const[f,t]=k.split('|');return{label:fmtDiaCorto(f)+' '+abrevTurno(t),value:s.byCiclo[k]};})):emptyMsg();
-    ph+=panel('🔁 Kilos por ciclo','cada jornada',inner);
-  }
-  if(indOn('ch_rango')){
-    ph+=panel('⚖️ Distribución por rango de kilos','tamaño de cada pesaje', s.n?rangoChart(rows):emptyMsg());
-  }
-  if(indOn('ch_tipo')){
-    const arr=sortArr(s.byTipo); ph+=panel('🏷️ Kilos por tipo de producto','', arr.length?hbars(arr,s.total):emptyMsg());
-  }
-  if(indOn('ch_linea')){
-    const arr=sortArr(s.byLinea); ph+=panel('🏭 Kilos por línea','', arr.length?hbars(arr,s.total):emptyMsg());
-  }
-  if(indOn('tabla')){
-    ph+=panel('📋 Pesajes recientes', s.n?s.n+' pesajes':'', `<div class="tbl-wrap"><table class="tbl">${renderTabla(rows)}</table></div>`, true);
-  }
-  return `<div class="kpis">${kp||'<div class="empty span2">Sin indicadores activos.</div>'}</div><div class="panels">${ph}</div>`;
+  // Tabla de detalle: global, al final (todos los tipos juntos)
+  let tabHtml='';
+  if(indOn('tabla')) tabHtml=`<div class="panels" style="margin-top:14px">${panel('📋 Pesajes recientes', s.n?s.n+' pesajes':'', `<div class="tbl-wrap"><table class="tbl">${renderTabla(rows)}</table></div>`, true)}</div>`;
+  return `<div class="kpis">${kp||'<div class="empty span2">Sin indicadores activos.</div>'}</div>${secHtml}${tabHtml}`;
 }
 function sortArr(obj){ return Object.entries(obj).map(([k,v])=>({label:k,value:v})).sort((a,b)=>b.value-a.value); }
 
