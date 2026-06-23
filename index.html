@@ -4852,14 +4852,17 @@ function _rtFlushLocalNow(){
   if(_rtSaveTimer){clearTimeout(_rtSaveTimer);_rtSaveTimer=null;}
   try{localStorage.setItem(RT_KEY,JSON.stringify(RT));}
   catch(e){
-    // Almacenamiento lleno: poda agresiva de pesajes viejos (a salvo en nube/outbox) y reintenta UNA vez.
+    // Almacenamiento lleno: poda PROGRESIVA de pesajes viejos (a salvo en nube/outbox).
+    // Baja el tope escalón a escalón y reintenta hasta que el guardado entre en la cuota.
     if(e&&e.name==='QuotaExceededError'){
-      const quitados=_rtPruneLocalPesajes(2500);
-      if(quitados>0){
-        try{localStorage.setItem(RT_KEY,JSON.stringify(RT));
-          if(typeof showToast==='function')showToast('Memoria de la tablet liberada ('+quitados+' pesajes antiguos archivados en la nube). Todo sigue guardado.','info');
+      let totalQuitados=0;
+      for(const cap of [2500,1500,800,400,200]){
+        totalQuitados+=_rtPruneLocalPesajes(cap);
+        try{
+          localStorage.setItem(RT_KEY,JSON.stringify(RT));
+          if(typeof showToast==='function')showToast('Memoria de la tablet liberada ('+totalQuitados+' pesajes antiguos archivados en la nube). Todo sigue guardado.','info');
           return;
-        }catch(e2){/* sigue sin entrar */}
+        }catch(e2){ if(!(e2&&e2.name==='QuotaExceededError'))break; } // si el error no es de cuota, no insistir
       }
     }
     console.warn('[rtSaveLocal]',e);
