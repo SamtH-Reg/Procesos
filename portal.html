@@ -894,6 +894,27 @@ document.querySelectorAll('#pvRangebar .chip[data-r]').forEach(c=>{ c.onclick=()
 $('pvLoad').onclick=loadPreview;
 $('pvSel').addEventListener('change',()=>{ if($('pvSel').value) loadPreview(); });
 
+/* Refresco automático al cierre del día (06:00). Si el portal queda abierto cruzando
+   las 6 AM, re-descarga los kilos para reflejar el cierre del turno noche. El chequeo
+   es solo de reloj (sin red); la descarga ocurre únicamente al cruzar las 6:00.
+   Robusto a suspensión del equipo: si despierta pasadas las 6, igual dispara. */
+let _portalLastClose=null;
+function _portalDailyRefreshCheck(){
+  const now=new Date();
+  const mark = now.getHours()>=6 ? fechaISO(now) : isoMenosDias(fechaISO(now),1);
+  if(_portalLastClose===null){ _portalLastClose=mark; return; }   // inicializa sin disparar
+  if(mark!==_portalLastClose){
+    _portalLastClose=mark;
+    if(WK && views.dash && !views.dash.classList.contains('hide')){
+      WK_ALL=null;            // invalida la caché de la sesión
+      loadDash(true);         // re-descarga fresca y re-dibuja
+      toast('Kilos actualizados — cierre 06:00','ok');
+    }
+  }
+}
+setInterval(_portalDailyRefreshCheck, 60000);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') _portalDailyRefreshCheck(); });
+
 (function init(){
   $('portalLink')&&($('portalLink').value=PORTAL_URL);
   try{ const s=sessionStorage.getItem('wk'); if(s){ WK=JSON.parse(s); if(WK&&WK.codigo&&WK.pin){ loadConfig().then(enterDash); return; } } }catch(_){}
