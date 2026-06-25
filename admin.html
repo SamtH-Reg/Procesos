@@ -889,6 +889,10 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div><h1 class="page-title">Unidades/min · Pesos por guía</h1><div class="page-sub">Carga el <strong>peso promedio por pieza</strong> de cada guía. Con esto + el rendimiento base se calculan las <strong>unidades por minuto</strong> de cada filetero (vista general y detalle en el portal).</div></div>
   </div>
   <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">📊 Unidades / min por día (fileteros)</div><div class="card-sub" id="unidMatrixSub">—</div></div>
+    <div id="unidMatrix"><div style="padding:14px;color:var(--text-3);">Carga guías con su peso promedio para ver la productividad.</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hdr"><div class="card-title">⚙️ Parámetros del cálculo</div></div>
     <div class="frow" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
       <div class="form-field"><label class="form-label">Rendimiento base (%)</label><input class="input" id="unidRend" type="number" step="0.1" style="max-width:140px;" placeholder="44.0"></div>
@@ -903,6 +907,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div class="form-field"><label class="form-label">Guía</label><input class="input" id="ngGuia" style="max-width:160px;" placeholder="Ej: 13900"></div>
       <div class="form-field"><label class="form-label">Especie</label><input class="input" id="ngEspecie" style="max-width:220px;" placeholder="Ej: MERLUZA DE COLA"></div>
       <div class="form-field"><label class="form-label">Peso promedio (kg/pieza)</label><input class="input" id="ngPeso" type="number" step="0.001" style="max-width:170px;" placeholder="Ej: 0.851"></div>
+      <div class="form-field"><label class="form-label">Rendimiento (%)</label><input class="input" id="ngRend" type="number" step="0.1" style="max-width:140px;" placeholder="vacío = global"></div>
       <button class="btn sm" type="button" onclick="addGuiaPeso()">Guardar guía</button>
     </div>
   </div>
@@ -910,7 +915,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="card">
     <div class="card-hdr"><div class="card-title">Guías registradas</div><div class="card-sub" id="guiasSub">—</div></div>
     <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th style="text-align:left;">Guía</th><th style="text-align:left;">Especie</th><th style="text-align:right;width:160px;">Peso promedio</th><th style="width:120px;text-align:right;">Acciones</th></tr></thead>
+      <thead><tr><th style="text-align:left;">Guía</th><th style="text-align:left;">Especie</th><th style="text-align:right;width:150px;">Peso promedio</th><th style="text-align:right;width:130px;">Rendimiento</th><th style="width:120px;text-align:right;">Acciones</th></tr></thead>
       <tbody id="tbGuias"></tbody>
     </table></div>
   </div>
@@ -5885,13 +5890,67 @@ async function renderGuiasPeso(){
     <td><strong>${esc(String(g.guia))}</strong></td>
     <td style="color:var(--text-2);">${esc(g.especie||'—')}</td>
     <td class="num">${(+g.peso_promedio).toLocaleString('es-CL',{minimumFractionDigits:3,maximumFractionDigits:3})} kg</td>
+    <td class="num">${g.rendimiento!=null?(+g.rendimiento*100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'<span style="color:var(--text-3);">global</span>'}</td>
     <td style="text-align:right;white-space:nowrap;">
       <button class="btn ghost sm" type="button" onclick="editGuiaPeso(${g.id})" title="Editar">✏️</button>
       <button class="btn ghost sm danger" type="button" onclick="delGuiaPeso(${g.id})" title="Eliminar">✕</button>
-    </td></tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:14px;">Sin guías cargadas. Agrega la primera arriba.</td></tr>';
+    </td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:14px;">Sin guías cargadas. Agrega la primera arriba.</td></tr>';
   const sub=document.getElementById('guiasSub'); if(sub)sub.textContent=GUIAS_PESO.length+' guía(s)';
+  try{renderUnidMatrix();}catch(e){console.warn('matrix',e);}
 }
 window.renderGuiasPeso=renderGuiasPeso;
+/* ── Matriz trabajador × día de unidades/min (fileteros) ── */
+function _unidCycleDate(p){
+  const f=p.fecha||''; if(!/^\d{4}-\d{2}-\d{2}/.test(f))return '';
+  const h=parseInt(String(p.hora||'').slice(0,2),10);
+  if(!isNaN(h)&&h<7){ const d=new Date(f.slice(0,10)+'T00:00:00'); d.setDate(d.getDate()-1); const p2=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+  return f.slice(0,10);
+}
+function _unidDatetime(p){
+  const f=(p.fecha||'').slice(0,10); const h=(p.hora||'00:00').slice(0,5);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null;
+  const d=new Date(f+'T'+(/^\d{2}:\d{2}$/.test(h)?h:'00:00')+':00');
+  return isNaN(d.getTime())?null:d;
+}
+function renderUnidMatrix(){
+  const host=document.getElementById('unidMatrix'); if(!host)return;
+  const pes=(RT.data&&RT.data.pesajes)||[];
+  const cat={}; (GUIAS_PESO||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
+  const gRend=+UNID_CFG.rendimiento||0.44, colMin=+UNID_CFG.colacion_min||40;
+  if(!Object.keys(cat).length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Carga guías con su peso promedio para ver la productividad.</div>'; const s=document.getElementById('unidMatrixSub'); if(s)s.textContent='—'; return; }
+  const acc={}; let sinGuia=0;
+  pes.forEach(p=>{
+    if(String(p.tipo||'').trim().toLowerCase()!=='filete')return;
+    const cd=_unidCycleDate(p); if(!cd)return;
+    const cod=String(p.codigo||p.trabId||p.trab_id||'').trim()||'—';
+    if(!acc[cod])acc[cod]={codigo:cod,nombre:p.nombre||'—',days:{}};
+    const w=acc[cod]; if(!w.days[cd])w.days[cd]={units:0,min:null,max:null};
+    const day=w.days[cd];
+    const g=cat[String(p.guia||'').trim().toLowerCase()]; const kg=+p.kg||0;
+    if(g&&g.peso>0){ const rend=g.rend!=null?g.rend:gRend; if(rend>0)day.units+=(kg/rend)/g.peso; }
+    else sinGuia++;
+    const dt=_unidDatetime(p); if(dt){ if(!day.min||dt<day.min)day.min=dt; if(!day.max||dt>day.max)day.max=dt; }
+  });
+  const allDates=new Set(); Object.values(acc).forEach(w=>Object.keys(w.days).forEach(d=>allDates.add(d)));
+  let dates=[...allDates].sort(); if(dates.length>12)dates=dates.slice(-12);
+  const rows=Object.values(acc).map(w=>{
+    const vals={}; let sum=0,cnt=0;
+    dates.forEach(d=>{
+      const day=w.days[d];
+      if(day&&day.min&&day.max){ const mins=(day.max-day.min)/60000-colMin; const upm=mins>0?day.units/mins:0; vals[d]=upm; if(upm>0){sum+=upm;cnt++;} }
+      else vals[d]=null;
+    });
+    return {codigo:w.codigo,nombre:w.nombre,vals,avg:cnt?sum/cnt:0};
+  }).filter(r=>r.avg>0).sort((a,b)=>b.avg-a.avg);
+  const fmtD=d=>{const[a,m,dd]=d.split('-');return dd+'-'+m+'-'+a;};
+  const num=v=>(v==null||v<=0)?'<span style="color:var(--text-3);">·</span>':v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const s=document.getElementById('unidMatrixSub'); if(s)s.textContent=rows.length+' fileteros · '+dates.length+' días';
+  if(!rows.length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Sin unidades calculables. Verifica que las guías de los pesajes tengan peso promedio cargado.</div>'; return; }
+  host.innerHTML=`<div class="tbl-wrap" style="overflow:auto;"><table class="resumen-pivot-tbl"><thead><tr><th style="text-align:left;">Código</th><th style="text-align:left;">Nombre</th>${dates.map(d=>`<th class="num">${fmtD(d)}</th>`).join('')}</tr></thead><tbody>`+
+    rows.map(r=>`<tr><td><strong>${esc(r.codigo)}</strong></td><td style="white-space:nowrap;">${esc(r.nombre)}</td>${dates.map(d=>`<td class="num">${num(r.vals[d])}</td>`).join('')}</tr>`).join('')+
+    `</tbody></table></div>`+(sinGuia?`<div style="font-size:11px;color:#d97706;margin-top:6px;">⚠ ${sinGuia} pesaje(s) con guía sin peso promedio cargado — no suman unidades. Cárgalas en la tabla de abajo.</div>`:'');
+}
+window.renderUnidMatrix=renderUnidMatrix;
 async function saveUnidCfg(){
   if(!_sb){toast('Sin conexión a Supabase','err');return;}
   const rend=Math.max(0.01,Math.min(1,(parseFloat(document.getElementById('unidRend').value)||44)/100));
@@ -5909,15 +5968,17 @@ async function addGuiaPeso(){
   const guia=(document.getElementById('ngGuia').value||'').trim();
   const especie=(document.getElementById('ngEspecie').value||'').trim()||null;
   const peso=parseFloat(document.getElementById('ngPeso').value);
+  const rendRaw=(document.getElementById('ngRend').value||'').trim();
+  const rendimiento=rendRaw===''?null:Math.max(0.01,Math.min(1,(parseFloat(rendRaw)||0)/100));
   if(!guia){toast('Falta la guía','warn');return;}
   if(!(peso>0)){toast('Peso promedio inválido','warn');return;}
   const exist=GUIAS_PESO.find(g=>String(g.guia).trim().toLowerCase()===guia.toLowerCase());
   try{
     let error;
-    if(exist){ ({error}=await _sb.from('guias_peso').update({especie,peso_promedio:peso,updated_at:new Date().toISOString()}).eq('id',exist.id)); }
-    else { ({error}=await _sb.from('guias_peso').insert({guia,especie,peso_promedio:peso})); }
+    if(exist){ ({error}=await _sb.from('guias_peso').update({especie,peso_promedio:peso,rendimiento,updated_at:new Date().toISOString()}).eq('id',exist.id)); }
+    else { ({error}=await _sb.from('guias_peso').insert({guia,especie,peso_promedio:peso,rendimiento})); }
     if(error)throw error;
-    document.getElementById('ngGuia').value='';document.getElementById('ngEspecie').value='';document.getElementById('ngPeso').value='';
+    document.getElementById('ngGuia').value='';document.getElementById('ngEspecie').value='';document.getElementById('ngPeso').value='';document.getElementById('ngRend').value='';
     toast(exist?'Guía actualizada ✓':'Guía agregada ✓','success'); renderGuiasPeso();
   }catch(e){toast('No se pudo guardar: '+(e&&e.message||e),'err');}
 }
@@ -5927,6 +5988,7 @@ function editGuiaPeso(id){
   document.getElementById('ngGuia').value=g.guia;
   document.getElementById('ngEspecie').value=g.especie||'';
   document.getElementById('ngPeso').value=g.peso_promedio;
+  document.getElementById('ngRend').value=g.rendimiento!=null?(+g.rendimiento*100).toFixed(1):'';
   document.getElementById('ngGuia').focus();
   toast('Editá los campos y pulsá «Guardar guía»','info');
 }
