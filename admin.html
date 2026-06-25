@@ -445,6 +445,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="nav-sec">Catálogos</div>
   <div class="nav-item" data-page="presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Productos / Presets</div>
   <div class="nav-item" data-page="especies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 12c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5c0 3-2.5 5.5-5.5 5.5"/><path d="M6.5 12l-3 .5L6.5 14"/><circle cx="14" cy="11" r="1"/></svg>Especies</div>
+  <div class="nav-item" data-page="unidades"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Unidades/min · Guías</div>
   <div class="nav-item" data-page="trabajadores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Trabajadores</div>
   <div class="nav-item" data-page="planilleros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>Planilleros</div>
   <div class="nav-item" data-page="turnos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Turnos y horarios</div>
@@ -878,6 +879,39 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div class="tbl-wrap"><table class="resumen-pivot-tbl">
       <thead><tr><th style="text-align:left;">Nombre</th><th style="text-align:left;width:200px;">Color (opcional)</th><th style="width:180px;text-align:right;">Acciones</th></tr></thead>
       <tbody id="tbEspecies"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ═══ UNIDADES/MIN · GUÍAS ═══ -->
+<div class="page" id="page-unidades">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Unidades/min · Pesos por guía</h1><div class="page-sub">Carga el <strong>peso promedio por pieza</strong> de cada guía. Con esto + el rendimiento base se calculan las <strong>unidades por minuto</strong> de cada filetero (vista general y detalle en el portal).</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">⚙️ Parámetros del cálculo</div></div>
+    <div class="frow" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-field"><label class="form-label">Rendimiento base (%)</label><input class="input" id="unidRend" type="number" step="0.1" style="max-width:140px;" placeholder="44.0"></div>
+      <div class="form-field"><label class="form-label">Colación (min)</label><input class="input" id="unidColacion" type="number" step="1" style="max-width:120px;" placeholder="40"></div>
+      <button class="btn sm" type="button" onclick="saveUnidCfg()">Guardar parámetros</button>
+    </div>
+    <div class="card-sub" style="margin-top:8px;">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio. &nbsp;Minutos = último − primer pesaje − colación.</div>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr"><div class="card-title">➕ Agregar / actualizar guía</div></div>
+    <div class="frow" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-field"><label class="form-label">Guía</label><input class="input" id="ngGuia" style="max-width:160px;" placeholder="Ej: 13900"></div>
+      <div class="form-field"><label class="form-label">Especie</label><input class="input" id="ngEspecie" style="max-width:220px;" placeholder="Ej: MERLUZA DE COLA"></div>
+      <div class="form-field"><label class="form-label">Peso promedio (kg/pieza)</label><input class="input" id="ngPeso" type="number" step="0.001" style="max-width:170px;" placeholder="Ej: 0.851"></div>
+      <button class="btn sm" type="button" onclick="addGuiaPeso()">Guardar guía</button>
+    </div>
+  </div>
+  <div class="slicer-bar"><div class="slicer" style="min-width:280px;"><label class="form-label">Buscar</label><input class="input" id="guiaSearch" placeholder="Guía o especie…" oninput="renderGuiasPeso()"></div></div>
+  <div class="card">
+    <div class="card-hdr"><div class="card-title">Guías registradas</div><div class="card-sub" id="guiasSub">—</div></div>
+    <div class="tbl-wrap"><table class="resumen-pivot-tbl">
+      <thead><tr><th style="text-align:left;">Guía</th><th style="text-align:left;">Especie</th><th style="text-align:right;width:160px;">Peso promedio</th><th style="width:120px;text-align:right;">Acciones</th></tr></thead>
+      <tbody id="tbGuias"></tbody>
     </table></div>
   </div>
 </div>
@@ -1528,6 +1562,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='resumen-general'&&typeof renderResumenGeneral==='function')renderResumenGeneral();
     if(id==='presets')renderPresets();
     if(id==='especies'&&typeof renderEspecies==='function')renderEspecies();
+    if(id==='unidades'&&typeof renderGuiasPeso==='function')renderGuiasPeso();
     if(id==='trabajadores')renderTrabs();
     if(id==='planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
     if(id==='turnos')renderTurnos();
@@ -5824,6 +5859,89 @@ async function delPreset(id){
 }
 
 /* ════════════ ESPECIES — catálogo independiente ════════════ */
+/* ═══ UNIDADES/MIN · catálogo de peso promedio por guía (tabla guias_peso + app_kv unidades_config) ═══ */
+let GUIAS_PESO=[];
+let UNID_CFG={rendimiento:0.44,colacion_min:40};
+async function loadGuiasPeso(){
+  if(!_sb)return;
+  try{
+    const [r1,r2]=await Promise.all([
+      _sb.from('guias_peso').select('*').order('guia',{ascending:true}),
+      _sb.from('app_kv').select('value').eq('key','unidades_config').maybeSingle()
+    ]);
+    if(!r1.error)GUIAS_PESO=r1.data||[];
+    if(!r2.error&&r2.data&&r2.data.value)UNID_CFG=Object.assign({rendimiento:0.44,colacion_min:40},r2.data.value);
+  }catch(e){console.warn('loadGuiasPeso',e);}
+}
+async function renderGuiasPeso(){
+  await loadGuiasPeso();
+  const r=document.getElementById('unidRend'),c=document.getElementById('unidColacion');
+  if(r&&document.activeElement!==r)r.value=(UNID_CFG.rendimiento*100).toFixed(1);
+  if(c&&document.activeElement!==c)c.value=UNID_CFG.colacion_min;
+  const ql=((document.getElementById('guiaSearch')||{}).value||'').trim().toLowerCase();
+  const list=GUIAS_PESO.filter(g=>!ql||String(g.guia).toLowerCase().includes(ql)||String(g.especie||'').toLowerCase().includes(ql));
+  const tb=document.getElementById('tbGuias');
+  if(tb)tb.innerHTML=list.length?list.map(g=>`<tr>
+    <td><strong>${esc(String(g.guia))}</strong></td>
+    <td style="color:var(--text-2);">${esc(g.especie||'—')}</td>
+    <td class="num">${(+g.peso_promedio).toLocaleString('es-CL',{minimumFractionDigits:3,maximumFractionDigits:3})} kg</td>
+    <td style="text-align:right;white-space:nowrap;">
+      <button class="btn ghost sm" type="button" onclick="editGuiaPeso(${g.id})" title="Editar">✏️</button>
+      <button class="btn ghost sm danger" type="button" onclick="delGuiaPeso(${g.id})" title="Eliminar">✕</button>
+    </td></tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:14px;">Sin guías cargadas. Agrega la primera arriba.</td></tr>';
+  const sub=document.getElementById('guiasSub'); if(sub)sub.textContent=GUIAS_PESO.length+' guía(s)';
+}
+window.renderGuiasPeso=renderGuiasPeso;
+async function saveUnidCfg(){
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  const rend=Math.max(0.01,Math.min(1,(parseFloat(document.getElementById('unidRend').value)||44)/100));
+  const col=Math.max(0,parseInt(document.getElementById('unidColacion').value,10)||0);
+  const value={rendimiento:rend,colacion_min:col};
+  try{
+    const {error}=await _sb.from('app_kv').upsert({key:'unidades_config',value,updated_at:new Date().toISOString()},{onConflict:'key'});
+    if(error)throw error;
+    UNID_CFG=value; toast('Parámetros guardados ✓','success');
+  }catch(e){toast('No se pudo guardar: '+(e&&e.message||e),'err');}
+}
+window.saveUnidCfg=saveUnidCfg;
+async function addGuiaPeso(){
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  const guia=(document.getElementById('ngGuia').value||'').trim();
+  const especie=(document.getElementById('ngEspecie').value||'').trim()||null;
+  const peso=parseFloat(document.getElementById('ngPeso').value);
+  if(!guia){toast('Falta la guía','warn');return;}
+  if(!(peso>0)){toast('Peso promedio inválido','warn');return;}
+  const exist=GUIAS_PESO.find(g=>String(g.guia).trim().toLowerCase()===guia.toLowerCase());
+  try{
+    let error;
+    if(exist){ ({error}=await _sb.from('guias_peso').update({especie,peso_promedio:peso,updated_at:new Date().toISOString()}).eq('id',exist.id)); }
+    else { ({error}=await _sb.from('guias_peso').insert({guia,especie,peso_promedio:peso})); }
+    if(error)throw error;
+    document.getElementById('ngGuia').value='';document.getElementById('ngEspecie').value='';document.getElementById('ngPeso').value='';
+    toast(exist?'Guía actualizada ✓':'Guía agregada ✓','success'); renderGuiasPeso();
+  }catch(e){toast('No se pudo guardar: '+(e&&e.message||e),'err');}
+}
+window.addGuiaPeso=addGuiaPeso;
+function editGuiaPeso(id){
+  const g=GUIAS_PESO.find(x=>String(x.id)===String(id)); if(!g)return;
+  document.getElementById('ngGuia').value=g.guia;
+  document.getElementById('ngEspecie').value=g.especie||'';
+  document.getElementById('ngPeso').value=g.peso_promedio;
+  document.getElementById('ngGuia').focus();
+  toast('Editá los campos y pulsá «Guardar guía»','info');
+}
+window.editGuiaPeso=editGuiaPeso;
+async function delGuiaPeso(id){
+  const g=GUIAS_PESO.find(x=>String(x.id)===String(id)); if(!g)return;
+  if(!confirm('¿Eliminar la guía '+g.guia+'?'))return;
+  try{
+    const {error}=await _sb.from('guias_peso').delete().eq('id',id);
+    if(error)throw error;
+    toast('Guía eliminada ✓','success'); renderGuiasPeso();
+  }catch(e){toast('No se pudo eliminar: '+(e&&e.message||e),'err');}
+}
+window.delGuiaPeso=delGuiaPeso;
+
 const ESPECIES_CLOUD_KEY='friosur_especies_catalog';
 let _espKvPushTimer=null;
 /** Renderiza la tabla de especies en admin. */
