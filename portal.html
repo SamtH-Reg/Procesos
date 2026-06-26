@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0b1220">
 <title>Portal del Trabajador · Friosur</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
@@ -16,7 +16,6 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body{touch-action:manipulation} /* sin doble-tap zoom; teléfono más cómodo */
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:radial-gradient(1200px 700px at 80% -10%,#16306a44,transparent),
@@ -969,10 +968,6 @@ function _portalDailyRefreshCheck(){
 }
 setInterval(_portalDailyRefreshCheck, 60000);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') _portalDailyRefreshCheck(); });
-
-/* Teléfono: bloquear pinch-zoom (iOS ignora user-scalable=no). El doble-tap-zoom
-   ya lo bloquea touch-action:manipulation por CSS. */
-['gesturestart','gesturechange','gestureend'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
 
 (function init(){
   $('portalLink')&&($('portalLink').value=PORTAL_URL);
