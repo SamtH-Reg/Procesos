@@ -393,7 +393,7 @@ const IND_CATALOG=[
     {id:'ch_especie',n:'Kilos por especie',d:'Por tipo de pescado',def:true},
     {id:'ch_turno',n:'Kilos por turno',d:'Día vs noche',def:true},
     {id:'ch_ciclo',n:'Kilos por ciclo',d:'Por jornada (fecha+turno)',def:false},
-    {id:'ch_rango',n:'Distribución por peso por canastillo',d:'Kg de cada canastillo',def:true},
+    {id:'ch_rango',n:'Distribución por peso canastillo',d:'Kg de cada canastillo',def:true},
     {id:'ch_tipo',n:'Kilos por tipo de producto',d:'Filete, H&G, etc.',def:false},
     {id:'ch_linea',n:'Kilos por línea',d:'Por línea de proceso',def:false},
   ]},
@@ -585,7 +585,7 @@ function dashboardHTML(rows){
       const inner=ciclos.length? svgBars(ciclos.map(k=>{const[f,t]=k.split('|');return{label:fmtDiaCorto(f)+' '+abrevTurno(t),value:st.byCiclo[k]};})):emptyMsg();
       ph+=panel('🔁 Kilos por ciclo','cada jornada',inner);
     }
-    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por peso por canastillo','kg de cada canastillo', rws.length?rangoChart(rws):emptyMsg()); }
+    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por peso canastillo','kg de cada canastillo', rws.length?rangoChart(rws):emptyMsg()); }
     if(indOn('ch_linea')){ const arr=sortArr(st.byLinea); ph+=panel('🏭 Kilos por línea','', arr.length?hbars(arr,st.total):emptyMsg()); }
     return ph;
   }
