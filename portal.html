@@ -695,7 +695,7 @@ function rangoChart(rows){
       <div class="bar-track"><div class="bar-fill ${i%2?'alt':''}" style="width:${(cnt[i]/max)*100}%${fill}"></div></div>
       <div class="vl" style="${over&&cnt[i]?'color:#ef4444;font-weight:800':''}">${cnt[i]}</div></div>`;
   }).join('');
-  const nota='<div style="margin-top:11px;font-size:11px;color:#fbbf24;line-height:1.45;background:#1c130355;border:1px solid #3a2a06;border-radius:10px;padding:9px 11px">⚠️ El rango ideal es <b>hasta 10 kg por canastillo</b>. Si se sobrepasa, se tiende a <b>aplastar los filetes</b> y se degrada su <b>calidad premium</b>.</div>';
+  const nota='<div style="margin-top:11px;font-size:11px;color:#fbbf24;line-height:1.45;background:#1c130355;border:1px solid #3a2a06;border-radius:10px;padding:9px 11px">⚠️ El rango ideal es <b>hasta 10 kg por canastillo</b>. Si se sobrepasa, se tiende a <b>aplastar los filetes y ovas</b> y se degrada su <b>calidad como premium</b>.</div>';
   return bars+nota;
 }
 function renderTabla(rows){
