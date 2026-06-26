@@ -7864,6 +7864,7 @@ function _doRender(dirty){
     if(id==='page-resumen'&&dataChanged&&typeof renderResumen==='function')renderResumen();
     if(id==='page-presets'&&(!dirty||dirty.has('presets'))&&typeof renderPresets==='function')renderPresets();
     if(id==='page-especies'&&typeof renderEspecies==='function')renderEspecies();
+    if(id==='page-unidades'&&dataChanged&&typeof renderGuiasPeso==='function')renderGuiasPeso();
     if(id==='page-trabajadores'&&(!dirty||dirty.has('trabajadores'))&&typeof renderTrabs==='function')renderTrabs();
     if(id==='page-planilleros'&&typeof renderPlanillerosLista==='function')renderPlanillerosLista();
     if(id==='page-turnos'&&(!dirty||dirty.has('turnos'))&&typeof renderTurnos==='function')renderTurnos();
