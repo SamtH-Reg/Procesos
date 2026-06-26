@@ -904,8 +904,9 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="card" style="margin-bottom:14px;">
     <div class="card-hdr"><div class="card-title">➕ Agregar / actualizar guía</div></div>
     <div class="frow" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-      <div class="form-field"><label class="form-label">Guía</label><input class="input" id="ngGuia" style="max-width:160px;" placeholder="Ej: 13900"></div>
-      <div class="form-field"><label class="form-label">Especie</label><input class="input" id="ngEspecie" style="max-width:220px;" placeholder="Ej: MERLUZA DE COLA"></div>
+      <div class="form-field"><label class="form-label">Fecha</label><input class="input" id="ngFecha" type="date" style="max-width:160px;"></div>
+      <div class="form-field"><label class="form-label">Guía</label><input class="input" id="ngGuia" style="max-width:140px;" placeholder="Ej: 13900"></div>
+      <div class="form-field"><label class="form-label">Especie</label><input class="input" id="ngEspecie" style="max-width:200px;" placeholder="Ej: MERLUZA DE COLA"></div>
       <div class="form-field"><label class="form-label">Peso promedio (kg/pieza)</label><input class="input" id="ngPeso" type="number" step="0.001" style="max-width:170px;" placeholder="Ej: 0.851"></div>
       <div class="form-field"><label class="form-label">Rendimiento (%)</label><input class="input" id="ngRend" type="number" step="0.1" style="max-width:140px;" placeholder="vacío = global"></div>
       <button class="btn sm" type="button" onclick="addGuiaPeso()">Guardar guía</button>
@@ -915,7 +916,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="card">
     <div class="card-hdr"><div class="card-title">Guías registradas</div><div class="card-sub" id="guiasSub">—</div></div>
     <div class="tbl-wrap"><table class="resumen-pivot-tbl">
-      <thead><tr><th style="text-align:left;">Guía</th><th style="text-align:left;">Especie</th><th style="text-align:right;width:150px;">Peso promedio</th><th style="text-align:right;width:130px;">Rendimiento</th><th style="width:120px;text-align:right;">Acciones</th></tr></thead>
+      <thead><tr><th style="text-align:left;width:110px;">Fecha</th><th style="text-align:left;">Guía</th><th style="text-align:left;">Especie</th><th style="text-align:right;width:140px;">Peso promedio</th><th style="text-align:right;width:120px;">Rendimiento</th><th style="width:110px;text-align:right;">Acciones</th></tr></thead>
       <tbody id="tbGuias"></tbody>
     </table></div>
   </div>
@@ -5887,6 +5888,7 @@ async function renderGuiasPeso(){
   const list=GUIAS_PESO.filter(g=>!ql||String(g.guia).toLowerCase().includes(ql)||String(g.especie||'').toLowerCase().includes(ql));
   const tb=document.getElementById('tbGuias');
   if(tb)tb.innerHTML=list.length?list.map(g=>`<tr>
+    <td style="color:var(--text-2);">${g.fecha?esc(String(g.fecha).split('-').reverse().join('-')):'—'}</td>
     <td><strong>${esc(String(g.guia))}</strong></td>
     <td style="color:var(--text-2);">${esc(g.especie||'—')}</td>
     <td class="num">${(+g.peso_promedio).toLocaleString('es-CL',{minimumFractionDigits:3,maximumFractionDigits:3})} kg</td>
@@ -5894,7 +5896,7 @@ async function renderGuiasPeso(){
     <td style="text-align:right;white-space:nowrap;">
       <button class="btn ghost sm" type="button" onclick="editGuiaPeso(${g.id})" title="Editar">✏️</button>
       <button class="btn ghost sm danger" type="button" onclick="delGuiaPeso(${g.id})" title="Eliminar">✕</button>
-    </td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:14px;">Sin guías cargadas. Agrega la primera arriba.</td></tr>';
+    </td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:14px;">Sin guías cargadas. Agrega la primera arriba.</td></tr>';
   const sub=document.getElementById('guiasSub'); if(sub)sub.textContent=GUIAS_PESO.length+' guía(s)';
   try{renderUnidMatrix();}catch(e){console.warn('matrix',e);}
 }
@@ -5970,26 +5972,30 @@ async function addGuiaPeso(){
   const peso=parseFloat(document.getElementById('ngPeso').value);
   const rendRaw=(document.getElementById('ngRend').value||'').trim();
   const rendimiento=rendRaw===''?null:Math.max(0.01,Math.min(1,(parseFloat(rendRaw)||0)/100));
+  const fecha=(document.getElementById('ngFecha').value||'').trim()||null;
   if(!guia){toast('Falta la guía','warn');return;}
   if(!(peso>0)){toast('Peso promedio inválido','warn');return;}
   const exist=GUIAS_PESO.find(g=>String(g.guia).trim().toLowerCase()===guia.toLowerCase());
   try{
     let error;
-    if(exist){ ({error}=await _sb.from('guias_peso').update({especie,peso_promedio:peso,rendimiento,updated_at:new Date().toISOString()}).eq('id',exist.id)); }
-    else { ({error}=await _sb.from('guias_peso').insert({guia,especie,peso_promedio:peso,rendimiento})); }
+    if(exist){ ({error}=await _sb.from('guias_peso').update({especie,peso_promedio:peso,rendimiento,fecha,updated_at:new Date().toISOString()}).eq('id',exist.id)); }
+    else { ({error}=await _sb.from('guias_peso').insert({guia,especie,peso_promedio:peso,rendimiento,fecha})); }
     if(error)throw error;
-    document.getElementById('ngGuia').value='';document.getElementById('ngEspecie').value='';document.getElementById('ngPeso').value='';document.getElementById('ngRend').value='';
+    ['ngGuia','ngEspecie','ngPeso','ngRend','ngFecha'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     toast(exist?'Guía actualizada ✓':'Guía agregada ✓','success'); renderGuiasPeso();
   }catch(e){toast('No se pudo guardar: '+(e&&e.message||e),'err');}
 }
 window.addGuiaPeso=addGuiaPeso;
 function editGuiaPeso(id){
   const g=GUIAS_PESO.find(x=>String(x.id)===String(id)); if(!g)return;
+  document.getElementById('ngFecha').value=g.fecha?String(g.fecha).slice(0,10):'';
   document.getElementById('ngGuia').value=g.guia;
   document.getElementById('ngEspecie').value=g.especie||'';
   document.getElementById('ngPeso').value=g.peso_promedio;
   document.getElementById('ngRend').value=g.rendimiento!=null?(+g.rendimiento*100).toFixed(1):'';
-  document.getElementById('ngGuia').focus();
+  const f=document.getElementById('ngGuia');
+  try{f.scrollIntoView({behavior:'smooth',block:'center'});}catch(_){}
+  f.focus();
   toast('Editá los campos y pulsá «Guardar guía»','info');
 }
 window.editGuiaPeso=editGuiaPeso;
