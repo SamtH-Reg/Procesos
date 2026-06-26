@@ -408,6 +408,43 @@ function indOn(id){ return PORTAL_CFG.ind[id]!==false; }
 async function loadConfig(){
   try{ const {data,error}=await sb.rpc('portal_config'); if(!error&&data) PORTAL_CFG=mergeCfg(data); }
   catch(e){ console.warn('cfg',e); }
+  await loadUnidData();
+}
+/* Catálogo de pesos por guía + parámetros (para piezas/min del filetero) */
+let GUIAS_CAT=[], UNID_CFG_P={rendimiento:0.44,colacion_min:40};
+async function loadUnidData(){
+  try{
+    const [g,c]=await Promise.all([ sb.rpc('portal_guias_peso'), sb.rpc('portal_unidades_cfg') ]);
+    if(!g.error&&Array.isArray(g.data)) GUIAS_CAT=g.data;
+    if(!c.error&&c.data) UNID_CFG_P=Object.assign({rendimiento:0.44,colacion_min:40},c.data);
+  }catch(e){ console.warn('unid',e); }
+}
+// Datetime real del pesaje (fecha+hora) para medir minutos cruzando medianoche
+function _pDatetime(r){ const f=(r.fecha||'').slice(0,10), h=(r.hora||'00:00').slice(0,5); if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null; const d=new Date(f+'T'+(/^\d{2}:\d{2}$/.test(h)?h:'00:00')+':00'); return isNaN(d.getTime())?null:d; }
+// Piezas/min por jornada (ciclo de fecha) del trabajador: unidades=(kg/rend)/peso_guia ; min=último-primer-colación
+function piezasMinDias(rows){
+  const cat={}; (GUIAS_CAT||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
+  const gRend=+UNID_CFG_P.rendimiento||0.44, colMin=+UNID_CFG_P.colacion_min||40;
+  const days={};
+  rows.forEach(r=>{
+    if(String(r.tipo||'').trim().toLowerCase()!=='filete')return;
+    const cd=cicloFecha(r); if(!cd||cd==='?')return;
+    if(!days[cd])days[cd]={units:0,min:null,max:null};
+    const d=days[cd], g=cat[String(r.guia||'').trim().toLowerCase()], kg=Number(r.kg)||0;
+    if(g&&g.peso>0){ const rend=g.rend!=null?g.rend:gRend; if(rend>0)d.units+=(kg/rend)/g.peso; }
+    const dt=_pDatetime(r); if(dt){ if(!d.min||dt<d.min)d.min=dt; if(!d.max||dt>d.max)d.max=dt; }
+  });
+  return Object.keys(days).sort().map(cd=>{
+    const d=days[cd]; let upm=0;
+    if(d.min&&d.max){ const mins=(d.max-d.min)/60000-colMin; upm=mins>0?d.units/mins:0; }
+    return {fecha:cd, upm};
+  }).filter(x=>x.upm>0);
+}
+function piezasMinPanelInner(rows){
+  if(!(GUIAS_CAT||[]).length) return '';
+  const arr=piezasMinDias(rows);
+  if(!arr.length) return '';
+  return panel('🔪 Piezas por minuto', arr.length+' días', svgBars(arr.map(x=>({label:fmtDiaCorto(x.fecha),value:x.upm}))));
 }
 
 /* ===================== CÁLCULO + RENDER DASHBOARD ===================== */
@@ -577,7 +614,8 @@ function dashboardHTML(rows){
   // Tabla de detalle: global, al final (todos los tipos juntos)
   let tabHtml='';
   if(indOn('tabla')) tabHtml=`<div class="panels" style="margin-top:14px">${panel('📋 Pesajes recientes', s.n?s.n+' pesajes':'', `<div class="tbl-wrap"><table class="tbl">${renderTabla(rows)}</table></div>`, true)}</div>`;
-  return `<div class="kpis">${kp||'<div class="empty span2">Sin indicadores activos.</div>'}</div>${secHtml}${tabHtml}`;
+  const pm=piezasMinPanelInner(rows); const pmWrap=pm?`<div class="panels">${pm}</div>`:'';
+  return `<div class="kpis">${kp||'<div class="empty span2">Sin indicadores activos.</div>'}</div>${pmWrap}${secHtml}${tabHtml}`;
 }
 function sortArr(obj){ return Object.entries(obj).map(([k,v])=>({label:k,value:v})).sort((a,b)=>b.value-a.value); }
 
