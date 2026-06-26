@@ -5920,7 +5920,22 @@ function renderUnidMatrix(){
   const cat={}; (GUIAS_PESO||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
   const gRend=+UNID_CFG.rendimiento||0.44, colMin=+UNID_CFG.colacion_min||40;
   if(!Object.keys(cat).length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Carga guías con su peso promedio para ver la productividad.</div>'; const s=document.getElementById('unidMatrixSub'); if(s)s.textContent='—'; return; }
-  const acc={}; let sinGuia=0;
+  // Pass 1: kg por (ciclo, guía) → guía DOMINANTE del día (la de más kg que esté en el catálogo)
+  const dayGuia={};
+  pes.forEach(p=>{
+    if(String(p.tipo||'').trim().toLowerCase()!=='filete')return;
+    const cd=_unidCycleDate(p); if(!cd)return;
+    const gk=String(p.guia||'').trim().toLowerCase();
+    (dayGuia[cd]||(dayGuia[cd]={}))[gk]=(dayGuia[cd][gk]||0)+(+p.kg||0);
+  });
+  const domByDay={};
+  Object.keys(dayGuia).forEach(cd=>{
+    let best=null,bestKg=-1;
+    Object.keys(dayGuia[cd]).forEach(gk=>{ if(cat[gk]&&cat[gk].peso>0&&dayGuia[cd][gk]>bestKg){bestKg=dayGuia[cd][gk];best=cat[gk];} });
+    if(best)domByDay[cd]=best;
+  });
+  // Pass 2: acumular por trabajador/día (guía del pesaje, o la dominante del día como respaldo)
+  const acc={}; const faltan={};
   pes.forEach(p=>{
     if(String(p.tipo||'').trim().toLowerCase()!=='filete')return;
     const cd=_unidCycleDate(p); if(!cd)return;
@@ -5928,11 +5943,13 @@ function renderUnidMatrix(){
     if(!acc[cod])acc[cod]={codigo:cod,nombre:p.nombre||'—',days:{}};
     const w=acc[cod]; if(!w.days[cd])w.days[cd]={units:0,min:null,max:null};
     const day=w.days[cd];
-    const g=cat[String(p.guia||'').trim().toLowerCase()]; const kg=+p.kg||0;
+    const gk=String(p.guia||'').trim().toLowerCase(), kg=+p.kg||0;
+    let g=cat[gk]; if(!(g&&g.peso>0))g=domByDay[cd]||null;   // respaldo: guía dominante del día
     if(g&&g.peso>0){ const rend=g.rend!=null?g.rend:gRend; if(rend>0)day.units+=(kg/rend)/g.peso; }
-    else sinGuia++;
+    else if(gk){ faltan[gk]=(faltan[gk]||0)+kg; }
     const dt=_unidDatetime(p); if(dt){ if(!day.min||dt<day.min)day.min=dt; if(!day.max||dt>day.max)day.max=dt; }
   });
+  const faltanList=Object.keys(faltan).sort((a,b)=>faltan[b]-faltan[a]);
   const allDates=new Set(); Object.values(acc).forEach(w=>Object.keys(w.days).forEach(d=>allDates.add(d)));
   let dates=[...allDates].sort(); if(dates.length>12)dates=dates.slice(-12);
   const rows=Object.values(acc).map(w=>{
@@ -5950,7 +5967,7 @@ function renderUnidMatrix(){
   if(!rows.length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Sin unidades calculables. Verifica que las guías de los pesajes tengan peso promedio cargado.</div>'; return; }
   host.innerHTML=`<div class="tbl-wrap" style="overflow:auto;"><table class="resumen-pivot-tbl"><thead><tr><th style="text-align:left;">Código</th><th style="text-align:left;">Nombre</th>${dates.map(d=>`<th class="num">${fmtD(d)}</th>`).join('')}</tr></thead><tbody>`+
     rows.map(r=>`<tr><td><strong>${esc(r.codigo)}</strong></td><td style="white-space:nowrap;">${esc(r.nombre)}</td>${dates.map(d=>`<td class="num">${num(r.vals[d])}</td>`).join('')}</tr>`).join('')+
-    `</tbody></table></div>`+(sinGuia?`<div style="font-size:11px;color:#d97706;margin-top:6px;">⚠ ${sinGuia} pesaje(s) con guía sin peso promedio cargado — no suman unidades. Cárgalas en la tabla de abajo.</div>`:'');
+    `</tbody></table></div>`+(faltanList.length?`<div style="font-size:12px;color:#d97706;margin-top:8px;font-weight:600;">⚠ Guías en los pesajes que faltan en el catálogo (no suman unidades): ${faltanList.map(g=>esc(g.toUpperCase())+' ('+_fmt(faltan[g])+' kg)').join(' · ')}. Cárgalas en la tabla de abajo.</div>`:'');
 }
 window.renderUnidMatrix=renderUnidMatrix;
 async function saveUnidCfg(){

@@ -425,12 +425,18 @@ function _pDatetime(r){ const f=(r.fecha||'').slice(0,10), h=(r.hora||'00:00').s
 function piezasMinDias(rows){
   const cat={}; (GUIAS_CAT||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
   const gRend=+UNID_CFG_P.rendimiento||0.44, colMin=+UNID_CFG_P.colacion_min||40;
+  // Guía dominante por día (la de más kg que esté en el catálogo) como respaldo
+  const dayGuia={};
+  rows.forEach(r=>{ if(String(r.tipo||'').trim().toLowerCase()!=='filete')return; const cd=cicloFecha(r); if(!cd||cd==='?')return; const gk=String(r.guia||'').trim().toLowerCase(); (dayGuia[cd]||(dayGuia[cd]={}))[gk]=(dayGuia[cd][gk]||0)+(Number(r.kg)||0); });
+  const domByDay={};
+  Object.keys(dayGuia).forEach(cd=>{ let best=null,bk=-1; Object.keys(dayGuia[cd]).forEach(gk=>{ if(cat[gk]&&cat[gk].peso>0&&dayGuia[cd][gk]>bk){bk=dayGuia[cd][gk];best=cat[gk];} }); if(best)domByDay[cd]=best; });
   const days={};
   rows.forEach(r=>{
     if(String(r.tipo||'').trim().toLowerCase()!=='filete')return;
     const cd=cicloFecha(r); if(!cd||cd==='?')return;
     if(!days[cd])days[cd]={units:0,min:null,max:null};
-    const d=days[cd], g=cat[String(r.guia||'').trim().toLowerCase()], kg=Number(r.kg)||0;
+    const d=days[cd], kg=Number(r.kg)||0;
+    let g=cat[String(r.guia||'').trim().toLowerCase()]; if(!(g&&g.peso>0))g=domByDay[cd]||null;
     if(g&&g.peso>0){ const rend=g.rend!=null?g.rend:gRend; if(rend>0)d.units+=(kg/rend)/g.peso; }
     const dt=_pDatetime(r); if(dt){ if(!d.min||dt<d.min)d.min=dt; if(!d.max||dt>d.max)d.max=dt; }
   });
