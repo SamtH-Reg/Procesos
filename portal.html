@@ -974,6 +974,20 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
   try{ const s=sessionStorage.getItem('wk'); if(s){ WK=JSON.parse(s); if(WK&&WK.codigo&&WK.pin){ loadConfig().then(enterDash); return; } } }catch(_){}
   show('login'); setTimeout(()=>{ const f=$('inCodigo'); if(f) f.focus(); },200);
 })();
+
+/* Auto-actualizador del portal: detecta deploy nuevo (ETag de portal.html) y recarga
+   cuando es seguro (sin input enfocado e inactivo ≥30 s). Evita quedar con caché vieja. */
+(function(){
+  let _pBase=null,_pPend=false,_pAct=Date.now();
+  const _pUrl=location.pathname.split('?')[0];
+  ['click','keydown','input','touchstart'].forEach(e=>document.addEventListener(e,()=>{_pAct=Date.now();},{passive:true}));
+  async function _pTag(){ try{const r=await fetch(_pUrl+'?upd='+Date.now(),{method:'HEAD',cache:'no-store'});return r.headers.get('etag')||r.headers.get('last-modified');}catch(_){return null;} }
+  function _pSafe(){ const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return false; return (Date.now()-_pAct)>30000; }
+  async function _pCheck(){ const t=await _pTag(); if(!t)return; if(_pBase===null){_pBase=t;return;} if(t!==_pBase)_pPend=true; if(_pPend&&_pSafe()){try{location.reload();}catch(_){}} }
+  setInterval(_pCheck,180000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_pCheck();});
+  setTimeout(_pCheck,5000);
+})();
 </script>
 </body>
 </html>
