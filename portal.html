@@ -15,7 +15,8 @@
   --warn:#f59e0b; --bad:#ef4444; --r:18px; --sh:0 18px 40px -18px rgba(0,0,0,.65);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%}
+html,body{margin:0;height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{touch-action:manipulation} /* sin doble-tap zoom; teléfono más cómodo */
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:radial-gradient(1200px 700px at 80% -10%,#16306a44,transparent),
@@ -392,7 +393,7 @@ const IND_CATALOG=[
     {id:'ch_especie',n:'Kilos por especie',d:'Por tipo de pescado',def:true},
     {id:'ch_turno',n:'Kilos por turno',d:'Día vs noche',def:true},
     {id:'ch_ciclo',n:'Kilos por ciclo',d:'Por jornada (fecha+turno)',def:false},
-    {id:'ch_rango',n:'Distribución por rango de kilos',d:'Tamaño de cada pesaje',def:true},
+    {id:'ch_rango',n:'Distribución por peso por canastillo',d:'Kg de cada canastillo',def:true},
     {id:'ch_tipo',n:'Kilos por tipo de producto',d:'Filete, H&G, etc.',def:false},
     {id:'ch_linea',n:'Kilos por línea',d:'Por línea de proceso',def:false},
   ]},
@@ -584,7 +585,7 @@ function dashboardHTML(rows){
       const inner=ciclos.length? svgBars(ciclos.map(k=>{const[f,t]=k.split('|');return{label:fmtDiaCorto(f)+' '+abrevTurno(t),value:st.byCiclo[k]};})):emptyMsg();
       ph+=panel('🔁 Kilos por ciclo','cada jornada',inner);
     }
-    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por rango de kilos','tamaño de cada pesaje', rws.length?rangoChart(rws):emptyMsg()); }
+    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por peso por canastillo','kg de cada canastillo', rws.length?rangoChart(rws):emptyMsg()); }
     if(indOn('ch_linea')){ const arr=sortArr(st.byLinea); ph+=panel('🏭 Kilos por línea','', arr.length?hbars(arr,st.total):emptyMsg()); }
     return ph;
   }
@@ -609,7 +610,7 @@ function dashboardHTML(rows){
       let panelsInner;
       if(t==='Ovas'){
         // Gráfico unido (kg + rendimiento por jornada) en lugar del día/turno genérico
-        const merged=panel('📅 Ovas y rendimiento por jornada','base '+fmt(OVAS_REND_BASE*100)+'%', ovasRendChart(rows));
+        const merged=panel('📅 Kilos, rendimiento y recolección de ovas','base '+fmt(OVAS_REND_BASE*100)+'%', ovasRendChart(rows));
         panelsInner=merged+chartPanels(ssub,rsub,true);
       }else{
         panelsInner=chartPanels(ssub,rsub);
@@ -687,9 +688,15 @@ function rangoChart(rows){
   const cnt=buckets.map(()=>0);
   rows.forEach(r=>{ const k=Number(r.kg)||0; for(let i=0;i<buckets.length;i++){ if(k>=buckets[i][0]&&k<buckets[i][1]){cnt[i]++;break;} } });
   const max=Math.max(...cnt,1);
-  return labels.map((l,i)=>`<div class="bar-row"><div class="nm">${l} kg</div>
-    <div class="bar-track"><div class="bar-fill ${i%2?'alt':''}" style="width:${(cnt[i]/max)*100}%"></div></div>
-    <div class="vl">${cnt[i]}</div></div>`).join('');
+  const bars=labels.map((l,i)=>{
+    const over=(i===labels.length-1); // 10+ kg = se pasó del rango ideal del canastillo
+    const fill=over?';background:#16a34a':''; // verde cuando se sobrepasa
+    return `<div class="bar-row"><div class="nm">${l} kg</div>
+      <div class="bar-track"><div class="bar-fill ${i%2?'alt':''}" style="width:${(cnt[i]/max)*100}%${fill}"></div></div>
+      <div class="vl" style="${over&&cnt[i]?'color:#16a34a;font-weight:800':''}">${cnt[i]}</div></div>`;
+  }).join('');
+  const nota='<div style="margin-top:11px;font-size:11px;color:#fbbf24;line-height:1.45;background:#1c130355;border:1px solid #3a2a06;border-radius:10px;padding:9px 11px">⚠️ El rango ideal es <b>hasta 10 kg por canastillo</b>. Si se sobrepasa, se tiende a <b>aplastar los filetes</b> y se degrada su <b>calidad premium</b>.</div>';
+  return bars+nota;
 }
 function renderTabla(rows){
   const sorted=rows.slice().sort((a,b)=>{ const ka=(a.fecha||'')+(a.hora||''),kb=(b.fecha||'')+(b.hora||''); return ka<kb?1:-1; }).slice(0,150);
@@ -962,6 +969,10 @@ function _portalDailyRefreshCheck(){
 }
 setInterval(_portalDailyRefreshCheck, 60000);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') _portalDailyRefreshCheck(); });
+
+/* Teléfono: bloquear pinch-zoom (iOS ignora user-scalable=no). El doble-tap-zoom
+   ya lo bloquea touch-action:manipulation por CSS. */
+['gesturestart','gesturechange','gestureend'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
 
 (function init(){
   $('portalLink')&&($('portalLink').value=PORTAL_URL);
