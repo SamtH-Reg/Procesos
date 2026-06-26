@@ -450,7 +450,11 @@ function piezasMinPanelInner(rows){
   if(!(GUIAS_CAT||[]).length) return '';
   const arr=piezasMinDias(rows);
   if(!arr.length) return '';
-  return panel('🔪 Piezas por minuto', arr.length+' días', svgBars(arr.map(x=>({label:fmtDiaCorto(x.fecha),value:x.upm}))));
+  const max=Math.max(...arr.map(x=>x.upm),1);
+  const bars=arr.map((x,idx)=>`<div class="bar-row"><div class="nm">${fmtDiaCorto(x.fecha)}</div>
+    <div class="bar-track"><div class="bar-fill ${idx%2?'alt':''}" style="width:${(x.upm/max)*100}%"></div></div>
+    <div class="vl">${fmt(x.upm)}</div></div>`).join('');
+  return panel('🔪 Piezas por minuto', arr.length+' días', bars);
 }
 
 /* ===================== CÁLCULO + RENDER DASHBOARD ===================== */
@@ -572,6 +576,7 @@ function dashboardHTML(rows){
       const inner=st.dias.length? (turnoLegend()+svgStackedTurno(st.dias.map(d=>({label:fmtDiaCorto(d),dia:(st.byDiaTurno[d]||{}).dia||0,noche:(st.byDiaTurno[d]||{}).noche||0})))) : emptyMsg();
       ph+=panel('📅 Kilos por día y turno', st.dias.length?st.dias.length+' días':'', inner);
     }
+    ph+=piezasMinPanelInner(rws); // 🔪 Piezas por minuto — entre "día y turno" y "especie" (solo filete)
     if(indOn('ch_especie')){ const arr=sortArr(st.byEsp); ph+=panel('🐟 Kilos por especie','', arr.length?hbars(arr,st.total):emptyMsg()); }
     if(indOn('ch_turno')){ const arr=sortArr(st.byTurno); ph+=panel('🌓 Kilos por turno','', arr.length?hbars(arr,st.total):emptyMsg()); }
     if(indOn('ch_ciclo')){
@@ -620,8 +625,7 @@ function dashboardHTML(rows){
   // Tabla de detalle: global, al final (todos los tipos juntos)
   let tabHtml='';
   if(indOn('tabla')) tabHtml=`<div class="panels" style="margin-top:14px">${panel('📋 Pesajes recientes', s.n?s.n+' pesajes':'', `<div class="tbl-wrap"><table class="tbl">${renderTabla(rows)}</table></div>`, true)}</div>`;
-  const pm=piezasMinPanelInner(rows); const pmWrap=pm?`<div class="panels">${pm}</div>`:'';
-  return `<div class="kpis">${kp||'<div class="empty span2">Sin indicadores activos.</div>'}</div>${pmWrap}${secHtml}${tabHtml}`;
+  return `<div class="kpis">${kp||'<div class="empty span2">Sin indicadores activos.</div>'}</div>${secHtml}${tabHtml}`;
 }
 function sortArr(obj){ return Object.entries(obj).map(([k,v])=>({label:k,value:v})).sort((a,b)=>b.value-a.value); }
 
