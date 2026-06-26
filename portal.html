@@ -584,7 +584,7 @@ function dashboardHTML(rows){
       const inner=ciclos.length? svgBars(ciclos.map(k=>{const[f,t]=k.split('|');return{label:fmtDiaCorto(f)+' '+abrevTurno(t),value:st.byCiclo[k]};})):emptyMsg();
       ph+=panel('🔁 Kilos por ciclo','cada jornada',inner);
     }
-    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por peso canastillo','kg de cada canastillo', rws.length?rangoChart(rws):emptyMsg()); }
+    if(indOn('ch_rango')){ ph+=panel('⚖️ Distribución por peso canastillo','último turno · kg por canastillo', rws.length?rangoChart(rws):emptyMsg()); }
     if(indOn('ch_linea')){ const arr=sortArr(st.byLinea); ph+=panel('🏭 Kilos por línea','', arr.length?hbars(arr,st.total):emptyMsg()); }
     return ph;
   }
@@ -683,18 +683,32 @@ function hbars(items,total){
   }).join('');
 }
 function rangoChart(rows){
+  // Solo el ÚLTIMO turno registrado (jornada de ciclo más reciente) → control en vivo del peso por canastillo
+  let ult=null;
+  rows.forEach(r=>{ const cd=cicloFecha(r); if(cd&&cd!=='?'&&(!ult||cd>ult))ult=cd; });
+  const rws=ult?rows.filter(r=>cicloFecha(r)===ult):rows;
   const buckets=[[0,2],[2,4],[4,6],[6,8],[8,10],[10,1e9]]; const labels=['0–2','2–4','4–6','6–8','8–10','10+'];
   const cnt=buckets.map(()=>0);
-  rows.forEach(r=>{ const k=Number(r.kg)||0; for(let i=0;i<buckets.length;i++){ if(k>=buckets[i][0]&&k<buckets[i][1]){cnt[i]++;break;} } });
+  rws.forEach(r=>{ const k=Number(r.kg)||0; for(let i=0;i<buckets.length;i++){ if(k>=buckets[i][0]&&k<buckets[i][1]){cnt[i]++;break;} } });
+  const total=cnt.reduce((a,b)=>a+b,0), over=cnt[5];
+  const overPct=total?(over/total*100):0;
   const max=Math.max(...cnt,1);
+  // Color del 10+ según % fuera de rango: ≥30% rojo · 10–30% amarillo · ≤10% verde
+  const overCol = overPct>=30?'#ef4444' : (overPct>10?'#f59e0b' : '#16a34a');
   const bars=labels.map((l,i)=>{
-    const over=(i===labels.length-1); // 10+ kg = se pasó del rango ideal del canastillo
-    const fill=over?';background:#ef4444':''; // rojo = alerta cuando se sobrepasa
+    const isOver=(i===5);
+    const fill=isOver?(';background:'+overCol):'';
     return `<div class="bar-row"><div class="nm">${l} kg</div>
       <div class="bar-track"><div class="bar-fill ${i%2?'alt':''}" style="width:${(cnt[i]/max)*100}%${fill}"></div></div>
-      <div class="vl" style="${over&&cnt[i]?'color:#ef4444;font-weight:800':''}">${cnt[i]}</div></div>`;
+      <div class="vl" style="${isOver&&cnt[i]?'color:'+overCol+';font-weight:800':''}">${cnt[i]}</div></div>`;
   }).join('');
-  const nota='<div style="margin-top:11px;font-size:11px;color:#fbbf24;line-height:1.45;background:#1c130355;border:1px solid #3a2a06;border-radius:10px;padding:9px 11px">⚠️ El rango ideal es <b>hasta 10 kg por canastillo</b>. Si se sobrepasa, se tiende a <b>aplastar los filetes y ovas</b> y se degrada su <b>calidad como premium</b>.</div>';
+  // Mensaje dinámico según desempeño
+  const p=overPct.toFixed(0)+'%';
+  let col,bg,bd,msg;
+  if(overPct>=30){ col='#fca5a5';bg='#2a0e0e';bd='#7a2020'; msg='⚠️ <b>'+p+'</b> de los canastillos supera los <b>10 kg</b>. Se aplastan los filetes y ovas y se degrada la <b>calidad como premium</b> — hay que bajar el peso.'; }
+  else if(overPct>10){ col='#fcd34d';bg='#1c1303';bd='#3a2a06'; msg='📈 Vamos <b>mejorando</b> ('+p+' sobre 10 kg). Sigan bajando el peso de los canastillos sobre 10 kg.'; }
+  else { col='#86efac';bg='#0e2a1b';bd='#1f7a45'; msg='✅ <b>Buen control</b> del peso (solo '+p+' sobre 10 kg). Se está trabajando y mejorando. ¡Sigan así!'; }
+  const nota='<div style="margin-top:11px;font-size:11px;color:'+col+';line-height:1.45;background:'+bg+';border:1px solid '+bd+';border-radius:10px;padding:9px 11px">'+msg+'</div>';
   return bars+nota;
 }
 function renderTabla(rows){
