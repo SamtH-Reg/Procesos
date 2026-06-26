@@ -7303,7 +7303,7 @@ async function adminPushEqRuntimeToCloud(opts){
  *  cada request a ~1000). Reemplaza el viejo .limit(500) que perdía registros cuando
  *  había más de 500 (moldes/pesajes/generales superan ese número). Ordena id desc. */
 async function _sbFetchAllRows(table){
-  const PAGE=1000, MAX=100000; // techo defensivo
+  const PAGE=50000, MAX=200000; // pagina grande: 1 viaje en vez de ~17 (mismo egress). pgrst.db_max_rows=100000
   let all=[], from=0;
   while(from<MAX){
     const{data,error}=await _sb.from(table).select('*').order('id',{ascending:false}).range(from,from+PAGE-1);
