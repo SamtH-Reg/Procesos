@@ -3074,6 +3074,26 @@ function applyFilters(){
   renderKPIs();renderDashGrid();
   try{if(document.getElementById('dashLastKgSync'))dashRefreshKgSummary({silent:true});}catch(e){}
   try{if(document.getElementById('page-resumen')&&document.getElementById('page-resumen').classList.contains('active'))renderResumen();}catch(e2){}
+  _maybeLoadHistoryForFilter();
+}
+/* Si el filtro pide fechas anteriores al corte (o "Todo"), baja el histórico bajo demanda. */
+async function _maybeLoadHistoryForFilter(){
+  try{
+    if(_allLoaded||_pullSinceYmd===null)return;           // todo cargado o aún sin pull inicial
+    const desdeYmd=(document.getElementById('slFechaDesde')||{}).value||null;
+    const preset=(document.getElementById('slFechaPreset')||{}).value||'';
+    const wantAll=(preset==='todo')||!desdeYmd;            // "Todo" o sin límite inferior
+    const need=wantAll?true:(desdeYmd<_pullSinceYmd);
+    if(!need)return;
+    if(typeof toast==='function')toast('Cargando histórico anterior…','info');
+    const ok=await _ensureHistoryFrom(wantAll?null:desdeYmd);
+    if(ok){
+      renderKPIs();renderDashGrid();
+      try{if(typeof _doRender==='function')_doRender(new Set(['moldes','pesajes','generales']));}catch(_){}
+      try{if(document.getElementById('page-resumen')&&document.getElementById('page-resumen').classList.contains('active'))renderResumen();}catch(_){}
+      if(typeof toast==='function')toast('Histórico cargado ✓','success');
+    }
+  }catch(e){console.warn('hist filter',e);}
 }
 function clearFilters(){
   _dashSlicersUserCleared=true;
@@ -7302,11 +7322,20 @@ async function adminPushEqRuntimeToCloud(opts){
 /** Trae TODAS las filas de una tabla operativa en páginas de 1000 (Supabase limita
  *  cada request a ~1000). Reemplaza el viejo .limit(500) que perdía registros cuando
  *  había más de 500 (moldes/pesajes/generales superan ese número). Ordena id desc. */
-async function _sbFetchAllRows(table){
+const _ADMIN_PULL_DAYS=60;   // carga inicial/periódica: solo últimos 60 días (menos egress + más rápido)
+let _pullSinceYmd=null;      // fecha más antigua con datos completos en local (null = aún sin pull)
+let _allLoaded=false;        // true cuando ya está TODO el histórico (tras "Sincronizar" o cargar todo)
+function _adminCutoffYmd(){ const d=new Date(); d.setDate(d.getDate()-_ADMIN_PULL_DAYS); return _dateObjToLocalYmd(d); }
+function _adminPrevDayYmd(ymd){ const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m)return ymd; const d=new Date(+m[1],+m[2]-1,+m[3],12,0,0); d.setDate(d.getDate()-1); return _dateObjToLocalYmd(d); }
+function _minYmd(a,b){ if(!a)return b; if(!b)return a; return a<b?a:b; }
+async function _sbFetchAllRows(table, sinceYmd){
   const PAGE=50000, MAX=200000; // pagina grande: 1 viaje en vez de ~17 (mismo egress). pgrst.db_max_rows=100000
   let all=[], from=0;
   while(from<MAX){
-    const{data,error}=await _sb.from(table).select('*').order('id',{ascending:false}).range(from,from+PAGE-1);
+    let q=_sb.from(table).select('*');
+    if(sinceYmd) q=q.gte('fecha',sinceYmd);   // solo desde el corte (carga inicial)
+    q=q.order('id',{ascending:false}).range(from,from+PAGE-1);
+    const{data,error}=await q;
     if(error)return{data:all,error};
     const chunk=Array.isArray(data)?data:[];
     all=all.concat(chunk);
@@ -7315,19 +7344,45 @@ async function _sbFetchAllRows(table){
   }
   return{data:all,error:null};
 }
+/* Carga bajo demanda del histórico anterior al corte (al filtrar fechas viejas o elegir "Todo").
+   desdeYmd null = todo el histórico restante. Hace merge sin duplicar por id. */
+async function _ensureHistoryFrom(desdeYmd){
+  if(!_sb||_allLoaded) return false;                     // todo cargado
+  if(_pullSinceYmd===null) return false;                 // aún sin pull inicial
+  if(desdeYmd && desdeYmd>=_pullSinceYmd) return false;   // ya cubierto
+  const hastaYmd=_adminPrevDayYmd(_pullSinceYmd);
+  for(const t of['moldes','pesajes','generales']){
+    try{
+      let q=_sb.from(t).select('*').lte('fecha',hastaYmd);
+      if(desdeYmd) q=q.gte('fecha',desdeYmd);
+      const{data,error}=await q.order('id',{ascending:false}).range(0,199999);
+      if(error){sbLog('hist '+t+': '+error.message,false);continue;}
+      const arr=Array.isArray(RT.data[t])?RT.data[t]:(RT.data[t]=[]);
+      const ex=new Set(arr.map(r=>String(r&&r.id)));
+      _sbParse(t,data||[]).forEach(m=>{ if(m&&m.id!=null&&!ex.has(String(m.id))){arr.push(m);ex.add(String(m.id));} });
+    }catch(e){sbLog('hist '+t+': '+(e&&e.message||e),false);}
+  }
+  if(desdeYmd) _pullSinceYmd=desdeYmd; else _allLoaded=true; // sin desde = se cargó todo el resto
+  try{RT._ensureShape&&RT._ensureShape();RT.save&&RT.save();}catch(_){}
+  return true;
+}
+window._ensureHistoryFrom=_ensureHistoryFrom;
 /** Moldes/pesajes/generales desde Supabase solamente (sin fusionar caché local). La consola admin refleja la nube; la tablet sigue usando merge donde aplique. */
 async function sbPullRuntimeFromCloud(){
   if(!_sb)return;
   if(!_currentUser||!isSbAdmin())return;
   try{
     if(!RT.data)RT.data={};
+    const cutoff=_adminCutoffYmd();
     for(const t of['moldes','pesajes','generales']){
-      const{data,error}=await _sbFetchAllRows(t);
+      const{data,error}=await _sbFetchAllRows(t, cutoff);
       if(error){sbLog('pull RT '+t+': '+error.message,false);continue;}
-      const remote=_sbParse(t,data||[]);
-      RT.data[t]=remote;
-      sbLog(t+': '+remote.length+' filas ↓ (solo nube)',true);
+      const recent=_sbParse(t,data||[]);
+      const old=(RT.data[t]||[]).filter(r=>String((r&&r.fecha)||'')<cutoff); // conserva histórico ya cargado bajo demanda
+      RT.data[t]=old.concat(recent);
+      sbLog(t+': '+recent.length+' filas (últ. '+_ADMIN_PULL_DAYS+'d)'+(old.length?' + '+old.length+' hist':'')+' ↓',true);
     }
+    if(!_allLoaded)_pullSinceYmd=_minYmd(_pullSinceYmd, cutoff);
     const armOk=await _adminPullArmadoLineasFromCloud();
     if(armOk)sbLog('armado_lineas aplicado desde nube',true);
     try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) aplicado desde nube',true);}catch(_e){}
@@ -7956,14 +8011,18 @@ async function _pollFresh(){
           sbLog('↺ poll '+t+': +'+parsed.length+' nuevas (incremental)');
         }
       }else{
-        // primera vez / bajó el count / reconciliación → full (paginado)
-        const{data:rows,error:e2}=await _sbFetchAllRows(t);
+        // primera vez / bajó el count / reconciliación → full (limitado al corte, conserva histórico ya cargado)
+        const cutoff=_adminCutoffYmd();
+        const{data:rows,error:e2}=await _sbFetchAllRows(t, cutoff);
         if(!e2&&rows){
           if(!RT.data)RT.data={};
-          RT.data[t]=_sbParse(t,rows);
+          const recent=_sbParse(t,rows);
+          const old=(RT.data[t]||[]).filter(r=>String((r&&r.fecha)||'')<cutoff);
+          RT.data[t]=old.concat(recent);
           let mx='';rows.forEach(r=>{const c=r&&r.created_at;if(c&&c>mx)mx=c;});_pollSince[t]=mx||_pollSince[t];
+          if(!_allLoaded)_pullSinceYmd=_minYmd(_pullSinceYmd,cutoff);
           RT._ensureShape();changed=true;
-          sbLog('↺ poll '+t+': '+n+' filas (full)');
+          sbLog('↺ poll '+t+': '+recent.length+' filas (full últ.'+_ADMIN_PULL_DAYS+'d)');
         }
       }
     }catch(ex){sbLog('poll ex: '+ex.message,false);}
@@ -8252,6 +8311,7 @@ async function pullAll(){
       RT.data[t]=remote;
       sbLog(t+': '+remote.length+' filas ↓ (solo nube)',true);
     }
+    _allLoaded=true; _pullSinceYmd=null; // "Sincronizar" trae TODO el histórico → ya no hay corte
     if(await _adminPullArmadoLineasFromCloud())sbLog('armado_lineas ↓',true);
     try{if(await _adminPullEqRuntimeFromCloud())sbLog('eq_runtime (túneles/placas) desde app_kv ↓',true);}catch(_e){}
     try{if(await adminPullPlanillerosFromCloud())sbLog('planilleros catálogo ↓ app_kv',true);}catch(_e){}
