@@ -5211,12 +5211,12 @@ async function _tbIncrementalPullOperativos(silent){
 }
 window._tbIncrementalPullOperativos=_tbIncrementalPullOperativos;
 /* Tick periódico liviano: incremental casi siempre; reconciliación completa +
-   catálogos cada ~30 min (1 de cada 15 ticks de 2 min). */
+   catálogos cada ~60 min (1 de cada 30 ticks de 2 min) para reducir egress. */
 let _tbPeriodicCount=0;
 async function _tbPeriodicPull(){
   if(!navigator.onLine||!_tbSb||!_tbUser)return;
   _tbPeriodicCount++;
-  if(_tbPeriodicCount%15===0||!_tbPullSince.pesajes){
+  if(_tbPeriodicCount%30===0||!_tbPullSince.pesajes){   // completo cada ~60 min (antes 30): incremental+Realtime traen lo nuevo → menos egress
     try{await tbPullCloudMultiDevice({silent:true});}catch(e){console.warn('[periodic full]',e);}
   }else{
     try{await _tbIncrementalPullOperativos(true);}catch(e){console.warn('[periodic incr]',e);}

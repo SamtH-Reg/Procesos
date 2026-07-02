@@ -7988,7 +7988,7 @@ async function _pollFresh(){
   if(!_sb||!_currentUser)return;
   let changed=false;
   _pollTick++;
-  const forceFull=(_pollTick%30===0); // reconciliación completa cada ~15 min (capta ediciones/borrados)
+  const forceFull=(_pollTick%60===0); // reconciliación completa cada ~30 min (capta ediciones/borrados; menos egress)
   for(const t of['moldes','pesajes','generales']){
     try{
       const{count,error}=await _sb.from(t).select('*',{count:'exact',head:true});
@@ -8057,7 +8057,7 @@ function sbStartPoll(){
     sbLog('Polling activo — counts iniciales: moldes='+_pollCounts.moldes+' pesajes='+_pollCounts.pesajes+' generales='+_pollCounts.generales);
   })();
   _pollInterval=setInterval(_pollFresh,30000);
-  window._adminCloudPullInt=setInterval(adminSyncFromCloudQuiet,90000);
+  window._adminCloudPullInt=setInterval(adminSyncFromCloudQuiet,600000); // full-pull 60d cada 10 min (antes 90 s): _pollFresh ya mantiene todo fresco al segundo → gran ahorro de egress
 }
 function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}if(window._adminCloudPullInt){clearInterval(window._adminCloudPullInt);window._adminCloudPullInt=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
