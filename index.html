@@ -12708,8 +12708,17 @@ const _obxSkip=new Set(); // filas con error de DATOS persistente (no reintentar
 function _obxIsDataError(err){
   // Error que NO se arregla reintentando (constraint, columna, etc.) vs red.
   if(!err||err._net)return false;
-  if(/^\d/.test(String(err.code||'')))return true;
-  return /violat|constraint|column|invalid input|duplicate key|not-null/.test(String(err.message||'').toLowerCase());
+  const msg=String(err.message||'').toLowerCase();
+  const code=String(err.code||'');
+  // AUTENTICACIÓN/PERMISO (JWT vencido, 401/403, RLS por sesión caída) es RECUPERABLE:
+  // se re-loguea/refresca y la fila DEBE reintentarse. Antes caía en el regex de
+  // "violat..." (RLS) y se descartaba para siempre → pesajes horas sin subir.
+  if(/jwt|token|expired|authoriz|logged|401|403/.test(msg)||/^pgrst30/i.test(code)||code==='42501'){
+    try{if(typeof _tbEnsureSession==='function')void _tbEnsureSession();}catch(_){}
+    return false;
+  }
+  if(/^\d/.test(code))return true;
+  return /violat|constraint|column|invalid input|duplicate key|not-null/.test(msg);
 }
 function _obxUpsertTimeout(row,ms){
   // Sube una fila con timeout duro: una conexión colgada NUNCA bloquea.
@@ -12778,11 +12787,82 @@ async function _obxDrain(){
 }
 window._obxDrain=_obxDrain;
 window._frioOutboxCount=async()=>{const n=await Outbox.count();console.log('[Friosur] Pesajes en outbox (sin confirmar en nube):',n);return n;};
+/* ── Flush KEEPALIVE al bloquear/ocultar la tablet ──
+   Chrome CONGELA los timers de una página oculta/bloqueada → el drain de 10 s deja
+   de correr y el outbox queda horas sin subir. fetch({keepalive:true}) es la única
+   vía que el navegador completa AUNQUE la página se congele justo después: en el
+   instante de bloquear/ocultar disparamos los pendientes directo al REST de
+   Supabase. Idempotente (upsert on_conflict=id) y con return=minimal (respuesta
+   de bytes → egress ≈ 0). El borrado del outbox solo ocurre si la respuesta OK
+   alcanza a llegar; si no, la fila se re-sube después (sin duplicar, mismo id). */
+function _tbGetTokSync(){
+  // Token de acceso leído SÍNCRONO de localStorage (supabase-js lo persiste ahí).
+  // En el momento del bloqueo no hay tiempo para el getSession() async.
+  try{
+    const j=JSON.parse(localStorage.getItem('friosur-sb-auth-tablet-v1')||'null');
+    const t=j&&(j.access_token||(j.currentSession&&j.currentSession.access_token));
+    return t?String(t):'';
+  }catch(_){return'';}
+}
+let _obxFlushLast=0;
+function _obxFlushKeepalive(){
+  try{
+    if(!_tbUser)return;
+    if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
+    const now=Date.now();if(now-_obxFlushLast<4000)return;_obxFlushLast=now;
+    void (async()=>{
+      let rows=[];try{rows=await Outbox.all();}catch(_){return;}
+      rows=rows.filter(r=>r&&!_obxSkip.has(String(r.id))).sort((a,b)=>(((a&&a.id)||0)-((b&&b.id)||0)));
+      if(!rows.length)return;
+      const tok=_tbGetTokSync();if(!tok)return;
+      const{url,key}=_tbResolveSupabaseCreds();
+      // Presupuesto keepalive del navegador ≈64 KB en vuelo → máx 180 filas (3×60).
+      for(let i=0;i<rows.length&&i<180;i+=60){
+        const batch=rows.slice(i,i+60);
+        fetch(url+'/rest/v1/pesajes?on_conflict=id',{
+          method:'POST',keepalive:true,
+          headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+tok,
+            'Prefer':'resolution=merge-duplicates,return=minimal'},
+          body:JSON.stringify(batch)
+        }).then(res=>{if(res&&res.ok)batch.forEach(b=>{try{void Outbox.del(b.id);}catch(_){}});})
+          .catch(()=>{});
+      }
+    })();
+  }catch(_){}
+}
+window._obxFlushKeepalive=_obxFlushKeepalive;
+/* ── Wake Lock: la pantalla NO se duerme mientras haya pesajes por subir ──
+   Con outbox vacío se libera → la tablet puede dormir normalmente (sin gastar
+   pantalla toda la noche). Si el navegador no soporta wakeLock, no hace nada. */
+let _tbWakeLock=null;
+async function _tbWakeLockSync(){
+  try{
+    if(!('wakeLock' in navigator))return;
+    if(document.visibilityState!=='visible'){_tbWakeLock=null;return;}
+    let n=0;try{n=await Outbox.count();}catch(_){n=0;}
+    if(n>0&&_tbUser){
+      if(!_tbWakeLock){
+        _tbWakeLock=await navigator.wakeLock.request('screen');
+        _tbWakeLock.addEventListener('release',()=>{_tbWakeLock=null;});
+      }
+    }else if(_tbWakeLock){
+      try{await _tbWakeLock.release();}catch(_){}
+      _tbWakeLock=null;
+    }
+  }catch(_){_tbWakeLock=null;}
+}
+window._tbWakeLockSync=_tbWakeLockSync;
 if(!window._obxHooks){
   window._obxHooks=true;
   window.addEventListener('online',()=>{void _obxDrain();});
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void _obxDrain();});
-  setInterval(()=>{void _obxDrain();},10000); // respaldo cada 10 s (prioriza subir a la nube)
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){void _obxDrain();void _tbWakeLockSync();}
+    else{_obxFlushKeepalive();}                    // ocultar/bloquear → flush inmediato
+  });
+  window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
+  document.addEventListener('freeze',()=>{_obxFlushKeepalive();});   // Page Lifecycle: congelamiento real
+  document.addEventListener('resume',()=>{void _obxDrain();});       // vuelve del congelamiento → drenar
+  setInterval(()=>{void _obxDrain();void _tbWakeLockSync();},10000); // respaldo cada 10 s (prioriza subir a la nube)
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
