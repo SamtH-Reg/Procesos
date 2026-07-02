@@ -8774,35 +8774,94 @@ function _ieToggleRecords(tgt){
   if(!box.hidden){ box.hidden=true; box.innerHTML=''; return; }
   _ieRenderRecordsInto(box.dataset.mod,box.dataset.anchor,box.dataset.turno,tgt);
 }
+const _ieFlt={}, _ieSel={}, _ieRecsCache={};   // filtros, selección e índice de registros por contenedor
+function _ieMatchFlt(r,f){
+  if(!f)return true;
+  if(f.op&&!String(r.nombre||'').toLowerCase().includes(f.op.toLowerCase()))return false;
+  if(f.tipo&&String(r.tipo||'').trim()!==f.tipo)return false;
+  if(f.esp&&!String(r.especie||'').toLowerCase().includes(f.esp.toLowerCase()))return false;
+  if(f.guia&&!String(r.guia||'').toLowerCase().includes(f.guia.toLowerCase()))return false;
+  return true;
+}
 function _ieRenderRecordsInto(mod,anchor,turno,tgt){
   const box=document.getElementById(tgt); if(!box)return;
   box.dataset.mod=mod; box.dataset.anchor=anchor; box.dataset.turno=turno; box.hidden=false;
-  const recs=_ieBucketRecords(mod,anchor,turno);
-  if(!recs.length){ box.innerHTML='<div style="padding:8px 12px;color:var(--text-3);font-size:12px;">Sin registros.</div>'; return; }
   const isMol=mod==='moldes';
-  const head=isMol?'<th>Hora</th><th>Operario</th><th>Producto</th><th>Especie</th><th class="num">Cant</th><th class="num">Kg</th><th></th>'
-                  :'<th>Hora</th><th>Operario</th><th>Especie</th><th>Tipo</th><th class="num">Kg</th><th></th>';
-  const body=recs.map(r=>{
-    const id=esc(String(r.id));
-    const cells=isMol
-      ?`<td>${esc((r.hora||'').slice(0,5))}</td><td>${esc(r.nombre||'—')}</td><td>${esc(r.producto||'—')}</td><td>${esc(r.especie||'—')}</td><td class="num">${r.cant!=null?esc(String(r.cant)):'—'}</td><td class="num">${r.kg!=null?_fmt(r.kg):'—'}</td>`
-      :`<td>${esc((r.hora||'').slice(0,5))}</td><td>${esc(r.nombre||'—')}</td><td>${esc(r.especie||'—')}</td><td>${esc(r.tipo||'—')}</td><td class="num">${r.kg!=null?_fmt(r.kg):'—'}</td>`;
-    return `<tr data-rec-id="${id}">${cells}<td class="num" style="white-space:nowrap">`+
-      `<button type="button" class="btn ghost sm" data-ie-act="edit-rec" data-mod="${esc(mod)}" data-id="${id}" data-tgt="${esc(tgt)}" title="Editar">✏️</button> `+
-      `<button type="button" class="btn ghost sm danger" data-ie-act="del-rec" data-mod="${esc(mod)}" data-id="${id}" data-tgt="${esc(tgt)}" title="Eliminar">✕</button></td></tr>`;
-  }).join('');
-  box.innerHTML=`<div style="overflow:auto;max-height:360px;margin:2px 8px 12px;border:1px solid var(--border);border-radius:8px;">`+
-    `<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="position:sticky;top:0;background:#f8fafc;">${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const f=_ieFlt[tgt]||(_ieFlt[tgt]={op:'',tipo:'',esp:'',guia:''});
+  _ieSel[tgt]=new Set();                                   // reinicia selección al re-render completo
+  const recs=_ieRecsCache[tgt]=_ieBucketRecords(mod,anchor,turno);
+  const tipos=[...new Set(recs.map(r=>String(r.tipo||'').trim()).filter(Boolean))].sort();
+  const head=isMol
+    ?'<th style="width:24px"></th><th>Hora</th><th>Operario</th><th>Producto</th><th>Especie</th><th>Guía</th><th class="num">Cant</th><th class="num">Kg</th><th></th>'
+    :'<th style="width:24px"></th><th>Hora</th><th>Operario</th><th>Especie</th><th>Tipo</th><th>Guía</th><th class="num">Kg</th><th></th>';
+  const tipoSel=isMol?'':`<select data-flt="tipo" onchange="_ieFilterRecords('${tgt}')" style="font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:7px"><option value="">Tipo…</option>${tipos.map(t=>`<option value="${esc(t)}"${f.tipo===t?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
+  const trabs=((DB&&DB.data&&DB.data.trabajadores)||[]).slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  const dlId='dlTrab_'+tgt;
+  const inC='font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:7px';
+  box.innerHTML=`<div style="margin:2px 8px 12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:7px 8px;background:#f8fafc;border-bottom:1px solid var(--border)">
+      <input data-flt="op" value="${esc(f.op||'')}" oninput="_ieFilterRecords('${tgt}')" placeholder="Operario…" style="flex:1;min-width:110px;${inC}">
+      ${tipoSel}
+      <input data-flt="esp" value="${esc(f.esp||'')}" oninput="_ieFilterRecords('${tgt}')" placeholder="Especie…" style="width:120px;${inC}">
+      <input data-flt="guia" value="${esc(f.guia||'')}" oninput="_ieFilterRecords('${tgt}')" placeholder="Guía…" style="width:80px;${inC}">
+      <span data-recs-count style="font-size:11px;color:var(--text-3);margin-left:auto"></span>
+    </div>
+    <div data-bulk style="display:none;gap:8px;flex-wrap:wrap;align-items:center;padding:7px 8px;background:#eef2ff;border-bottom:1px solid var(--border)">
+      <strong data-bulk-n style="font-size:12px"></strong>
+      <span style="font-size:12px;color:var(--text-2)">→ transferir a:</span>
+      <input data-transfer-to list="${dlId}" placeholder="Código o nombre…" style="flex:1;min-width:150px;${inC}">
+      <datalist id="${dlId}">${trabs.map(t=>`<option value="${esc((t.codigo||'')+' — '+(t.nombre||''))}"></option>`).join('')}</datalist>
+      <button type="button" class="btn sm" data-ie-act="transfer-recs" data-tgt="${tgt}">Transferir</button>
+      <button type="button" class="btn ghost sm danger" data-ie-act="bulkdel-recs" data-tgt="${tgt}">Eliminar sel.</button>
+    </div>
+    <div style="overflow:auto;max-height:340px"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="position:sticky;top:0;background:#f8fafc">${head}</tr></thead><tbody data-recs-body></tbody></table></div>
+  </div>`;
+  _ieRenderRecordsRows(tgt);
 }
+function _ieRenderRecordsRows(tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const mod=box.dataset.mod, isMol=mod==='moldes';
+  const f=_ieFlt[tgt]||{}, sel=_ieSel[tgt]||(_ieSel[tgt]=new Set());
+  const all=_ieRecsCache[tgt]||_ieBucketRecords(mod,box.dataset.anchor,box.dataset.turno);
+  const recs=all.filter(r=>_ieMatchFlt(r,f));
+  const tb=box.querySelector('[data-recs-body]'); if(!tb)return;
+  const colspan=isMol?9:8;
+  if(!recs.length){ tb.innerHTML=`<tr><td colspan="${colspan}" style="text-align:center;color:var(--text-3);padding:12px">Sin registros para el filtro.</td></tr>`; }
+  else tb.innerHTML=recs.map(r=>{
+    const id=esc(String(r.id)), ck=sel.has(String(r.id))?' checked':'';
+    const cells=isMol
+      ?`<td>${esc((r.hora||'').slice(0,5))}</td><td>${esc(r.nombre||'—')}</td><td>${esc(r.producto||'—')}</td><td>${esc(r.especie||'—')}</td><td>${esc(r.guia||'—')}</td><td class="num">${r.cant!=null?esc(String(r.cant)):'—'}</td><td class="num">${r.kg!=null?_fmt(r.kg):'—'}</td>`
+      :`<td>${esc((r.hora||'').slice(0,5))}</td><td>${esc(r.nombre||'—')}</td><td>${esc(r.especie||'—')}</td><td>${esc(r.tipo||'—')}</td><td>${esc(r.guia||'—')}</td><td class="num">${r.kg!=null?_fmt(r.kg):'—'}</td>`;
+    return `<tr data-rec-id="${id}"><td style="text-align:center"><input type="checkbox" data-ie-act="sel-rec" data-tgt="${tgt}" data-id="${id}"${ck}></td>${cells}<td class="num" style="white-space:nowrap"><button type="button" class="btn ghost sm" data-ie-act="edit-rec" data-mod="${esc(mod)}" data-id="${id}" data-tgt="${tgt}" title="Editar">✏️</button> <button type="button" class="btn ghost sm danger" data-ie-act="del-rec" data-mod="${esc(mod)}" data-id="${id}" data-tgt="${tgt}" title="Eliminar">✕</button></td></tr>`;
+  }).join('');
+  const cnt=box.querySelector('[data-recs-count]'); if(cnt)cnt.textContent=recs.length+' de '+all.length;
+  _ieUpdateBulk(tgt);
+}
+function _ieFilterRecords(tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const f=_ieFlt[tgt]||(_ieFlt[tgt]={});
+  const g=k=>{const el=box.querySelector('[data-flt="'+k+'"]');return el?el.value:'';};
+  f.op=g('op'); f.tipo=g('tipo'); f.esp=g('esp'); f.guia=g('guia');
+  _ieRenderRecordsRows(tgt);
+}
+function _ieUpdateBulk(tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const sel=_ieSel[tgt]||new Set();
+  const bar=box.querySelector('[data-bulk]'), n=box.querySelector('[data-bulk-n]');
+  if(bar)bar.style.display=sel.size?'flex':'none';
+  if(n)n.textContent=sel.size+' seleccionado(s)';
+}
+window._ieFilterRecords=_ieFilterRecords;
 function _ieEditRecordForm(mod,id,tgt){
   const box=document.getElementById(tgt); if(!box)return;
   const tr=_ieFindTr(box,id), r=_ieFindRec(mod,id); if(!tr||!r)return;
   const isMol=mod==='moldes';
-  const inp=(name,val,extra='')=>`<input data-f="${name}" value="${esc(val==null?'':String(val).replace(/"/g,'&quot;'))}" ${extra} style="width:100%;min-width:58px;font-size:12px;padding:3px 5px;box-sizing:border-box;">`;
+  const inp=(name,val,extra='')=>`<input data-f="${name}" value="${esc(val==null?'':String(val).replace(/"/g,'&quot;'))}" ${extra} style="width:100%;min-width:54px;font-size:12px;padding:3px 5px;box-sizing:border-box;">`;
   const cells=isMol
-    ?`<td>${inp('hora',(r.hora||'').slice(0,5))}</td><td>${inp('nombre',r.nombre)}</td><td>${inp('producto',r.producto)}</td><td>${inp('especie',r.especie)}</td><td>${inp('cant',r.cant,'type="number" step="1"')}</td><td>${inp('kg',r.kg,'type="number" step="0.01"')}</td>`
-    :`<td>${inp('hora',(r.hora||'').slice(0,5))}</td><td>${inp('nombre',r.nombre)}</td><td>${inp('especie',r.especie)}</td><td>${inp('tipo',r.tipo)}</td><td>${inp('kg',r.kg,'type="number" step="0.01"')}</td>`;
-  tr.innerHTML=cells+`<td class="num" style="white-space:nowrap"><button type="button" class="btn sm" data-ie-act="save-rec" data-mod="${esc(mod)}" data-id="${esc(String(id))}" data-tgt="${esc(tgt)}">Guardar</button> <button type="button" class="btn ghost sm" data-ie-act="cancel-rec" data-tgt="${esc(tgt)}">✕</button></td>`;
+    ?`<td>${inp('hora',(r.hora||'').slice(0,5))}</td><td>${inp('nombre',r.nombre)}</td><td>${inp('producto',r.producto)}</td><td>${inp('especie',r.especie)}</td><td>${inp('guia',r.guia)}</td><td>${inp('cant',r.cant,'type="number" step="1"')}</td><td>${inp('kg',r.kg,'type="number" step="0.01"')}</td>`
+    :`<td>${inp('hora',(r.hora||'').slice(0,5))}</td><td>${inp('nombre',r.nombre)}</td><td>${inp('especie',r.especie)}</td><td>${inp('tipo',r.tipo)}</td><td>${inp('guia',r.guia)}</td><td>${inp('kg',r.kg,'type="number" step="0.01"')}</td>`;
+  tr.innerHTML='<td></td>'+cells+`<td class="num" style="white-space:nowrap"><button type="button" class="btn sm" data-ie-act="save-rec" data-mod="${esc(mod)}" data-id="${esc(String(id))}" data-tgt="${tgt}">Guardar</button> <button type="button" class="btn ghost sm" data-ie-act="cancel-rec" data-tgt="${tgt}">✕</button></td>`;
 }
 async function _ieSaveRecord(mod,id,tgt){
   const box=document.getElementById(tgt); if(!box)return;
@@ -8820,7 +8879,7 @@ async function _ieSaveRecord(mod,id,tgt){
     if(error)throw error;
     Object.assign(rec,patch);
     RT.save();
-    _ieRenderRecordsInto(box.dataset.mod,box.dataset.anchor,box.dataset.turno,tgt);
+    _ieRenderRecordsRows(tgt);
     toast('Registro actualizado en Supabase ✓','success');
   }catch(e){ console.error(e); toast('No se pudo guardar: '+(e&&e.message||e),'err'); }
 }
@@ -8836,6 +8895,52 @@ async function _ieDeleteRecord(mod,id,tgt){
     RT.save();
     if(box)_ieRenderRecordsInto(box.dataset.mod,box.dataset.anchor,box.dataset.turno,tgt);
     toast('Registro eliminado de Supabase ✓','success');
+  }catch(e){ console.error(e); toast('No se pudo eliminar: '+(e&&e.message||e),'err'); }
+}
+/* Transferir registros seleccionados a otro trabajador (reasigna operario en Supabase) */
+async function _ieTransferRecs(tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const sel=_ieSel[tgt]; if(!sel||!sel.size){toast('No hay registros seleccionados','warn');return;}
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  const val=((box.querySelector('[data-transfer-to]')||{}).value||'').trim();
+  if(!val){toast('Elegí el trabajador destino','warn');return;}
+  const trabs=(DB&&DB.data&&DB.data.trabajadores)||[];
+  const codePart=val.split('—')[0].trim();
+  const w=trabs.find(t=>String(t.codigo||'').toLowerCase()===codePart.toLowerCase())
+        ||trabs.find(t=>((t.codigo||'')+' — '+(t.nombre||''))===val)
+        ||trabs.find(t=>String(t.nombre||'').toLowerCase()===val.toLowerCase());
+  if(!w){toast('Trabajador no encontrado — elegilo de la lista','err');return;}
+  const mod=box.dataset.mod, ids=[...sel];
+  if(!confirm('¿Transferir '+ids.length+' registro(s) a '+(w.nombre||w.codigo)+'?\n\nSe reasigna el operario también en Supabase.'))return;
+  const patch={codigo:w.codigo||null,nombre:w.nombre||null,ficha:w.ficha||null,trab_id:w.id!=null?w.id:null};
+  try{
+    for(let i=0;i<ids.length;i+=200){
+      const slice=ids.slice(i,i+200).map(x=>isNaN(+x)?x:+x);
+      const {error}=await _sb.from(mod).update(patch).in('id',slice);
+      if(error)throw error;
+    }
+    (RT.data[mod]||[]).forEach(r=>{ if(sel.has(String(r.id)))Object.assign(r,patch,{trabId:w.id}); });
+    RT.save&&RT.save();
+    _ieRenderRecordsInto(mod,box.dataset.anchor,box.dataset.turno,tgt);
+    toast(ids.length+' registro(s) transferido(s) a '+(w.nombre||w.codigo)+' ✓','success');
+  }catch(e){ console.error(e); toast('No se pudo transferir: '+(e&&e.message||e),'err'); }
+}
+async function _ieBulkDelRecs(tgt){
+  const box=document.getElementById(tgt); if(!box)return;
+  const sel=_ieSel[tgt]; if(!sel||!sel.size){toast('No hay registros seleccionados','warn');return;}
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  const mod=box.dataset.mod, ids=[...sel];
+  if(!confirm('¿Eliminar '+ids.length+' registro(s) de forma permanente?\n\nSe borran de Supabase. No se puede deshacer.'))return;
+  try{
+    for(let i=0;i<ids.length;i+=200){
+      const slice=ids.slice(i,i+200).map(x=>isNaN(+x)?x:+x);
+      const {error}=await _sb.from(mod).delete().in('id',slice);
+      if(error)throw error;
+    }
+    RT.data[mod]=(RT.data[mod]||[]).filter(r=>!sel.has(String(r.id)));
+    RT._ensureShape&&RT._ensureShape(); RT.save&&RT.save();
+    _ieRenderRecordsInto(mod,box.dataset.anchor,box.dataset.turno,tgt);
+    toast(ids.length+' registro(s) eliminado(s) ✓','success');
   }catch(e){ console.error(e); toast('No se pudo eliminar: '+(e&&e.message||e),'err'); }
 }
 window._ieToggleRecords=_ieToggleRecords;
@@ -8888,7 +8993,10 @@ function ieExplorerClickDelegate(ev){
   if(act==='edit-rec'){_ieEditRecordForm(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
   if(act==='save-rec'){_ieSaveRecord(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
   if(act==='del-rec'){_ieDeleteRecord(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
-  if(act==='cancel-rec'){const bx=document.getElementById(b.dataset.tgt);if(bx)_ieRenderRecordsInto(bx.dataset.mod,bx.dataset.anchor,bx.dataset.turno,b.dataset.tgt);return;}
+  if(act==='cancel-rec'){_ieRenderRecordsRows(b.dataset.tgt);return;}
+  if(act==='sel-rec'){const s=_ieSel[b.dataset.tgt]||(_ieSel[b.dataset.tgt]=new Set());if(b.checked)s.add(b.dataset.id);else s.delete(b.dataset.id);_ieUpdateBulk(b.dataset.tgt);return;}
+  if(act==='transfer-recs'){_ieTransferRecs(b.dataset.tgt);return;}
+  if(act==='bulkdel-recs'){_ieBulkDelRecs(b.dataset.tgt);return;}
   if(act==='export-tun'){ieExApplyTuneles(b.dataset.fecha,b.dataset.turno||'',true);return;}
   if(act==='month-all'){ieExApplyMonth(b.dataset.mod,b.dataset.month);return;}
 }
