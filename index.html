@@ -1311,6 +1311,16 @@ button.worker-chip:focus-visible{outline:2px solid var(--brand);outline-offset:2
 .preg-focus-enter-btn{background:#16a34a!important;border:1px solid #15803d!important;color:#fff!important;font-weight:700;}
 .preg-focus-enter-btn:hover{background:#15803d!important;}
 .preg-focus-enter-btn:active{background:#166534!important;transform:scale(.97);}
+/* Modo concentración deshabilitado (solo Filete): gris apagado, sin clic. */
+.preg-focus-enter-btn.pf-disabled{background:#94a3b8!important;border-color:#94a3b8!important;color:#e5e7eb!important;opacity:.5;filter:grayscale(.6);pointer-events:none;cursor:not-allowed;box-shadow:none!important;}
+/* ── TIPO = OVAS → toda la app en BEIGE (fuerte pista visual para no equivocar el tipo) ── */
+body.tipo-ovas{background:#e4d5b3!important;}
+body.tipo-ovas .card{background:#f5edd8!important;border-color:#d6c399!important;}
+body.tipo-ovas .card-hdr{background:#efe4c6!important;border-color:#d6c399!important;}
+body.tipo-ovas #pRegTipo{background:#d59a17!important;color:#2e2205!important;font-weight:800!important;border-color:#a06e00!important;box-shadow:0 0 0 3px rgba(213,154,23,.3)!important;}
+/* Franja de aviso fija arriba de todo. */
+body.tipo-ovas::before{content:"⚠️  TIPO SELECCIONADO: OVAS  ⚠️";position:fixed;top:0;left:0;right:0;z-index:100060;background:#d59a17;color:#2e2205;font-weight:800;font-size:13px;letter-spacing:1px;text-align:center;padding:6px 8px;box-shadow:0 2px 8px rgba(0,0,0,.2);}
+body.tipo-ovas{padding-top:30px;}
 .toast{
   padding:14px 20px;
   background:var(--brand);
@@ -2406,7 +2416,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
                 </div>
                 <div class="form-field">
                   <label class="form-label">Tipo</label>
-                  <select class="select" id="pRegTipo">
+                  <select class="select" id="pRegTipo" onchange="_pRegTipoChange()">
                     <option value="">—</option>
                     <option value="Filete">Filete</option>
                     <option value="Porción">Porción</option>
@@ -8150,6 +8160,7 @@ function _pRegClearCamposSinLineaArmado(){
   const e=document.getElementById('pRegEspecie');if(e)e.value='';
   const t=document.getElementById('pRegTipo');if(t)t.value='';
   const k=document.getElementById('pRegKg');if(k)k.value='';
+  try{if(typeof _pRegTipoChange==='function')_pRegTipoChange();}catch(_){}
   try{window.__pRegLastArmadoScope='';}catch(_){}
   if(typeof clearRegPicker==='function'){
     clearRegPicker('pRegPlanillero',null);
@@ -8232,6 +8243,7 @@ function _pRegFillDefaultsSiVacios(){
     const o=[...tip.options].find(x=>String(x.value||'').trim());
     if(o)tip.value=o.value;
   }
+  try{if(typeof _pRegTipoChange==='function')_pRegTipoChange();}catch(_){}
 }
 function renderPRegLinea(){
   const sel=document.getElementById('pRegLinea');if(!sel)return;
@@ -8795,7 +8807,32 @@ function _pRegFlashSaveOk(){
   btn._okT=setTimeout(()=>{btn.classList.remove('p-reg-save-ok');if(btn._okHtml)btn.innerHTML=btn._okHtml;},1500);
 }
 window._pRegFlashSaveOk=_pRegFlashSaveOk;
+/* ── TIPO: pinta la app de beige si es OVAS y bloquea concentración salvo Filete ──
+   Nace de errores reales al asignar el tipo: el beige a pantalla completa + la franja
+   de aviso hacen imposible confundir OVAS con Filete, y concentración (pesaje rápido)
+   queda SOLO para Filete, que es donde se usa. Ver [[crash-pesaje-y-sync-monitor]]. */
+function _pRegTipoChange(){
+  const el=document.getElementById('pRegTipo');
+  const t=String((el&&el.value)||'').trim().toLowerCase();
+  try{document.body.classList.toggle('tipo-ovas', t==='ovas');}catch(_){}
+  const isFilete = (t==='filete');
+  document.querySelectorAll('.preg-focus-enter-btn').forEach(b=>{
+    b.classList.toggle('pf-disabled', !isFilete);
+    b.setAttribute('aria-disabled', String(!isFilete));
+    b.title = isFilete
+      ? 'Pesar a pantalla completa, sin distracciones'
+      : 'El modo concentración solo está disponible para Filete';
+  });
+}
+window._pRegTipoChange=_pRegTipoChange;
 function pRegFocusEnter(){
+  // Concentración es SOLO para Filete (pesaje rápido de fileteros). En Porción/Ovas se
+  // bloquea para no reforzar una asignación de tipo equivocada.
+  const _tipo=String((document.getElementById('pRegTipo')||{}).value||'').trim().toLowerCase();
+  if(_tipo!=='filete'){
+    if(typeof showToast==='function')showToast('El modo concentración solo está disponible para Filete.','warn');
+    return;
+  }
   // Aviso SOLO por la guía (es el dato manual que se suele olvidar y no se ve en
   // concentración). Línea/especie/tipo vienen del armado/contexto; si faltaran, la
   // validación al Guardar lo avisa (el toast ya se ve en concentración).
