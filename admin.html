@@ -7720,6 +7720,7 @@ function _adminNetLabel(net){
   return String(net.type).toUpperCase()+(extra.length?(' · '+extra.join(' · ')):'');
 }
 async function adminRefreshTabletHealth(manual){
+  if(document.hidden&&!manual)return;   // auto-refresh pausado en segundo plano (el botón manual siempre corre)
   const list=document.getElementById('adminTabletHealthList');
   if(!_sb){if(list)list.innerHTML='<div style="color:var(--text-3);">Conecta a Supabase para ver el estado.</div>';return;}
   try{
@@ -7986,6 +7987,7 @@ let _pollSince={moldes:null,pesajes:null,generales:null};
 let _pollTick=0;
 async function _pollFresh(){
   if(!_sb||!_currentUser)return;
+  if(document.hidden)return;   // pestaña en segundo plano → no consumir egress (catch-up al volver visible)
   let changed=false;
   _pollTick++;
   const forceFull=(_pollTick%60===0); // reconciliación completa cada ~30 min (capta ediciones/borrados; menos egress)
@@ -8036,6 +8038,7 @@ async function _pollFresh(){
 /** Consola: catálogo + armado + planilleros desde la nube (otros equipos), sin toast. */
 function adminSyncFromCloudQuiet(){
   if(!_sb||!_currentUser||!isSbAdmin())return;
+  if(document.hidden)return;   // en segundo plano no baja los 60 días (se hace catch-up al volver visible)
   void (async()=>{
     try{await sbPullDbCatalogOnly();}catch(e){sbLog('adminSync cat: '+(e&&e.message?e.message:String(e)),false);}
     try{await sbPullRuntimeFromCloud();}catch(e){sbLog('adminSync RT: '+(e&&e.message?e.message:String(e)),false);}
@@ -8058,6 +8061,22 @@ function sbStartPoll(){
   })();
   _pollInterval=setInterval(_pollFresh,30000);
   window._adminCloudPullInt=setInterval(adminSyncFromCloudQuiet,600000); // full-pull 60d cada 10 min (antes 90 s): _pollFresh ya mantiene todo fresco al segundo → gran ahorro de egress
+  // Catch-up al volver visible: los pollers se auto-pausan en segundo plano (guards
+  // document.hidden). Al reenfocar, un refresco inmediato (throttle 1,5 s) pone al día
+  // sin esperar al próximo tick. Se instala una sola vez.
+  if(!window._adminPollVisHook){
+    window._adminPollVisHook=true;
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState!=='visible')return;
+      if(!_sb||!_currentUser)return;
+      clearTimeout(window._adminPollVisT);
+      window._adminPollVisT=setTimeout(()=>{
+        try{void _pollFresh();}catch(_e){}
+        try{void adminSyncFromCloudQuiet();}catch(_e){}
+        try{void adminRefreshTabletHealth(false);}catch(_e){}
+      },1500);
+    });
+  }
 }
 function sbStopPoll(){if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}if(window._adminCloudPullInt){clearInterval(window._adminCloudPullInt);window._adminCloudPullInt=null;}}
 function openSupabaseModal(){document.querySelector('[data-page="supabase"]').click();}
