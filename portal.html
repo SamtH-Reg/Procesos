@@ -992,12 +992,26 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 /* Auto-actualizador del portal: detecta deploy nuevo (ETag de portal.html) y recarga
    cuando es seguro (sin input enfocado e inactivo ≥30 s). Evita quedar con caché vieja. */
 (function(){
-  let _pBase=null,_pPend=false,_pAct=Date.now();
+  let _pBase=null,_pPend=false,_pAct=Date.now(),_pCand=null;
   const _pUrl=location.pathname.split('?')[0];
+  const _P_COOLDOWN=10*60000,_P_LS='friosur_portal_upd_last';
   ['click','keydown','input','touchstart'].forEach(e=>document.addEventListener(e,()=>{_pAct=Date.now();},{passive:true}));
-  async function _pTag(){ try{const r=await fetch(_pUrl+'?upd='+Date.now(),{method:'HEAD',cache:'no-store'});return r.headers.get('etag')||r.headers.get('last-modified');}catch(_){return null;} }
+  const _pNorm=t=>String(t||'').replace(/^W\//i,'').replace(/"/g,'').trim();
+  async function _pTag(){ try{const r=await fetch(_pUrl+'?upd='+Date.now(),{method:'HEAD',cache:'no-store'});return _pNorm(r.headers.get('etag')||r.headers.get('last-modified'));}catch(_){return null;} }
   function _pSafe(){ const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return false; return (Date.now()-_pAct)>30000; }
-  async function _pCheck(){ const t=await _pTag(); if(!t)return; if(_pBase===null){_pBase=t;return;} if(t!==_pBase)_pPend=true; if(_pPend&&_pSafe()){try{location.reload();}catch(_){}} }
+  async function _pCheck(){
+    const t=await _pTag(); if(!t)return;
+    if(_pBase===null){_pBase=t;return;}
+    if(t===_pBase){_pCand=null;}
+    else if(_pCand!==t){_pCand=t;}   // 1ª vista del tag nuevo: confirmar en el próximo chequeo (el CDN de Pages alterna ETags entre nodos → sin esto, bucle de recargas que re-baja los pesajes en cada vuelta)
+    else{_pPend=true;}               // 2ª vista consecutiva = deploy real
+    if(_pPend&&_pSafe()){
+      const last=+localStorage.getItem(_P_LS)||0;
+      if(Date.now()-last<_P_COOLDOWN)return;   // máx 1 recarga automática cada 10 min
+      try{localStorage.setItem(_P_LS,String(Date.now()));}catch(_){}
+      try{location.reload();}catch(_){}
+    }
+  }
   setInterval(_pCheck,180000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_pCheck();});
   setTimeout(_pCheck,5000);

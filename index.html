@@ -12917,15 +12917,18 @@ if(!window._obxHooks){
    (localStorage + vacía el outbox + push). Como los datos ya son durables
    (RT en localStorage + outbox en IndexedDB), ni un flush interrumpido pierde
    nada. Además muestra un aviso discreto con botón "Actualizar ahora". */
-const _updCfg={pollMs:5*60000,idleMs:45000};
-let _updBaseTag=null,_updPending=false,_updReloading=false,_updLastActivity=Date.now();
+const _updCfg={pollMs:5*60000,idleMs:45000,cooldownMs:10*60000};
+let _updBaseTag=null,_updPending=false,_updReloading=false,_updLastActivity=Date.now(),_updCand=null;
+const _UPD_LAST_LS='friosur_tb_upd_last';
 ['click','keydown','touchstart','input','pointerdown'].forEach(ev=>
   document.addEventListener(ev,()=>{_updLastActivity=Date.now();},{passive:true,capture:true}));
+// Normalizar ETag (sin W/ ni comillas): los nodos del CDN de Pages varían el formato.
+function _updNormTag(t){return String(t||'').replace(/^W\//i,'').replace(/"/g,'').trim();}
 async function _updFetchTag(){
   try{
     const base=location.pathname.replace(/[^/]*$/,'');
     const r=await fetch(base+'index.html?_uv='+Date.now(),{method:'HEAD',cache:'no-store'});
-    return r.headers.get('etag')||r.headers.get('last-modified')||null;
+    return _updNormTag(r.headers.get('etag')||r.headers.get('last-modified'))||null;
   }catch(_){return null;}
 }
 async function _updCheck(){
@@ -12933,7 +12936,12 @@ async function _updCheck(){
   const tag=await _updFetchTag();
   if(!tag)return;
   if(_updBaseTag==null){_updBaseTag=tag;return;}     // línea base = versión del arranque
-  if(tag!==_updBaseTag){_updPending=true;_updShowBanner();}
+  if(tag===_updBaseTag){_updCand=null;return;}       // sin cambio (o el CDN volvió al nodo original)
+  // CONFIRMACIÓN DOBLE: el CDN de Pages a veces alterna ETags entre nodos sin que
+  // haya deploy → una sola vista distinta provocaba bucles de recarga (visto en el
+  // admin). Solo se marca pendiente al ver el MISMO tag nuevo dos veces seguidas.
+  if(_updCand!==tag){_updCand=tag;return;}
+  _updPending=true;_updShowBanner();
 }
 function _updBusy(){
   for(const id of ['pRegKg','pRegFicha','pRegGuia']){
@@ -12948,6 +12956,11 @@ function _updBusy(){
 async function _updApply(force){
   if(_updReloading)return;
   if(!force&&_updBusy())return;
+  // Cooldown anti-bucle: máx 1 recarga automática cada 10 min (el botón manual no aplica).
+  if(!force){
+    const last=+localStorage.getItem(_UPD_LAST_LS)||0;
+    if(Date.now()-last<_updCfg.cooldownMs)return;
+  }
   _updReloading=true;
   let listo=true;
   try{
@@ -12969,6 +12982,7 @@ async function _updApply(force){
     }
   }finally{
     if(listo){
+      try{localStorage.setItem(_UPD_LAST_LS,String(Date.now()));}catch(_){} // sella el cooldown SOLO al recargar de verdad
       setTimeout(()=>{try{location.reload();}catch(_){location.href=location.href;}},500);
     }else{
       _updReloading=false;
