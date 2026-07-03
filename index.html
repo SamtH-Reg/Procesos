@@ -306,14 +306,6 @@ body[data-theme="dark"] .eq-item-congelando__badge{
 .top-btn:active{background:rgba(255,255,255,.14);}
 .top-btn svg{width:20px;height:20px;}
 .top-btn .dot{position:absolute;top:8px;right:8px;width:8px;height:8px;background:var(--safety-red);border:2px solid var(--navy-950);border-radius:50%;}
-/* Pantalla completa (solo index): visible en viewports táctiles ≤1024px */
-#idxFsBtn{display:none;place-items:center;}
-#idxFsBtn > svg{grid-area:1/1;width:20px;height:20px;}
-@media (max-width:1024px){
-  @media (hover:none),(pointer:coarse){
-    #idxFsBtn{display:grid;grid-template-columns:1fr;grid-template-rows:1fr;}
-  }
-}
 
 .user-chip{
   display:flex;align-items:center;gap:10px;
@@ -1991,10 +1983,6 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
   </div>
 
   <div class="topbar-right">
-    <button type="button" class="top-btn" id="idxFsBtn" onclick="idxToggleFullscreen()" title="Pantalla completa" aria-label="Pantalla completa" aria-pressed="false">
-      <svg data-fs-enter viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-      <svg data-fs-exit hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
-    </button>
     <button class="top-btn" title="Notificaciones" style="color: rgb(251, 247, 247);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
       <span class="dot"></span>
@@ -5224,44 +5212,6 @@ async function _tbPeriodicPull(){
   try{await _tbCheckForceSync();}catch(_){}  // atiende orden remota de subida forzada del admin
 }
 window._tbPeriodicPull=_tbPeriodicPull;
-function idxFsActive(){
-  return !!(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement);
-}
-function idxUpdateFsBtn(){
-  const btn=document.getElementById('idxFsBtn');
-  if(!btn)return;
-  const on=idxFsActive();
-  btn.title=on?'Salir de pantalla completa':'Pantalla completa';
-  btn.setAttribute('aria-label',btn.title);
-  btn.setAttribute('aria-pressed',on?'true':'false');
-  const enter=btn.querySelector('[data-fs-enter]');
-  const exit=btn.querySelector('[data-fs-exit]');
-  if(enter)enter.hidden=on;
-  if(exit)exit.hidden=!on;
-}
-function idxToggleFullscreen(){
-  try{
-    if(idxFsActive()){
-      if(document.exitFullscreen)document.exitFullscreen();
-      else if(document.webkitExitFullscreen)document.webkitExitFullscreen();
-      else if(document.msExitFullscreen)document.msExitFullscreen();
-      return;
-    }
-    const el=document.documentElement;
-    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
-    if(req){
-      Promise.resolve(req.call(el)).catch(function(){
-        if(typeof showToast==='function')showToast('Pantalla completa no disponible','warn');
-      });
-    }else if(typeof showToast==='function')showToast('Tu navegador no permite pantalla completa aquí','warn');
-  }catch(_){
-    if(typeof showToast==='function')showToast('Pantalla completa no disponible','warn');
-  }
-}
-window.idxToggleFullscreen=idxToggleFullscreen;
-window.idxUpdateFsBtn=idxUpdateFsBtn;
-['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,idxUpdateFsBtn);});
-idxUpdateFsBtn();
 const ARM_SCOPE_SEP='@@';
 /** AAAA-MM-DD desde date/ISO/texto (evita que .eq en Supabase falle si la fila guardó timestamp). */
 function _tbNormYmd(v){
@@ -12756,6 +12706,8 @@ function _tbUploadPesajeRow(row){
     try{await Outbox.put(row);}catch(_){}
     const ok=await _obxUploadOne(row);
     if(ok&&typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();
+    // Falló la subida directa → el SW queda encargado: subirá aunque congelen la pestaña.
+    if(!ok&&typeof _swKickSync==='function')_swKickSync();
   }).catch(()=>{});
 }
 window._tbUploadPesajeRow=_tbUploadPesajeRow;
@@ -12852,17 +12804,54 @@ async function _tbWakeLockSync(){
   }catch(_){_tbWakeLock=null;}
 }
 window._tbWakeLockSync=_tbWakeLockSync;
+/* ── Service Worker + Background Sync: subida aunque Chrome congele la pestaña ──
+   Al cambiar de pestaña/bloquear, Chrome congela el JS de la página y los
+   reintentos mueren. El SW (sw.js) corre en un hilo APARTE: registramos el sync
+   'obx-sync' y el navegador despierta al worker para subir el outbox, incluso
+   con la pestaña congelada o al volver la conexión. El worker no puede leer
+   localStorage → la página espeja url/key/token en IndexedDB friosur_sw_meta. */
+const _SW_META_DB='friosur_sw_meta';
+let _swMetaLastTok='';
+function _swMirrorMeta(){
+  try{
+    const tok=_tbGetTokSync();if(!tok||tok===_swMetaLastTok)return;
+    _swMetaLastTok=tok;
+    const{url,key}=_tbResolveSupabaseCreds();
+    const r=indexedDB.open(_SW_META_DB,1);
+    r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains('meta'))db.createObjectStore('meta',{keyPath:'k'});};
+    r.onsuccess=()=>{try{
+      const db=r.result;
+      db.transaction('meta','readwrite').objectStore('meta').put({k:'sb',url,key,tok,at:Date.now()});
+      setTimeout(()=>{try{db.close();}catch(_){}},500);
+    }catch(_){}};
+  }catch(_){}
+}
+function _swKickSync(){
+  // Pide al SW subir el outbox: sync si hay soporte; si no, mensaje directo.
+  try{
+    if(!('serviceWorker' in navigator))return;
+    _swMirrorMeta();
+    navigator.serviceWorker.ready.then(reg=>{
+      if(reg.sync&&reg.sync.register)reg.sync.register('obx-sync').catch(()=>{});
+      else if(reg.active)reg.active.postMessage({type:'obx-drain'});
+    }).catch(()=>{});
+  }catch(_){}
+}
+window._swKickSync=_swKickSync;
+if('serviceWorker' in navigator){
+  try{navigator.serviceWorker.register('sw.js').catch(()=>{});}catch(_){}
+}
 if(!window._obxHooks){
   window._obxHooks=true;
   window.addEventListener('online',()=>{void _obxDrain();});
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){void _obxDrain();void _tbWakeLockSync();}
-    else{_obxFlushKeepalive();}                    // ocultar/bloquear → flush inmediato
+    else{_obxFlushKeepalive();_swKickSync();}      // ocultar/bloquear → flush inmediato + sync del SW
   });
   window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
   document.addEventListener('freeze',()=>{_obxFlushKeepalive();});   // Page Lifecycle: congelamiento real
   document.addEventListener('resume',()=>{void _obxDrain();});       // vuelve del congelamiento → drenar
-  setInterval(()=>{void _obxDrain();void _tbWakeLockSync();},10000); // respaldo cada 10 s (prioriza subir a la nube)
+  setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();},10000); // respaldo cada 10 s (prioriza subir a la nube; espejo de token solo si cambió)
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
