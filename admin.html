@@ -2550,6 +2550,9 @@ async function adminPushTrabajadoresToCloud(opts){
     const mapped=_sbRows('trabajadores',rows).map(r=>_sbSanitizeRow(r));
     const{error}=await _sb.from('trabajadores').upsert(mapped,{onConflict:'id'});
     if(error)throw error;
+    // Ping a las tablets: cambio de catálogo (p.ej. n° de ficha) → refrescan al
+    // instante por Realtime (o en su chequeo de 2 min). Best-effort.
+    try{await _sb.from('app_kv').upsert({key:'friosur_trab_ping',value:{at:String(Date.now()),by:(_currentUser&&_currentUser.email)||''}},{onConflict:'key'});}catch(_e){}
     if(!silent)toast(rows.length+' trabajadores guardados en la nube','success');
     sbLog('trabajadores: '+rows.length+' filas ↑',true);
     return true;

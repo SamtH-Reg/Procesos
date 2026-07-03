@@ -12596,11 +12596,38 @@ async function _tbHandleForceSync(value){
   }catch(e){console.warn('[tb force-sync]',e);}
   finally{_tbForceSyncInFlight=false;}
 }
+/* ── Ping de trabajadores: el admin cambió el catálogo (p.ej. n° de ficha) →
+   TODAS las tablets refrescan su copia local al instante (Realtime) o en el
+   próximo chequeo (2 min). Dedup por marca 'at' en localStorage. ── */
+const TB_TRAB_PING_KEY='friosur_trab_ping';
+async function _tbHandleTrabPing(val){
+  try{
+    const at=val&&val.at?String(val.at):'';
+    if(!at)return;
+    if(localStorage.getItem('friosur_trab_ping_seen')===at)return;
+    localStorage.setItem('friosur_trab_ping_seen',at);
+    if(!_tbSb||!_tbUser)return;
+    const{data,error}=await _tbSb.from('trabajadores').select('*');
+    if(!error&&Array.isArray(data)&&data.length){
+      DB.data.trabajadores=data;
+      try{if(DB.save)DB.save();}catch(_){}
+      // NO reconstruir selects (deseleccionaría al trabajador en pleno pesaje):
+      // solo re-resolver la ficha visible; los pickers leen el catálogo al abrirse.
+      try{if(typeof onPRegTrabChange==='function')onPRegTrabChange(true);}catch(_){}
+      console.log('[Friosur] Catálogo de trabajadores actualizado desde el admin ('+data.length+').');
+    }
+  }catch(_){}
+}
+window._tbHandleTrabPing=_tbHandleTrabPing;
 async function _tbCheckForceSync(){
   if(!_tbSb||!_tbUser||(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline()))return;
   try{
-    const{data,error}=await _tbSb.from('app_kv').select('value').eq('key',TB_FORCE_SYNC_KEY).maybeSingle();
-    if(!error&&data&&data.value)await _tbHandleForceSync(data.value);
+    // Un solo request lee ambas órdenes: subida forzada + ping de trabajadores.
+    const{data,error}=await _tbSb.from('app_kv').select('key,value').in('key',[TB_FORCE_SYNC_KEY,TB_TRAB_PING_KEY]);
+    if(!error&&Array.isArray(data))for(const r of data){
+      if(r.key===TB_FORCE_SYNC_KEY&&r.value)await _tbHandleForceSync(r.value);
+      else if(r.key===TB_TRAB_PING_KEY&&r.value)await _tbHandleTrabPing(r.value);
+    }
   }catch(_){}
 }
 window._tbCheckForceSync=_tbCheckForceSync;
@@ -12617,7 +12644,10 @@ window._tbCheckForceSync=_tbCheckForceSync;
    localStorage se corrompe o la pestaña muere, el pesaje sigue aquí hasta subir.
    Degradación elegante: si IndexedDB no está disponible, todo lo demás sigue. */
 const Outbox=(()=>{
-  const DB='friosur_outbox',STORE='pesajes',VER=1;
+  // VER=2: si el SW abrió la base antes que la página (indexedDB.open sin versión
+  // la CREA vacía), el store 'pesajes' no existiría y encolar fallaría siempre.
+  // El bump dispara onupgradeneeded y garantiza el store (los datos se conservan).
+  const DB='friosur_outbox',STORE='pesajes',VER=2;
   let _db=null,_dead=false;
   function open(){
     if(_dead)return Promise.reject(new Error('idb no disponible'));
@@ -12919,13 +12949,31 @@ async function _updApply(force){
   if(_updReloading)return;
   if(!force&&_updBusy())return;
   _updReloading=true;
+  let listo=true;
   try{
     if(typeof _rtFlushLocalNow==='function')_rtFlushLocalNow();         // persistir RT YA (flush inmediato, no throttled)
-    try{if(typeof _obxDrain==='function')await _obxDrain();}catch(_){}  // vaciar outbox (best-effort)
-    try{if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();}catch(_){}
+    try{if(typeof _obxDrain==='function')await _obxDrain();}catch(_){}  // vaciar outbox de pesajes
+    // Push de moldes/generales/armado ESPERADO (antes era fire-and-forget y la
+    // recarga a los 500 ms lo mataba en vuelo → "se borran los datos").
+    try{
+      if(typeof tbFlushPendingCloudSync==='function')await tbFlushPendingCloudSync();
+      else if(typeof TBSync!=='undefined'&&TBSync.pushImmediate)TBSync.pushImmediate();
+    }catch(_){}
     try{if(typeof _tbWriteHeartbeat==='function')await _tbWriteHeartbeat();}catch(_){}
+    // SILENCIOSA Y SEGURA: si aún quedan pesajes sin confirmar en la nube, NO
+    // recargar (salvo botón manual). El reintento de 15 s lo vuelve a intentar
+    // cuando el outbox esté vacío; mientras tanto el SW sigue subiendo.
+    if(!force){
+      let pend=0;try{pend=await Outbox.count();}catch(_){pend=0;}
+      if(pend>0)listo=false;
+    }
   }finally{
-    setTimeout(()=>{try{location.reload();}catch(_){location.href=location.href;}},500);
+    if(listo){
+      setTimeout(()=>{try{location.reload();}catch(_){location.href=location.href;}},500);
+    }else{
+      _updReloading=false;
+      try{if(typeof _swKickSync==='function')_swKickSync();}catch(_){}
+    }
   }
 }
 window._updApplyNow=()=>_updApply(true);
@@ -13926,6 +13974,12 @@ const TBSync={
         if(String(row.key||'')!==TB_FORCE_SYNC_KEY)return;
         if(p.eventType==='DELETE')return;
         _tbHandleForceSync(row.value);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_kv',filter:'key=eq.'+TB_TRAB_PING_KEY},(p)=>{
+        const row=p.new||p.old;if(!row)return;
+        if(String(row.key||'')!==TB_TRAB_PING_KEY)return;
+        if(p.eventType==='DELETE')return;
+        _tbHandleTrabPing(row.value);   // ficha/catálogo cambiado en admin → refresco instantáneo
       }).subscribe();
   }
 };
