@@ -1845,6 +1845,8 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .preg-focus-bar .pf-title{display:flex;flex-direction:column;gap:2px;min-width:0;}
 .preg-focus-bar .pf-title b{font-size:15px;font-weight:800;letter-spacing:.01em;}
 .preg-focus-bar .pf-ctx{font-size:12px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;}
+/* Reloj en concentración: la barra de estado queda tapada → hora siempre visible. */
+.preg-focus-bar .pf-clock{margin-left:auto;font:800 22px/1 var(--mono,ui-monospace,monospace);letter-spacing:.04em;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:7px 12px;white-space:nowrap;}
 .preg-focus-exit{flex-shrink:0;background:#fff;color:#0f3d6e;border:0;border-radius:10px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:7px;}
 .preg-focus-exit:active{transform:scale(.97);}
 .preg-focus-body{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;width:100%;max-width:640px;margin:0 auto;box-sizing:border-box;}
@@ -8734,6 +8736,7 @@ function _pregFocusEnsureOverlay(){
   ov=document.createElement('div');
   ov.id='pRegFocusOverlay';ov.className='preg-focus-overlay';ov.hidden=true;
   ov.innerHTML='<div class="preg-focus-bar"><div class="pf-title"><b>🎯 Modo concentración</b><span class="pf-ctx" id="pRegFocusCtx"></span></div>'
+    +'<span class="pf-clock" id="pRegFocusClock" aria-label="Hora actual"></span>'
     +'<button type="button" class="preg-focus-exit" onclick="pRegFocusExit()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Salir</button></div>'
     +'<div class="preg-focus-body" id="pRegFocusBody"></div>';
   document.body.appendChild(ov);
@@ -8804,6 +8807,14 @@ function pRegFocusEnter(){
     body.appendChild(el);
   });
   const ctx=document.getElementById('pRegFocusCtx');if(ctx)ctx.textContent=_pregFocusCtxText();
+  // Reloj: en concentración no se ve la hora del sistema → HH:MM en la barra.
+  const _tickClock=()=>{
+    const c=document.getElementById('pRegFocusClock');
+    if(c){const d=new Date();c.textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+  };
+  _tickClock();
+  clearInterval(window._pregFocusClockT);
+  window._pregFocusClockT=setInterval(_tickClock,15000);
   document.body.classList.add('preg-focus-on');
   window._pRegFocusActive=true;
   try{if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();}catch(_){} // kilos editable (teclado del sistema)
@@ -8821,6 +8832,7 @@ function pRegFocusExit(){
   }
   document.body.classList.remove('preg-focus-on');
   window._pRegFocusActive=false;
+  clearInterval(window._pregFocusClockT);window._pregFocusClockT=null;
   try{if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();}catch(_){} // restaurar preferencia del teclado
   if(ov)ov.hidden=true;
 }
@@ -12832,8 +12844,11 @@ function _swKickSync(){
     if(!('serviceWorker' in navigator))return;
     _swMirrorMeta();
     navigator.serviceWorker.ready.then(reg=>{
+      // AMBOS: el mensaje hace que el worker empiece a drenar YA (su waitUntil lo
+      // mantiene vivo aunque la página se congele al bloquear la pantalla); el sync
+      // queda de garantía con reintentos del navegador (p.ej. si vuelve la red).
+      if(reg.active)reg.active.postMessage({type:'obx-drain'});
       if(reg.sync&&reg.sync.register)reg.sync.register('obx-sync').catch(()=>{});
-      else if(reg.active)reg.active.postMessage({type:'obx-drain'});
     }).catch(()=>{});
   }catch(_){}
 }
