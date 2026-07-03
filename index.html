@@ -12427,6 +12427,7 @@ setInterval(()=>{
    - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
+const TB_BUILD='v3-sw-reloj'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 const TB_SB_STORAGE_KEY='friosur_sb';
@@ -12543,6 +12544,7 @@ function _tbHeartbeatPayload(pendOverride){
     online:!!(typeof tbNavigatorOnline==='function'?tbNavigatorOnline():navigator.onLine),
     net:_tbNetInfo(),
     ua:(navigator.userAgent||'').slice(0,140),
+    v:(typeof TB_BUILD!=='undefined'?TB_BUILD:''),  // versión de la app → el admin ve qué tablets ya actualizaron
     ts:new Date().toISOString(),
     lastOkAt:_tbHbLastOkAt
   };
@@ -12864,7 +12866,7 @@ if(!window._obxHooks){
     else{_obxFlushKeepalive();_swKickSync();}      // ocultar/bloquear → flush inmediato + sync del SW
   });
   window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
-  document.addEventListener('freeze',()=>{_obxFlushKeepalive();});   // Page Lifecycle: congelamiento real
+  document.addEventListener('freeze',()=>{_obxFlushKeepalive();_swKickSync();});   // Page Lifecycle: congelamiento/descarte → keepalive + worker
   document.addEventListener('resume',()=>{void _obxDrain();});       // vuelve del congelamiento → drenar
   setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();},10000); // respaldo cada 10 s (prioriza subir a la nube; espejo de token solo si cambió)
 }
