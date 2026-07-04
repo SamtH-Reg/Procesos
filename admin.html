@@ -7733,7 +7733,7 @@ async function adminRefreshTabletHealth(manual){
       const v=(r&&r.value)||{};
       const tsRaw=v.ts||r.updated_at;
       const ts=tsRaw?Date.parse(tsRaw):NaN;
-      return{dev:v.dev||String(r.key||'').replace('tb_hb:',''),nombre:v.nombre||'',rol:v.rol||'',lineas:Array.isArray(v.lineas)?v.lineas:[],pend:+v.pend||0,net:v.net||null,ver:v.v||'',pwa:v.pwa,ua:v.ua||'',uso:v.uso||null,ts:ts};
+      return{dev:v.dev||String(r.key||'').replace('tb_hb:',''),nombre:v.nombre||'',rol:v.rol||'',email:v.email||'',lineas:Array.isArray(v.lineas)?v.lineas:[],pend:+v.pend||0,net:v.net||null,ver:v.v||'',pwa:v.pwa,ua:v.ua||'',uso:v.uso||null,online:v.online,lastOk:v.lastOkAt||null,ts:ts};
     })
     // Ocultar tablets retiradas (sin latido hace >12 h): no son la operación actual.
     .filter(r=>isFinite(r.ts)&&(Date.now()-r.ts)<12*3600000);
@@ -7770,8 +7770,9 @@ function _adminRenderTabletHealth(rows){
     if(list)list.innerHTML='<div style="color:var(--text-3);padding:8px 0;">Aún no hay latidos de tablets. Aparecerán cuando una tablet con sesión esté online (puede tardar ~90 s).</div>';
     return;
   }
+  window._admHbRows=rows; // para el detalle expandible por fila
   let alertCount=0,pendStuck=0;
-  const rowsHtml=rows.map(t=>{
+  const rowsHtml=rows.map((t,_i)=>{
     const age=now-(t.ts||0);
     const stale=!isFinite(t.ts)||age>STALE;
     const badNet=t.net&&/^(2g|slow-2g)$/i.test(t.net.type||'');
@@ -7780,7 +7781,7 @@ function _adminRenderTabletHealth(rows){
     if(stale){color='#dc2626';estado=hasPend?('SIN SEÑAL · '+t.pend+' sin subir'):'SIN SEÑAL';alertCount++;if(hasPend)pendStuck+=t.pend;}
     else if(hasPend||badNet){color='#d97706';estado=hasPend?(t.pend+' sin subir'):'Red débil';if(hasPend){alertCount++;pendStuck+=t.pend;}}
     const netL=_adminNetLabel(t.net);
-    return '<tr style="border-top:1px solid var(--border);">'
+    return '<tr style="border-top:1px solid var(--border);cursor:pointer;" onclick="adminTbHbToggle('+_i+')" title="Clic para ver el detalle completo">'
       +'<td style="padding:8px 10px;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+color+';margin-right:7px;"></span><strong>'+esc(t.nombre||t.dev)+'</strong>'+(t.rol?'<span style="color:var(--text-3);font-size:11px;"> · '+esc(t.rol)+'</span>':'')+'</td>'
       +'<td style="padding:8px 10px;font-size:12px;">'+(t.lineas&&t.lineas.length?esc(t.lineas.join(', ')):'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:13px;font-weight:700;color:'+(hasPend?'#d97706':'var(--text-3)')+';">'+(t.pend||0)+'</td>'
@@ -7789,8 +7790,18 @@ function _adminRenderTabletHealth(rows){
       +'<td style="padding:8px 10px;font-size:11px;color:'+(t.ver?'var(--text-3)':'#d97706')+';font-weight:600;">'+(t.ver?esc(t.ver):'antigua')+(t.pwa===true?' · 📱 app':(t.pwa===false?' · 🌐 navegador':''))+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:var(--text-3);">'+esc(_adminPlatFromUa(t.ua))+'</td>'
       +(function(){const u=_adminUsoLabel(t.uso);return '<td style="padding:8px 10px;font-size:11px;font-weight:600;color:'+(u.warn?'#dc2626':'var(--text-3)')+';">'+esc(u.txt)+(u.warn?' ⚠':'')+'</td>';})()
-      +'<td style="padding:8px 10px;font-size:12px;color:'+color+';font-weight:600;">'+esc(estado)+'</td>'
-      +'</tr>';
+      +'<td style="padding:8px 10px;font-size:12px;color:'+color+';font-weight:600;">'+esc(estado)+' <span style="color:var(--text-3);font-weight:400;font-size:10px;">▸ detalle</span></td>'
+      +'</tr>'
+      +'<tr id="admHbDet'+_i+'" hidden><td colspan="9" style="padding:10px 14px;background:var(--surface-alt,#f8fafc);border-top:1px dashed var(--border);font-size:11.5px;line-height:1.8;color:var(--text-2,#334155);">'
+        +'<b>ID dispositivo:</b> '+esc(t.dev)+' &nbsp;·&nbsp; <b>Cuenta:</b> '+esc(t.email||'—')
+        +' &nbsp;·&nbsp; <b>Conectado (según tablet):</b> '+(t.online===true?'sí':(t.online===false?'no':'—'))
+        +' &nbsp;·&nbsp; <b>Última subida de latido OK:</b> '+(t.lastOk?esc(new Date(t.lastOk).toLocaleString()):'—')+'<br>'
+        +'<b>Red:</b> '+(t.net?esc((t.net.type||'?')+' · latencia '+(t.net.rtt!=null?t.net.rtt+' ms':'—')+' · bajada '+(t.net.down!=null?t.net.down+' Mb':'—')+(t.net.save?' · AHORRO DE DATOS ACTIVO ⚠':'')):'sin dato (el navegador no lo expone)')+'<br>'
+        +'<b>Uso de la app:</b> '+(t.uso?esc('visible '+(t.uso.visMin||0)+' min · fuera '+(t.uso.hidMin||0)+' min · '+(t.uso.salidas||0)+' salida(s) a otra pestaña/app · contando desde '+(t.uso.desde?new Date(t.uso.desde).toLocaleString():'—')):'sin dato (versión anterior)')+'<br>'
+        +'<b>Modo:</b> '+(t.pwa===true?'📱 app instalada (ventana propia, sin pestañas)':(t.pwa===false?'🌐 navegador Chrome (con pestañas — conviene instalar la app)':'—'))
+        +' &nbsp;·&nbsp; <b>Versión:</b> '+esc(t.ver||'antigua')+' &nbsp;·&nbsp; <b>Equipo:</b> '+esc(_adminPlatFromUa(t.ua))+'<br>'
+        +'<b>Navegador (UA completo):</b> <span style="font-size:10px;color:var(--text-3);">'+esc(t.ua||'—')+'</span>'
+      +'</td></tr>';
   }).join('');
   if(alertBox){
     if(alertCount>0){
@@ -7800,10 +7811,32 @@ function _adminRenderTabletHealth(rows){
     }
   }
   if(list){
-    list.innerHTML='<table style="width:100%;border-collapse:collapse;"><thead><tr>'
+    // Resumen general: modo de uso, versiones y uso promedio de las tablets con señal fresca.
+    const fresh=rows.filter(r=>isFinite(r.ts)&&(now-r.ts)<STALE);
+    const nApp=rows.filter(r=>r.pwa===true).length, nNav=rows.filter(r=>r.pwa===false).length;
+    const nViejas=rows.filter(r=>!r.ver).length;
+    const usos=rows.map(r=>r.uso).filter(u=>u&&((+u.visMin||0)+(+u.hidMin||0))>=5);
+    const pctProm=usos.length?Math.round(usos.reduce((s,u)=>s+(+u.visMin||0)*100/((+u.visMin||0)+(+u.hidMin||0)),0)/usos.length):null;
+    const resumen='<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;padding:9px 12px;background:var(--surface-alt,#f8fafc);border:1px solid var(--border);border-radius:10px;font-size:12px;">'
+      +'<span><b>'+fresh.length+'</b> con señal fresca (&lt;5 min) de <b>'+rows.length+'</b> vistas en 12 h</span>'
+      +'<span>📱 app instalada: <b>'+nApp+'</b> · 🌐 navegador: <b>'+nNav+'</b>'+(rows.length-nApp-nNav>0?' · sin dato: '+(rows.length-nApp-nNav):'')+'</span>'
+      +(nViejas?'<span style="color:#d97706;">⚠ versión antigua: <b>'+nViejas+'</b> (recargar esas tablets)</span>':'<span style="color:#16a34a;">✓ todas en versión actual</span>')
+      +(pctProm!=null?'<span>uso promedio de la app: <b>'+pctProm+'%</b> visible</span>':'')
+      +'</div>';
+    const leyenda='<div style="margin-top:10px;font-size:11px;color:var(--text-3);line-height:1.6;">'
+      +'ℹ <b>SIN SEÑAL</b> con horas de antigüedad = sesión de un turno anterior o equipo apagado (normal fuera de turno); solo preocupa si la tablet debería estar pesando AHORA. '
+      +'<b>Uso de la app</b> en rojo ⚠ = la app estuvo oculta &gt;30% del tiempo: ese navegador se usa para otras cosas — conviene instalar la 📱 app (⋮ → Agregar a pantalla de inicio) para que quede en ventana propia sin pestañas. '
+      +'Clic en cualquier fila para ver el detalle completo (ID, cuenta, red, uso, navegador).</div>';
+    list.innerHTML=resumen
+      +'<table style="width:100%;border-collapse:collapse;"><thead><tr>'
       +['Tablet / usuario','Líneas','Sin subir','Red','Última señal','Versión','Equipo','Uso de la app','Estado'].map(h=>'<th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">'+h+'</th>').join('')
-      +'</tr></thead><tbody>'+rowsHtml+'</tbody></table>';
+      +'</tr></thead><tbody>'+rowsHtml+'</tbody></table>'+leyenda;
   }
+}
+/** Muestra/oculta la fila de detalle de una tablet en el panel de salud. */
+function adminTbHbToggle(i){
+  const d=document.getElementById('admHbDet'+i);
+  if(d)d.hidden=!d.hidden;
 }
 function adminStartTabletHealthWatch(){
   if(_adminTabletHealthTimer)clearInterval(_adminTabletHealthTimer);
