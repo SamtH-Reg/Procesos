@@ -12549,6 +12549,7 @@ function _tbHeartbeatPayload(pendOverride){
     net:_tbNetInfo(),
     ua:(navigator.userAgent||'').slice(0,140),
     v:(typeof TB_BUILD!=='undefined'?TB_BUILD:''),  // versión de la app → el admin ve qué tablets ya actualizaron
+    pwa:(function(){try{return !!(matchMedia('(display-mode: standalone)').matches||navigator.standalone);}catch(_){return false;}})(),  // app instalada vs navegador
     ts:new Date().toISOString(),
     lastOkAt:_tbHbLastOkAt
   };
