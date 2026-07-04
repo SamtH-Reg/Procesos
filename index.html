@@ -12922,7 +12922,7 @@ if('serviceWorker' in navigator){
 }
 if(!window._obxHooks){
   window._obxHooks=true;
-  window.addEventListener('online',()=>{void _obxDrain();});
+  window.addEventListener('online',()=>{void _obxDrain();_swKickSync();});  // volvió la señal → drenar YA + ciclo nuevo del SW
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){void _obxDrain();void _tbWakeLockSync();}
     else{_obxFlushKeepalive();_swKickSync();}      // ocultar/bloquear → flush inmediato + sync del SW

@@ -91,7 +91,29 @@ async function drainOutbox(){
   }finally{try{db.close();}catch(_){}}
 }
 self.addEventListener('sync',e=>{
-  if(e.tag==='obx-sync')e.waitUntil(drainOutbox());
+  if(e.tag!=='obx-sync')return;
+  e.waitUntil((async()=>{
+    try{
+      await drainOutbox();   // red/5xx/auth → throw → backoff del navegador
+      // Drenó sin error pero ¿quedaron filas (p.ej. token recién renovado)?
+      // Re-registrar para otro ciclo apenas haya señal.
+      try{
+        const db=await _open(OBX_DB);
+        const n=(await _getAll(db,OBX_STORE)).length;
+        try{db.close();}catch(_){}
+        if(n>0&&self.registration.sync)await self.registration.sync.register('obx-sync');
+      }catch(_){}
+    }catch(err){
+      // lastChance = el navegador agotó sus ~3 reintentos y va a ABANDONAR el
+      // sync. Sin esto, los pendientes quedaban esperando a que alguien abra
+      // la app. Re-registrando un sync NUEVO el ciclo renace: reintentos
+      // eternos espaciados, y sube apenas la tablet tenga señal.
+      if(e.lastChance){
+        try{if(self.registration.sync)await self.registration.sync.register('obx-sync');}catch(_){}
+      }
+      throw err;
+    }
+  })());
 });
 self.addEventListener('message',e=>{
   // Fallback para navegadores sin Background Sync: la página pide drenar directo.
