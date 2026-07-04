@@ -12826,14 +12826,24 @@ window._frioOutboxCount=async()=>{const n=await Outbox.count();console.log('[Fri
    outbox está VACÍO = todo confirmado → re-alinea las firmas y limpia el badge.
    Si hay filas en el outbox, NO toca nada (son pendientes reales; el drain +
    los fixes de sesión los suben). Es la fuente de verdad durable. */
+/* Filas SUBIBLES reales del outbox = todas MENOS las descartadas por error de
+   dato (_obxSkip: constraint/not-null, que NUNCA suben por reintento y quedarían
+   contando eternamente → badge pegado + Wake Lock eterno). Fuente de verdad. */
+async function _obxPendingReal(){
+  try{const rows=await Outbox.all();return rows.filter(r=>r&&!_obxSkip.has(String(r.id))).length;}catch(_){return 0;}
+}
+window._obxPendingReal=_obxPendingReal;
+window._frioOutboxSkipped=()=>{const a=[..._obxSkip];console.log('[Friosur] Filas en outbox descartadas por error de datos (no suben por reintento):',a);return a;};
 let _tbReconcileInFlight=false;
 async function _tbReconcileBadgeFromOutbox(){
   if(_tbReconcileInFlight)return;_tbReconcileInFlight=true;
   try{
-    let n=0;try{n=await Outbox.count();}catch(_){_tbReconcileInFlight=false;return;}
-    if(n>0){_tbReconcileInFlight=false;return;}   // pendientes reales → no tocar
+    let rows=[];try{rows=await Outbox.all();}catch(_){_tbReconcileInFlight=false;return;}
+    const pend=rows.filter(r=>r&&!_obxSkip.has(String(r.id))).length;
+    if(pend>0){_tbReconcileInFlight=false;return;}   // hay filas subibles reales → no tocar
+    if(rows.length>0)console.warn('[Friosur] '+rows.length+' registro(s) en outbox con error de datos (no suben por reintento). Diag: _frioOutboxSkipped()');
     try{if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(_){}
-    try{_tbMarkPendingPush(false);}catch(_){}      // outbox vacío = nada pendiente real
+    try{_tbMarkPendingPush(false);}catch(_){}      // nada SUBIBLE pendiente → badge no debe mentir
     try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
   }catch(_){}
   finally{_tbReconcileInFlight=false;}
@@ -12891,7 +12901,7 @@ async function _tbWakeLockSync(){
   try{
     if(!('wakeLock' in navigator))return;
     if(document.visibilityState!=='visible'){_tbWakeLock=null;return;}
-    let n=0;try{n=await Outbox.count();}catch(_){n=0;}
+    let n=0;try{n=(typeof _obxPendingReal==='function')?await _obxPendingReal():await Outbox.count();}catch(_){n=0;}
     if(n>0&&_tbUser){
       if(!_tbWakeLock){
         _tbWakeLock=await navigator.wakeLock.request('screen');
