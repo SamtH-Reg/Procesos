@@ -12740,7 +12740,10 @@ function _obxIsDataError(err){
   // se re-loguea/refresca y la fila DEBE reintentarse. Antes caía en el regex de
   // "violat..." (RLS) y se descartaba para siempre → pesajes horas sin subir.
   if(/jwt|token|expired|authoriz|logged|401|403/.test(msg)||/^pgrst30/i.test(code)||code==='42501'){
-    try{if(typeof _tbEnsureSession==='function')void _tbEnsureSession();}catch(_){}
+    // 401/403/RLS en pesajes = token podrido (can_write ya incluye al rol) → FORZAR
+    // refresh sin mirar expires_at; la fila queda y se reintenta con el token nuevo.
+    try{if(typeof _tbForceSessionRefresh==='function')void _tbForceSessionRefresh();
+        else if(typeof _tbEnsureSession==='function')void _tbEnsureSession();}catch(_){}
     return false;
   }
   if(/^\d/.test(code))return true;
@@ -12922,14 +12925,15 @@ if('serviceWorker' in navigator){
 }
 if(!window._obxHooks){
   window._obxHooks=true;
-  window.addEventListener('online',()=>{void _obxDrain();_swKickSync();});  // volvió la señal → drenar YA + ciclo nuevo del SW
+  const _tbResume=()=>{ if(typeof _tbResumeSync==='function')void _tbResumeSync(); else{void _obxDrain();void _tbWakeLockSync();} };
+  window.addEventListener('online',_tbResume);       // volvió la señal → sesión+drenar+SW coordinado
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'){void _obxDrain();void _tbWakeLockSync();}
-    else{_obxFlushKeepalive();_swKickSync();}      // ocultar/bloquear → flush inmediato + sync del SW
+    if(document.visibilityState==='visible')_tbResume();          // desbloqueo/volver a foco → reanudación coordinada
+    else{_obxFlushKeepalive();_swKickSync();}                      // ocultar/bloquear → flush inmediato + sync del SW
   });
   window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
   document.addEventListener('freeze',()=>{_obxFlushKeepalive();_swKickSync();});   // Page Lifecycle: congelamiento/descarte → keepalive + worker
-  document.addEventListener('resume',()=>{void _obxDrain();});       // vuelve del congelamiento → drenar
+  document.addEventListener('resume',_tbResume);     // vuelve del congelamiento/desbloqueo → reanudación coordinada
   setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();},10000); // respaldo cada 10 s (prioriza subir a la nube; espejo de token solo si cambió)
 }
 
@@ -14209,10 +14213,63 @@ async function _tbEnsureSession(){
   finally{_tbSessChecking=false;}
 }
 window._tbEnsureSession=_tbEnsureSession;
+/* ── Refresh FORZADO de sesión ──
+   _tbEnsureSession confía en expires_at → si el token quedó inválido en el
+   servidor pero "no vencido" (pasa tras bloqueos LARGOS de pantalla: rotación/
+   invalidación server-side), no lo renueva y las subidas dan 401 eternamente.
+   Esto se llama cuando hay EVIDENCIA real de token rechazado (401/403 de una
+   subida) o cuando un pesaje sigue pendiente tras reanudar: fuerza refreshSession
+   sin mirar expires_at. Cooldown 12 s → sin tormenta de refresh ni egress. */
+let _tbForceRefAt=0,_tbForceRefIn=false;
+async function _tbForceSessionRefresh(){
+  if(_tbForceRefIn||!_tbSb||!_tbUser)return false;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return false;
+  const now=Date.now();
+  if(now-_tbForceRefAt<12000)return false;
+  _tbForceRefAt=now;_tbForceRefIn=true;
+  try{
+    const r=await _tbSb.auth.refreshSession();
+    const ok=!!(r&&r.data&&r.data.session&&!r.error);
+    if(ok){
+      _tbSessionBanner(false);
+      try{if(typeof _swMirrorMeta==='function')_swMirrorMeta();}catch(_){}   // el SW necesita el token nuevo
+      try{void _obxDrain();}catch(_){}                                        // reintenta pendientes YA con token fresco
+      try{if(typeof TBSync!=='undefined'&&TBSync.schedulePush)TBSync.schedulePush();}catch(_){}
+      console.log('[Friosur] Token renovado tras rechazo; reintentando subida.');
+    }else{
+      _tbSessionBanner(true);   // refresh token muerto → hay que reingresar (banner rojo)
+    }
+    return ok;
+  }catch(_){return false;}
+  finally{_tbForceRefIn=false;}
+}
+window._tbForceSessionRefresh=_tbForceSessionRefresh;
+/* ── Reanudación coordinada (desbloqueo / volver a foco / vuelve la red) ──
+   ORDEN correcto: 1) asegurar sesión, 2) drenar, 3) si TODAVÍA queda pendiente
+   (prueba de token podrido pese a expires_at futuro) forzar refresh y drenar de
+   nuevo. Así "desbloquea → ingresa datos → queda por subir" se resuelve solo. */
+let _tbResumeAt=0;
+async function _tbResumeSync(){
+  const now=Date.now();
+  if(now-_tbResumeAt<2500)return;_tbResumeAt=now;   // coalesce ráfagas de eventos al reanudar
+  try{
+    try{await _tbEnsureSession();}catch(_){}
+    let pend=0;try{pend=await Outbox.count();}catch(_){}
+    if(pend>0){
+      try{await _obxDrain();}catch(_){}
+      let pend2=0;try{pend2=await Outbox.count();}catch(_){}
+      if(pend2>0){try{await _tbForceSessionRefresh();}catch(_){}}   // sigue trabado → token podrido → forzar
+    }
+    try{_swKickSync();}catch(_){}
+    try{void _tbWakeLockSync();}catch(_){}
+    try{_tbCheckForceSync();}catch(_){}
+  }catch(_){}
+}
+window._tbResumeSync=_tbResumeSync;
 if(!window._tbSessHooks){
   window._tbSessHooks=true;
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){_tbEnsureSession();try{_tbCheckForceSync();}catch(_){}}});
-  window.addEventListener('online',()=>{_tbEnsureSession();try{_tbCheckForceSync();}catch(_){}});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void _tbResumeSync();});
+  window.addEventListener('online',()=>{void _tbResumeSync();});
   setInterval(()=>{_tbEnsureSession();},5*60000); // cada 5 min
 }
 async function tbDoLogin(){
