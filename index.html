@@ -12818,6 +12818,27 @@ async function _obxDrain(){
 }
 window._obxDrain=_obxDrain;
 window._frioOutboxCount=async()=>{const n=await Outbox.count();console.log('[Friosur] Pesajes en outbox (sin confirmar en nube):',n);return n;};
+/* ── VERDAD del badge = OUTBOX, no la firma de TBSync ──
+   El badge "Por subir" sale de comparar la firma de las filas locales contra
+   TBSync._lastSig; tras bloquear/desbloquear esa firma queda desalineada y el
+   badge se PEGA en "Por subir" aunque cada pesaje YA esté confirmado en la nube
+   (el outbox se vacía solo con el ACK del servidor). Este reconciliador: si el
+   outbox está VACÍO = todo confirmado → re-alinea las firmas y limpia el badge.
+   Si hay filas en el outbox, NO toca nada (son pendientes reales; el drain +
+   los fixes de sesión los suben). Es la fuente de verdad durable. */
+let _tbReconcileInFlight=false;
+async function _tbReconcileBadgeFromOutbox(){
+  if(_tbReconcileInFlight)return;_tbReconcileInFlight=true;
+  try{
+    let n=0;try{n=await Outbox.count();}catch(_){_tbReconcileInFlight=false;return;}
+    if(n>0){_tbReconcileInFlight=false;return;}   // pendientes reales → no tocar
+    try{if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(_){}
+    try{_tbMarkPendingPush(false);}catch(_){}      // outbox vacío = nada pendiente real
+    try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
+  }catch(_){}
+  finally{_tbReconcileInFlight=false;}
+}
+window._tbReconcileBadgeFromOutbox=_tbReconcileBadgeFromOutbox;
 /* ── Flush KEEPALIVE al bloquear/ocultar la tablet ──
    Chrome CONGELA los timers de una página oculta/bloqueada → el drain de 10 s deja
    de correr y el outbox queda horas sin subir. fetch({keepalive:true}) es la única
@@ -12939,7 +12960,7 @@ if(!window._obxHooks){
   window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
   document.addEventListener('freeze',()=>{_obxFlushKeepalive();_swKickSync();});   // Page Lifecycle: congelamiento/descarte → keepalive + worker
   document.addEventListener('resume',_tbResume);     // vuelve del congelamiento/desbloqueo → reanudación coordinada
-  setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();},10000); // respaldo cada 10 s (prioriza subir a la nube; espejo de token solo si cambió)
+  setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();void _tbReconcileBadgeFromOutbox();},10000); // respaldo 10 s: subir + reconciliar badge con el outbox real
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -14265,6 +14286,7 @@ async function _tbResumeSync(){
       let pend2=0;try{pend2=await Outbox.count();}catch(_){}
       if(pend2>0){try{await _tbForceSessionRefresh();}catch(_){}}   // sigue trabado → token podrido → forzar
     }
+    try{await _tbReconcileBadgeFromOutbox();}catch(_){}   // outbox vacío → limpiar badge pegado tras desbloqueo
     try{_swKickSync();}catch(_){}
     try{void _tbWakeLockSync();}catch(_){}
     try{_tbCheckForceSync();}catch(_){}
