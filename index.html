@@ -12925,11 +12925,16 @@ if('serviceWorker' in navigator){
 }
 if(!window._obxHooks){
   window._obxHooks=true;
+  let _tbHiddenAt=0;
   const _tbResume=()=>{ if(typeof _tbResumeSync==='function')void _tbResumeSync(); else{void _obxDrain();void _tbWakeLockSync();} };
   window.addEventListener('online',_tbResume);       // volvió la señal → sesión+drenar+SW coordinado
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible')_tbResume();          // desbloqueo/volver a foco → reanudación coordinada
-    else{_obxFlushKeepalive();_swKickSync();}                      // ocultar/bloquear → flush inmediato + sync del SW
+    if(document.visibilityState==='visible'){
+      const hiddenMs=_tbHiddenAt?(Date.now()-_tbHiddenAt):0;_tbHiddenAt=0;
+      _tbResume();                                                // desbloqueo/volver a foco → reanudación coordinada
+      // Bloqueo real (>25 s oculta) → tras intentar recuperar, recarga de rescate si sigue trabado.
+      if(hiddenMs>25000&&typeof _tbPostUnlockRecovery==='function')void _tbPostUnlockRecovery();
+    }else{_tbHiddenAt=Date.now();_obxFlushKeepalive();_swKickSync();}  // ocultar/bloquear → flush inmediato + sync del SW
   });
   window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
   document.addEventListener('freeze',()=>{_obxFlushKeepalive();_swKickSync();});   // Page Lifecycle: congelamiento/descarte → keepalive + worker
@@ -14266,6 +14271,55 @@ async function _tbResumeSync(){
   }catch(_){}
 }
 window._tbResumeSync=_tbResumeSync;
+/* ── Recuperación fuerte tras DESBLOQUEO (último recurso: recargar) ──
+   Si tras desbloquear la pantalla los pesajes SIGUEN sin subir pese a la
+   reanudación coordinada + refresh forzado, se hace una RECARGA de la página:
+   re-crea sesión, websocket y cliente Supabase desde cero (arregla estados
+   colgados que ningún reintento in-situ resuelve). Solo recarga si es SEGURO
+   (nada a medio escribir, sin modal/picker) → nunca interrumpe un pesaje en
+   curso. Los datos son durables (RT en localStorage + outbox en IndexedDB): la
+   recarga jamás pierde nada. Cooldown 60 s para no recargar en bucle. */
+function _tbSafeToReload(){
+  try{
+    for(const id of ['pRegKg','pRegFicha','pRegGuia']){
+      const el=document.getElementById(id);
+      if(el&&String(el.value||'').trim())return false;   // pesaje a medio ingresar
+    }
+    if(document.querySelector('#modalOverlay.show'))return false;
+    if(document.querySelector('.fs-combo-panel:not([hidden])'))return false;
+    if(window._pRegFocusActive)return false;              // en modo concentración
+    return true;
+  }catch(_){return false;}
+}
+let _tbRecoverAt=0;
+async function _tbPostUnlockRecovery(){
+  const now=Date.now();
+  if(now-_tbRecoverAt<60000)return;_tbRecoverAt=now;
+  await new Promise(r=>setTimeout(r,6000));              // deja actuar a _tbResumeSync (sesión+drain+refresh)
+  let pend=0;try{pend=await Outbox.count();}catch(_){}
+  if(pend<=0)return;                                     // se recuperó solo
+  try{await _tbForceSessionRefresh();}catch(_){}         // segundo empujón explícito
+  try{await _obxDrain();}catch(_){}
+  await new Promise(r=>setTimeout(r,4000));
+  let pend2=0;try{pend2=await Outbox.count();}catch(_){}
+  if(pend2<=0)return;                                    // recuperado
+  // SIGUE trabado tras desbloqueo → recarga de rescate (si es seguro).
+  console.warn('[Friosur] Pendientes trabados tras desbloqueo → recarga de rescate.');
+  const _tryReload=()=>{
+    if(_tbSafeToReload()){
+      try{if(typeof _rtFlushLocalNow==='function')_rtFlushLocalNow();}catch(_){}
+      try{_obxFlushKeepalive();}catch(_){}
+      setTimeout(()=>{try{location.reload();}catch(_){location.href=location.href;}},400);
+      return true;
+    }
+    return false;
+  };
+  if(_tryReload())return;
+  // No era seguro (operario pesando) → reintentar recargar cuando quede libre, hasta 2 min.
+  let tries=0;
+  const iv=setInterval(()=>{ tries++; if(_tryReload()||tries>24)clearInterval(iv); },5000);
+}
+window._tbPostUnlockRecovery=_tbPostUnlockRecovery;
 if(!window._tbSessHooks){
   window._tbSessHooks=true;
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void _tbResumeSync();});
