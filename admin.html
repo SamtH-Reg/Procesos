@@ -7733,7 +7733,7 @@ async function adminRefreshTabletHealth(manual){
       const v=(r&&r.value)||{};
       const tsRaw=v.ts||r.updated_at;
       const ts=tsRaw?Date.parse(tsRaw):NaN;
-      return{dev:v.dev||String(r.key||'').replace('tb_hb:',''),nombre:v.nombre||'',rol:v.rol||'',lineas:Array.isArray(v.lineas)?v.lineas:[],pend:+v.pend||0,net:v.net||null,ver:v.v||'',pwa:v.pwa,ts:ts};
+      return{dev:v.dev||String(r.key||'').replace('tb_hb:',''),nombre:v.nombre||'',rol:v.rol||'',lineas:Array.isArray(v.lineas)?v.lineas:[],pend:+v.pend||0,net:v.net||null,ver:v.v||'',pwa:v.pwa,ua:v.ua||'',uso:v.uso||null,ts:ts};
     })
     // Ocultar tablets retiradas (sin latido hace >12 h): no son la operación actual.
     .filter(r=>isFinite(r.ts)&&(Date.now()-r.ts)<12*3600000);
@@ -7743,6 +7743,22 @@ async function adminRefreshTabletHealth(manual){
   }catch(e){
     if(list)list.innerHTML='<div style="color:#dc2626;">No se pudo leer el estado: '+esc(e.message||String(e))+'</div>';
   }
+}
+/** Plataforma + versión de Chrome legibles a partir del user-agent del latido. */
+function _adminPlatFromUa(ua){
+  ua=String(ua||'');
+  const plat=/Android/i.test(ua)?'Android':/Windows/i.test(ua)?'Windows':/X11|Linux/i.test(ua)?'Linux':/iPhone|iPad|Mac/i.test(ua)?'Apple':'';
+  const m=ua.match(/Chrome\/(\d+)/);
+  return (plat||'—')+(m?(' · Chrome '+m[1]):'');
+}
+/** Etiqueta de uso: % del tiempo con la app visible + veces que salieron a otra cosa. */
+function _adminUsoLabel(uso){
+  if(!uso)return{txt:'—',warn:false};
+  const vis=+uso.visMin||0,hid=+uso.hidMin||0,tot=vis+hid;
+  if(tot<5)return{txt:'recién iniciada',warn:false};
+  const pct=Math.round(vis*100/tot);
+  const warn=pct<70; // más del 30% del tiempo en otra cosa → señal de mal uso del navegador
+  return{txt:'visible '+pct+'% · '+(+uso.salidas||0)+' salida(s)'+(hid?(' · '+hid+' min fuera'):''),warn};
 }
 function _adminRenderTabletHealth(rows){
   const list=document.getElementById('adminTabletHealthList');
@@ -7771,6 +7787,8 @@ function _adminRenderTabletHealth(rows){
       +'<td style="padding:8px 10px;font-size:12px;color:'+(badNet?'#d97706':'var(--text-3)')+';">'+esc(netL||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:12px;color:'+(stale?'#dc2626':'var(--text-3)')+';">'+_adminFmtAge(age)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:'+(t.ver?'var(--text-3)':'#d97706')+';font-weight:600;">'+(t.ver?esc(t.ver):'antigua')+(t.pwa===true?' · 📱 app':(t.pwa===false?' · 🌐 navegador':''))+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--text-3);">'+esc(_adminPlatFromUa(t.ua))+'</td>'
+      +(function(){const u=_adminUsoLabel(t.uso);return '<td style="padding:8px 10px;font-size:11px;font-weight:600;color:'+(u.warn?'#dc2626':'var(--text-3)')+';">'+esc(u.txt)+(u.warn?' ⚠':'')+'</td>';})()
       +'<td style="padding:8px 10px;font-size:12px;color:'+color+';font-weight:600;">'+esc(estado)+'</td>'
       +'</tr>';
   }).join('');
@@ -7783,7 +7801,7 @@ function _adminRenderTabletHealth(rows){
   }
   if(list){
     list.innerHTML='<table style="width:100%;border-collapse:collapse;"><thead><tr>'
-      +['Tablet / usuario','Líneas','Sin subir','Red','Última señal','Versión','Estado'].map(h=>'<th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">'+h+'</th>').join('')
+      +['Tablet / usuario','Líneas','Sin subir','Red','Última señal','Versión','Equipo','Uso de la app','Estado'].map(h=>'<th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);">'+h+'</th>').join('')
       +'</tr></thead><tbody>'+rowsHtml+'</tbody></table>';
   }
 }

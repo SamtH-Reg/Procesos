@@ -12534,6 +12534,32 @@ function _tbNetInfo(){
     return{type:c.effectiveType||'',down:typeof c.downlink==='number'?c.downlink:null,rtt:typeof c.rtt==='number'?c.rtt:null,save:!!c.saveData};
   }catch(_){return null;}
 }
+/* ── Seguimiento de USO: cuánto tiempo la app está visible vs en segundo plano.
+   Si el navegador se usa para otra cosa (otra pestaña/app), la página queda
+   hidden → se acumula en 'hid' y se cuenta la salida. Viaja en el latido
+   (mismo request, sin egress extra). Persistido en localStorage para
+   sobrevivir recargas; se resetea cada 24 h. ── */
+const _TB_USO_LS='friosur_tb_uso';
+const _tbUso=(function(){
+  try{
+    const j=JSON.parse(localStorage.getItem(_TB_USO_LS)||'null');
+    if(j&&j.d0&&(Date.now()-j.d0)<24*3600000)return j;
+  }catch(_){}
+  return{vis:0,hid:0,hides:0,d0:Date.now()};
+})();
+let _tbUsoMark=Date.now();
+function _tbUsoTick(){
+  const now=Date.now(),dt=Math.max(0,Math.min(now-_tbUsoMark,10*60000)); // cap 10 min: congelamientos no inflan
+  _tbUsoMark=now;
+  if(document.visibilityState==='visible')_tbUso.vis+=dt;else _tbUso.hid+=dt;
+  if((Date.now()-_tbUso.d0)>=24*3600000){_tbUso.vis=0;_tbUso.hid=0;_tbUso.hides=0;_tbUso.d0=Date.now();}
+  try{localStorage.setItem(_TB_USO_LS,JSON.stringify(_tbUso));}catch(_){}
+}
+document.addEventListener('visibilitychange',()=>{
+  _tbUsoTick();
+  if(document.visibilityState==='hidden')_tbUso.hides++;
+});
+setInterval(_tbUsoTick,60000);
 let _tbHbLastOkAt=null,_tbHbInFlight=false,_tbHbTimer=null;
 function _tbHeartbeatPayload(pendOverride){
   let pend=pendOverride;
@@ -12550,6 +12576,7 @@ function _tbHeartbeatPayload(pendOverride){
     ua:(navigator.userAgent||'').slice(0,140),
     v:(typeof TB_BUILD!=='undefined'?TB_BUILD:''),  // versión de la app → el admin ve qué tablets ya actualizaron
     pwa:(function(){try{return !!(matchMedia('(display-mode: standalone)').matches||navigator.standalone);}catch(_){return false;}})(),  // app instalada vs navegador
+    uso:(function(){try{_tbUsoTick();return{visMin:Math.round(_tbUso.vis/60000),hidMin:Math.round(_tbUso.hid/60000),salidas:_tbUso.hides,desde:new Date(_tbUso.d0).toISOString()};}catch(_){return null;}})(),  // seguimiento: app visible vs en otra cosa
     ts:new Date().toISOString(),
     lastOkAt:_tbHbLastOkAt
   };
