@@ -4758,6 +4758,10 @@ function _tbHasLocalDataPendingPush(){
   }catch(e){return true;}
 }
 function _tbIsPendingPush(){
+  // OUTBOX = fuente de verdad del badge: si conocemos el conteo real de filas
+  // subibles, mandamos eso (evita el badge pegado por firmas desalineadas tras
+  // bloquear/desbloquear). Solo si aún no se calculó, caemos al método viejo.
+  if(typeof window._obxPendCached==='number')return window._obxPendCached>0;
   try{if(localStorage.getItem(TB_PENDING_PUSH_KEY)==='1')return true;}catch(e){}
   return _tbHasLocalDataPendingPush();
 }
@@ -12573,7 +12577,7 @@ setInterval(()=>{
    - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
-const TB_BUILD='v5-swauth'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
+const TB_BUILD='v6-badge-resync'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 const TB_SB_STORAGE_KEY='friosur_sb';
@@ -12925,10 +12929,14 @@ function _tbUploadPesajeRow(row){
   // put va DENTRO de la cadena → subidas estrictamente de a una, en orden.
   _uploadChain=_uploadChain.then(async()=>{
     try{await Outbox.put(row);}catch(_){}
+    try{void _obxRefreshPendCache();}catch(_){}      // badge "por subir" al instante
     const ok=await _obxUploadOne(row);
     if(ok&&typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();
-    // Falló la subida directa → el SW queda encargado: subirá aunque congelen la pestaña.
-    if(!ok&&typeof _swKickSync==='function')_swKickSync();
+    if(!ok&&typeof _swKickSync==='function')_swKickSync();  // falló directo → SW se encarga
+    // Cada registro RE-SINCRONIZA TODO lo pendiente (arrastra filas viejas atrapadas
+    // tras un bloqueo): asegura sesión → drena todo → refresca badge. Silencioso.
+    try{if(typeof _tbSyncWatchdog==='function')void _tbSyncWatchdog();else void _obxDrain();}catch(_){}
+    try{void _obxRefreshPendCache();}catch(_){}
   }).catch(()=>{});
 }
 window._tbUploadPesajeRow=_tbUploadPesajeRow;
@@ -12956,7 +12964,7 @@ async function _obxDrain(){
     }
     if(subidos&&typeof _tbAfterSingleRowCloudSync==='function')_tbAfterSingleRowCloudSync();
   }catch(e){console.warn('[outbox drain]',e&&e.message||e);}
-  finally{_obxDraining=false;}
+  finally{_obxDraining=false;try{void _obxRefreshPendCache();}catch(_){}}
 }
 window._obxDrain=_obxDrain;
 window._frioOutboxCount=async()=>{const n=await Outbox.count();console.log('[Friosur] Pesajes en outbox (sin confirmar en nube):',n);return n;};
@@ -12975,6 +12983,14 @@ async function _obxPendingReal(){
   try{const rows=await Outbox.all();return rows.filter(r=>r&&!_obxSkip.has(String(r.id))).length;}catch(_){return 0;}
 }
 window._obxPendingReal=_obxPendingReal;
+/* Cache del conteo real del outbox → alimenta el badge (fuente de verdad) y lo
+   redibuja. Se refresca tras cada put/drain/reconcile y en el tick de respaldo. */
+async function _obxRefreshPendCache(){
+  try{window._obxPendCached=(typeof _obxPendingReal==='function')?await _obxPendingReal():await Outbox.count();}catch(_){}
+  try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}
+  return window._obxPendCached;
+}
+window._obxRefreshPendCache=_obxRefreshPendCache;
 window._frioOutboxSkipped=()=>{const a=[..._obxSkip];console.log('[Friosur] Filas en outbox descartadas por error de datos (no suben por reintento):',a);return a;};
 let _tbReconcileInFlight=false;
 async function _tbReconcileBadgeFromOutbox(){
@@ -12982,7 +12998,8 @@ async function _tbReconcileBadgeFromOutbox(){
   try{
     let rows=[];try{rows=await Outbox.all();}catch(_){_tbReconcileInFlight=false;return;}
     const pend=rows.filter(r=>r&&!_obxSkip.has(String(r.id))).length;
-    if(pend>0){_tbReconcileInFlight=false;return;}   // hay filas subibles reales → no tocar
+    window._obxPendCached=pend;   // badge = outbox real
+    if(pend>0){_tbReconcileInFlight=false;try{if(typeof TBSync!=='undefined'&&TBSync._applySyncBadge)TBSync._applySyncBadge();}catch(_){}return;}   // hay filas subibles reales → no tocar
     if(rows.length>0)console.warn('[Friosur] '+rows.length+' registro(s) en outbox con error de datos (no suben por reintento). Diag: _frioOutboxSkipped()');
     try{if(typeof TBSync!=='undefined'&&TBSync.refreshPushSignaturesFromLocal)TBSync.refreshPushSignaturesFromLocal();}catch(_){}
     try{_tbMarkPendingPush(false);}catch(_){}      // nada SUBIBLE pendiente → badge no debe mentir
@@ -13118,6 +13135,10 @@ if(!window._obxHooks){
   window.addEventListener('pagehide',()=>{_obxFlushKeepalive();},{capture:true});
   document.addEventListener('freeze',()=>{_obxFlushKeepalive();_swKickSync();});   // Page Lifecycle: congelamiento/descarte → keepalive + worker
   document.addEventListener('resume',_tbResume);     // vuelve del congelamiento/desbloqueo → reanudación coordinada
+  // Android/Chrome no siempre dispara visibilitychange al desbloquear la PWA →
+  // sumamos focus/pageshow como redes extra para reanudar la sincronización.
+  window.addEventListener('focus',_tbResume);
+  window.addEventListener('pageshow',_tbResume);
   setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();void _tbReconcileBadgeFromOutbox();},10000); // respaldo 10 s: subir + reconciliar badge con el outbox real
 }
 
