@@ -308,6 +308,16 @@ body[data-theme="dark"] .eq-item-congelando__badge{
 }
 
 .topbar-right{display:flex;align-items:center;gap:10px;margin-left:auto;}
+/* Menú rápido de temas (barra superior) */
+.qtm{position:fixed;z-index:100055;min-width:210px;max-width:88vw;background:var(--surface,#fff);border:1px solid var(--border,#dbe1eb);border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.22);padding:8px;display:none;}
+.qtm.show{display:block;}
+.qtm .qtm-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3,#94a3b8);padding:4px 8px 8px;}
+.qtm .qtm-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;background:transparent;border-radius:9px;cursor:pointer;font:600 14px var(--font);color:var(--text,#1e293b);text-align:left;}
+.qtm .qtm-item:hover{background:var(--surface-alt,#f4f5fc);}
+.qtm .qtm-item.active{background:var(--focus-ring,rgba(30,58,102,.12));}
+.qtm .qtm-sw{width:18px;height:18px;border-radius:5px;border:1px solid;flex:0 0 auto;}
+.qtm .qtm-nom{flex:1;}
+.qtm .qtm-ck{color:var(--brand,#1e3a66);font-weight:900;}
 .top-btn{
   width:44px;height:44px;
   display:grid;place-items:center;
@@ -2008,6 +2018,9 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
   </div>
 
   <div class="topbar-right">
+    <button class="top-btn" id="idxThemeBtn" title="Cambiar tema" aria-label="Cambiar tema" style="color: rgb(251, 247, 247);" onclick="idxToggleThemeMenu(event)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.2-10-8.2z"/></svg>
+    </button>
     <button class="top-btn" title="Notificaciones" style="color: rgb(251, 247, 247);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
       <span class="dot"></span>
@@ -4512,6 +4525,35 @@ function setTheme(id){
   showToast('Tema: '+(THEMES.find(t=>t.id===id)||{}).nombre,'success');
 }
 window.setTheme=setTheme;window.renderTemas=renderTemas;
+/* Menú rápido de temas desde la barra superior (siempre visible en index). */
+function idxRenderQuickThemes(){
+  const m=document.getElementById('idxThemeMenu');if(!m)return;
+  const cur=getCurrentTheme();
+  m.innerHTML='<div class="qtm-title">Tema de la app</div>'+THEMES.map(t=>
+    '<button type="button" class="qtm-item'+(t.id===cur?' active':'')+'" onclick="idxPickTheme(\''+t.id+'\')">'
+    +'<span class="qtm-sw" style="background:'+t.topbar+';border-color:'+t.border+'"></span>'
+    +'<span class="qtm-nom">'+esc(t.nombre)+'</span>'
+    +(t.id===cur?'<span class="qtm-ck">✓</span>':'')+'</button>').join('');
+}
+function idxToggleThemeMenu(ev){
+  if(ev){ev.stopPropagation();}
+  let m=document.getElementById('idxThemeMenu');
+  if(!m){
+    m=document.createElement('div');m.id='idxThemeMenu';m.className='qtm';
+    document.body.appendChild(m);
+  }
+  const open=m.classList.contains('show');
+  if(open){m.classList.remove('show');return;}
+  idxRenderQuickThemes();
+  const btn=document.getElementById('idxThemeBtn');
+  const r=btn?btn.getBoundingClientRect():{bottom:52,right:120};
+  m.style.top=(r.bottom+8)+'px';
+  m.style.right=Math.max(8,(window.innerWidth-r.right))+'px';
+  m.classList.add('show');
+}
+function idxPickTheme(id){ setTheme(id); idxRenderQuickThemes(); const m=document.getElementById('idxThemeMenu'); if(m)setTimeout(()=>m.classList.remove('show'),250); }
+window.idxToggleThemeMenu=idxToggleThemeMenu;window.idxPickTheme=idxPickTheme;
+document.addEventListener('click',(e)=>{const m=document.getElementById('idxThemeMenu');if(m&&m.classList.contains('show')&&!m.contains(e.target)&&e.target.id!=='idxThemeBtn'&&!(e.target.closest&&e.target.closest('#idxThemeBtn')))m.classList.remove('show');});
 // Restaurar tema guardado al cargar
 try{
   const saved=localStorage.getItem(THEME_KEY);
