@@ -125,6 +125,36 @@ body[data-theme="friosur"]{
   --focus:#2a3691;--focus-ring:rgba(42,54,145,.22);
 }
 
+/* Océano — turquesa vivo, fresco y muy visible */
+body[data-theme="ocean"]{
+  --brand:#0e7490;--brand-strong:#155e63;--brand-accent:#06b6d4;
+  --topbar-bg:#083344;--topbar-border:#155e75;
+  --navy-950:#083344;--navy-900:#0e4a5e;--navy-800:#155e75;--navy-700:#0e7490;--navy-600:#0891b2;--navy-500:#06b6d4;
+  --app-bg:#e8fbfd;--surface:#ffffff;--surface-alt:#effcfe;--border:#bfeef3;--border-strong:#8fdfe8;
+  --text:#062f3d;--text-2:#155e75;--text-3:#0e7490;--text-muted:#5b8b95;
+  --slate-50:#effcfe;--slate-100:#d7f6fa;--slate-200:#bfeef3;--slate-300:#8fdfe8;--slate-400:#5cc4d1;--slate-500:#3f97a2;--slate-600:#2c6b73;--slate-700:#1d4248;--slate-800:#0f2529;
+  --focus:#0891b2;--focus-ring:rgba(8,145,178,.24);
+}
+/* Coral — rojo/rosa energético, alta llamada de atención */
+body[data-theme="coral"]{
+  --brand:#e11d48;--brand-strong:#9f1239;--brand-accent:#fb7185;
+  --topbar-bg:#4c0519;--topbar-border:#881337;
+  --navy-950:#4c0519;--navy-900:#881337;--navy-800:#9f1239;--navy-700:#be123c;--navy-600:#e11d48;--navy-500:#f43f5e;
+  --app-bg:#fff0f3;--surface:#ffffff;--surface-alt:#fff5f7;--border:#fbd0d8;--border-strong:#f7a8b5;
+  --text:#4c0519;--text-2:#881337;--text-3:#9f1239;--text-muted:#a86b76;
+  --slate-50:#fff5f7;--slate-100:#ffe1e7;--slate-200:#fbd0d8;--slate-300:#f7a8b5;--slate-400:#ef8194;--slate-500:#c25f70;--slate-600:#8a4250;--slate-700:#552932;--slate-800:#31171d;
+  --focus:#e11d48;--focus-ring:rgba(225,29,72,.24);
+}
+/* Solar — dorado brillante, máxima visibilidad diurna */
+body[data-theme="solar"]{
+  --brand:#ca8a04;--brand-strong:#a16207;--brand-accent:#facc15;
+  --topbar-bg:#422006;--topbar-border:#854d0e;
+  --navy-950:#422006;--navy-900:#713f12;--navy-800:#854d0e;--navy-700:#a16207;--navy-600:#ca8a04;--navy-500:#eab308;
+  --app-bg:#fffbe6;--surface:#ffffff;--surface-alt:#fffdf0;--border:#f6e8ad;--border-strong:#eed374;
+  --text:#3f2d05;--text-2:#713f12;--text-3:#854d0e;--text-muted:#9a7d3f;
+  --slate-50:#fffdf0;--slate-100:#fcf3cf;--slate-200:#f6e8ad;--slate-300:#eed374;--slate-400:#d8b64a;--slate-500:#a5853a;--slate-600:#735c28;--slate-700:#463818;--slate-800:#26200e;
+  --focus:#ca8a04;--focus-ring:rgba(202,138,4,.26);
+}
 /* Amber — ámbar cálido (visibilidad en planta, contraste alto) */
 body[data-theme="amber"]{
   --brand:#b45309;--brand-strong:#92400e;--brand-accent:#f59e0b;
@@ -1876,7 +1906,9 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .preg-focus-feed{position:fixed;left:0;right:0;bottom:18px;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 12px;}
 .preg-focus-feed .pff-item{display:flex;align-items:center;gap:10px;max-width:520px;width:auto;padding:8px 16px;border-radius:999px;background:var(--surface,#fff);border:1px solid var(--border,#dbe1eb);box-shadow:0 4px 14px rgba(0,0,0,.08);font-size:14px;transform:translateY(0);transition:opacity .6s ease,transform .45s ease;}
 .preg-focus-feed .pff-item.pff-enter{opacity:0 !important;transform:translateY(10px);}
+.preg-focus-feed.pff-idle{opacity:0;transition:opacity 1.1s ease;pointer-events:none;}
 .preg-focus-feed .pff-kg{font-weight:800;color:var(--brand,#1e3a66);font-variant-numeric:tabular-nums;}
+.preg-focus-feed .pff-fi{font-weight:800;font-size:12px;color:#fff;background:var(--brand,#1e3a66);border-radius:999px;padding:2px 9px;letter-spacing:.02em;}
 .preg-focus-feed .pff-nom{font-weight:600;color:var(--text-2,#334155);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;}
 .preg-focus-feed .pff-h{font-size:12px;color:var(--text-3,#94a3b8);margin-left:2px;}
 body[data-theme="dark"] .preg-focus-feed .pff-item{background:#1e293b;border-color:#334155;}
@@ -3066,7 +3098,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
             </div>
             <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Temas</div>
             <div style="font-size:12px;color:var(--slate-500);">Personaliza colores y apariencia</div>
-            <div style="margin-top:12px;"><span class="badge slate" id="badgeTemas">7 temas</span></div>
+            <div style="margin-top:12px;"><span class="badge slate" id="badgeTemas">10 temas</span></div>
           </div>
         </button>
         <button class="card" type="button" onclick="openCfg('io')" style="text-align:left;cursor:pointer;">
@@ -4493,6 +4525,9 @@ window.togglePerm=togglePerm;window.renderRoles=renderRoles;window.openIdxRolMod
 const THEMES=[
   {id:'marine',nombre:'Marine (default)',desc:'Azul marino industrial, para planta',topbar:'#0a1628',bg:'#eceff4',surface:'#ffffff',brand:'#1e3a66',border:'#dbe1eb'},
   {id:'friosur',nombre:'Friosur',desc:'Azul de la marca (logo oficial)',topbar:'#2a3691',bg:'#eef0fb',surface:'#ffffff',brand:'#2a3691',border:'#d5d9f0'},
+  {id:'ocean',nombre:'Océano',desc:'Turquesa vivo, fresco y visible',topbar:'#083344',bg:'#e8fbfd',surface:'#ffffff',brand:'#0e7490',border:'#bfeef3'},
+  {id:'coral',nombre:'Coral',desc:'Rojo-rosa energético, alta atención',topbar:'#4c0519',bg:'#fff0f3',surface:'#ffffff',brand:'#e11d48',border:'#fbd0d8'},
+  {id:'solar',nombre:'Solar',desc:'Dorado brillante, máxima visibilidad',topbar:'#422006',bg:'#fffbe6',surface:'#ffffff',brand:'#ca8a04',border:'#f6e8ad'},
   {id:'forest',nombre:'Forest',desc:'Verde bosque, industrial y cálido',topbar:'#052e16',bg:'#f0fdf4',surface:'#ffffff',brand:'#166534',border:'#d1fae5'},
   {id:'amber',nombre:'Amber',desc:'Ámbar cálido, alta visibilidad',topbar:'#78350f',bg:'#fffbeb',surface:'#ffffff',brand:'#b45309',border:'#fde68a'},
   {id:'violet',nombre:'Violet',desc:'Violeta moderno, oficina',topbar:'#2e1065',bg:'#f5f3ff',surface:'#ffffff',brand:'#6d28d9',border:'#e9d5ff'},
@@ -8820,18 +8855,31 @@ function _pRegFocusFeedPush(rec){
     const feed=document.getElementById('pRegFocusFeed');if(!feed||!rec)return;
     const kg=(rec.kg!=null?(Math.round(rec.kg*100)/100).toString().replace('.',','):'');
     const nom=(rec.nombre||'—').split(',')[0];   // apellido corto, sin saturar
+    const fi=(rec.ficha!=null&&String(rec.ficha).trim())?('F'+String(rec.ficha).trim().replace(/[<>&]/g,'')):'';
     const el=document.createElement('div');
     el.className='pff-item pff-enter';
-    el.innerHTML='<span class="pff-kg">'+kg+' kg</span><span class="pff-nom">'+nom.replace(/[<>&]/g,'')+'</span><span class="pff-h">'+(rec.hora||'')+'</span>';
+    el.innerHTML='<span class="pff-kg">'+kg+' kg</span>'
+      +(fi?'<span class="pff-fi">'+fi+'</span>':'')
+      +'<span class="pff-nom">'+nom.replace(/[<>&]/g,'')+'</span><span class="pff-h">'+(rec.hora||'')+'</span>';
+    feed.classList.remove('pff-idle');
     feed.insertBefore(el,feed.firstChild);
     requestAnimationFrame(()=>el.classList.remove('pff-enter'));
     while(feed.children.length>5)feed.removeChild(feed.lastChild);
-    // Re-escalonar opacidad por antigüedad (0 = más nuevo).
     [...feed.children].forEach((c,i)=>{c.style.opacity=String(Math.max(0.12,1-i*0.22));});
+    _pffScheduleIdle();   // se desvanece tras 1 min sin nuevos pesajes
   }catch(_){}
 }
 window._pRegFocusFeedPush=_pRegFocusFeedPush;
-function _pRegFocusFeedClear(){try{const f=document.getElementById('pRegFocusFeed');if(f)f.innerHTML='';}catch(_){}}
+/* Auto-ocultar el feed tras 60 s sin actividad (fade suave + limpiar). */
+function _pffScheduleIdle(){
+  clearTimeout(window._pffIdleT);
+  window._pffIdleT=setTimeout(()=>{
+    const f=document.getElementById('pRegFocusFeed');if(!f)return;
+    f.classList.add('pff-idle');                       // fade-out por CSS
+    setTimeout(()=>{ if(f.classList.contains('pff-idle')){ f.innerHTML=''; f.classList.remove('pff-idle'); } },1200);
+  },60000);
+}
+function _pRegFocusFeedClear(){try{clearTimeout(window._pffIdleT);window._pffIdleT=null;const f=document.getElementById('pRegFocusFeed');if(f){f.innerHTML='';f.classList.remove('pff-idle');}}catch(_){}}
 function _pregFocusCtxText(){
   const g=id=>{const e=document.getElementById(id);return e?String(e.value||'').trim():'';};
   const ls=document.getElementById('pRegLinea');
