@@ -61,6 +61,37 @@ async function _meta(){
     return rows.find(r=>r&&r.k==='sb')||null;
   }catch(_){return null;}
 }
+/* Persiste el token nuevo (tras re-login del SW) para que la próxima pasada y la
+   página lo compartan. */
+async function _saveTok(meta){
+  try{
+    const db=await _open(META_DB);
+    await new Promise((res)=>{
+      let tx;try{tx=db.transaction(META_STORE,'readwrite');}catch(e){return res();}
+      tx.objectStore(META_STORE).put({k:'sb',url:meta.url,key:meta.key,tok:meta.tok,e:meta.e,p:meta.p,at:Date.now()});
+      tx.oncomplete=()=>res();tx.onerror=()=>res();tx.onabort=()=>res();
+    });
+    try{db.close();}catch(_){}
+  }catch(_){}
+}
+/* AUTO-AUTENTICACIÓN del worker: si no hay token o dio 401, se loguea SOLO con las
+   credenciales espejadas (grant_type=password) → obtiene token fresco. Así sube
+   AUNQUE la app esté cerrada/congelada y la sesión de la página haya muerto. */
+let _swReloginAt=0;
+async function _swRelogin(meta){
+  if(!meta||!meta.url||!meta.key||!meta.e||!meta.p)return false;
+  const now=Date.now();if(now-_swReloginAt<15000)return false;_swReloginAt=now;
+  try{
+    const res=await fetch(meta.url+'/auth/v1/token?grant_type=password',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':meta.key},
+      body:JSON.stringify({email:meta.e,password:meta.p})
+    });
+    if(!res.ok)return false;
+    const j=await res.json();
+    if(j&&j.access_token){meta.tok=j.access_token;await _saveTok(meta);return true;}
+  }catch(_){}
+  return false;
+}
 function _post(meta,rows){
   return fetch(meta.url+'/rest/v1/pesajes?on_conflict=id',{
     method:'POST',
@@ -71,17 +102,22 @@ function _post(meta,rows){
   });
 }
 async function drainOutbox(){
-  const meta=await _meta();
-  if(!meta||!meta.url||!meta.key||!meta.tok)return;
+  let meta=await _meta();
+  if(!meta||!meta.url||!meta.key)return;
+  if(!meta.tok){ if(!(await _swRelogin(meta)))return; }   // sin token → intentar loguear solo
   const db=await _open(OBX_DB);
   try{
     const rows=(await _getAll(db,OBX_STORE)).filter(r=>r&&r.id!=null);
     if(!rows.length)return;
     for(let i=0;i<rows.length;i+=100){
       const batch=rows.slice(i,i+100);
-      const res=await _post(meta,batch);
+      let res=await _post(meta,batch);
+      if((res.status===401||res.status===403)){
+        // token muerto → RE-LOGIN autónomo del worker y reintento con token nuevo
+        if(await _swRelogin(meta)){ res=await _post(meta,batch); }
+      }
       if(res.ok){await _delMany(db,OBX_STORE,batch.map(b=>b.id));continue;}
-      if(res.status===401||res.status===403)throw new Error('auth '+res.status); // token vencido → backoff, reintenta con token renovado
+      if(res.status===401||res.status===403)throw new Error('auth '+res.status); // ni con re-login → backoff
       if(res.status>=500||res.status===429)throw new Error('HTTP '+res.status);  // servidor/red → backoff
       // 4xx de datos: fila por fila; las buenas suben, las malas quedan (no se borra nada).
       for(const row of batch){

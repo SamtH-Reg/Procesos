@@ -12573,7 +12573,7 @@ setInterval(()=>{
    - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
-const TB_BUILD='v4-autosync'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
+const TB_BUILD='v5-swauth'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 const TB_SB_STORAGE_KEY='friosur_sb';
@@ -13066,14 +13066,20 @@ const _SW_META_DB='friosur_sw_meta';
 let _swMetaLastTok='';
 function _swMirrorMeta(){
   try{
-    const tok=_tbGetTokSync();if(!tok||tok===_swMetaLastTok)return;
-    _swMetaLastTok=tok;
+    const tok=_tbGetTokSync();
     const{url,key}=_tbResolveSupabaseCreds();
+    // Credenciales para que el SW se AUTENTIQUE SOLO si el token muere (app cerrada).
+    let e='',p='';
+    try{const c=JSON.parse(decodeURIComponent(escape(atob(localStorage.getItem('friosur_tb_cred')||''))));if(c){e=c.e||'';p=c.p||'';}}catch(_){}
+    if(!tok&&!e)return;
+    const sig=(tok||'')+'|'+e;
+    if(sig===_swMetaLastTok)return;   // sin cambios → no reescribir
+    _swMetaLastTok=sig;
     const r=indexedDB.open(_SW_META_DB,1);
     r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains('meta'))db.createObjectStore('meta',{keyPath:'k'});};
     r.onsuccess=()=>{try{
       const db=r.result;
-      db.transaction('meta','readwrite').objectStore('meta').put({k:'sb',url,key,tok,at:Date.now()});
+      db.transaction('meta','readwrite').objectStore('meta').put({k:'sb',url,key,tok,e,p,at:Date.now()});
       setTimeout(()=>{try{db.close();}catch(_){}},500);
     }catch(_){}};
   }catch(_){}
