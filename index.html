@@ -114,6 +114,17 @@ body[data-theme="forest"]{
   --focus:#16a34a;--focus-ring:rgba(22,163,74,.22);
 }
 
+/* Friosur — azul de marca (logo oficial) */
+body[data-theme="friosur"]{
+  --brand:#2a3691;--brand-strong:#1f2870;--brand-accent:#4756c9;
+  --topbar-bg:#2a3691;--topbar-border:#1f2870;
+  --navy-950:#161c52;--navy-900:#1f2870;--navy-800:#2a3691;--navy-700:#3341ab;--navy-600:#4756c9;--navy-500:#6673d8;
+  --app-bg:#eef0fb;--surface:#ffffff;--surface-alt:#f4f5fc;--border:#d5d9f0;--border-strong:#aeb6e4;
+  --text:#161c52;--text-2:#1f2870;--text-3:#2a3691;--text-muted:#7079b0;
+  --slate-50:#f4f5fc;--slate-100:#e7e9f7;--slate-200:#d5d9f0;--slate-300:#aeb6e4;--slate-400:#8b93cc;--slate-500:#636aa0;--slate-600:#454a73;--slate-700:#2c2f4c;--slate-800:#1a1c30;
+  --focus:#2a3691;--focus-ring:rgba(42,54,145,.22);
+}
+
 /* Amber — ámbar cálido (visibilidad en planta, contraste alto) */
 body[data-theme="amber"]{
   --brand:#b45309;--brand-strong:#92400e;--brand-accent:#f59e0b;
@@ -1851,6 +1862,14 @@ body[data-theme="dark"] .input.ficha-fixed{border-color:#4ade80 !important;backg
 .preg-focus-bar .pf-ctx{font-size:12px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;}
 /* Reloj en concentración: la barra de estado queda tapada → hora siempre visible. */
 .preg-focus-bar .pf-clock{margin-left:auto;font:800 22px/1 var(--mono,ui-monospace,monospace);letter-spacing:.04em;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:10px;padding:7px 12px;white-space:nowrap;}
+/* Feed no invasivo de últimos pesajes en concentración: SOLO visual, no intercepta toques. */
+.preg-focus-feed{position:fixed;left:0;right:0;bottom:18px;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 12px;}
+.preg-focus-feed .pff-item{display:flex;align-items:center;gap:10px;max-width:520px;width:auto;padding:8px 16px;border-radius:999px;background:var(--surface,#fff);border:1px solid var(--border,#dbe1eb);box-shadow:0 4px 14px rgba(0,0,0,.08);font-size:14px;transform:translateY(0);transition:opacity .6s ease,transform .45s ease;}
+.preg-focus-feed .pff-item.pff-enter{opacity:0 !important;transform:translateY(10px);}
+.preg-focus-feed .pff-kg{font-weight:800;color:var(--brand,#1e3a66);font-variant-numeric:tabular-nums;}
+.preg-focus-feed .pff-nom{font-weight:600;color:var(--text-2,#334155);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;}
+.preg-focus-feed .pff-h{font-size:12px;color:var(--text-3,#94a3b8);margin-left:2px;}
+body[data-theme="dark"] .preg-focus-feed .pff-item{background:#1e293b;border-color:#334155;}
 .preg-focus-exit{flex-shrink:0;background:#fff;color:#0f3d6e;border:0;border-radius:10px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:7px;}
 .preg-focus-exit:active{transform:scale(.97);}
 .preg-focus-body{flex:1;display:flex;flex-direction:column;gap:16px;padding:16px;width:100%;max-width:640px;margin:0 auto;box-sizing:border-box;}
@@ -3034,7 +3053,7 @@ body[data-theme="dark"] .fs-combo-search-wrap{background:var(--surface-alt);}
             </div>
             <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Temas</div>
             <div style="font-size:12px;color:var(--slate-500);">Personaliza colores y apariencia</div>
-            <div style="margin-top:12px;"><span class="badge slate" id="badgeTemas">6 temas</span></div>
+            <div style="margin-top:12px;"><span class="badge slate" id="badgeTemas">7 temas</span></div>
           </div>
         </button>
         <button class="card" type="button" onclick="openCfg('io')" style="text-align:left;cursor:pointer;">
@@ -4460,6 +4479,7 @@ window.togglePerm=togglePerm;window.renderRoles=renderRoles;window.openIdxRolMod
 /* ═══ TEMAS ═══════════════════════════════════════════════════ */
 const THEMES=[
   {id:'marine',nombre:'Marine (default)',desc:'Azul marino industrial, para planta',topbar:'#0a1628',bg:'#eceff4',surface:'#ffffff',brand:'#1e3a66',border:'#dbe1eb'},
+  {id:'friosur',nombre:'Friosur',desc:'Azul de la marca (logo oficial)',topbar:'#2a3691',bg:'#eef0fb',surface:'#ffffff',brand:'#2a3691',border:'#d5d9f0'},
   {id:'forest',nombre:'Forest',desc:'Verde bosque, industrial y cálido',topbar:'#052e16',bg:'#f0fdf4',surface:'#ffffff',brand:'#166534',border:'#d1fae5'},
   {id:'amber',nombre:'Amber',desc:'Ámbar cálido, alta visibilidad',topbar:'#78350f',bg:'#fffbeb',surface:'#ffffff',brand:'#b45309',border:'#fde68a'},
   {id:'violet',nombre:'Violet',desc:'Violeta moderno, oficina',topbar:'#2e1065',bg:'#f5f3ff',surface:'#ffffff',brand:'#6d28d9',border:'#e9d5ff'},
@@ -8712,6 +8732,7 @@ function regPesaje(){
   document.getElementById('pRegFicha').value='';
   clearRegPicker('pRegTrab','onPRegTrabChange');
   if(typeof _pRegFlashSaveOk==='function')_pRegFlashSaveOk(); // único feedback: botón verde "¡Guardado!"
+  if(typeof _pRegFocusFeedPush==='function')_pRegFocusFeedPush(rec); // feed no invasivo en concentración
   // Toast verde "Pesaje guardado ..." removido a pedido — el botón verde basta y
   // ahorra el costo del toast (es ruido cuando se pesa rápido en serie).
   // Subida LIVIANA (O(1)): mapea solo esta fila, la encola en el outbox durable y
@@ -8742,10 +8763,33 @@ function _pregFocusEnsureOverlay(){
   ov.innerHTML='<div class="preg-focus-bar"><div class="pf-title"><b>🎯 Modo concentración</b><span class="pf-ctx" id="pRegFocusCtx"></span></div>'
     +'<span class="pf-clock" id="pRegFocusClock" aria-label="Hora actual"></span>'
     +'<button type="button" class="preg-focus-exit" onclick="pRegFocusExit()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Salir</button></div>'
-    +'<div class="preg-focus-body" id="pRegFocusBody"></div>';
+    +'<div class="preg-focus-body" id="pRegFocusBody"></div>'
+    +'<div class="preg-focus-feed" id="pRegFocusFeed" aria-hidden="true"></div>';   // últimos 5, solo visual, se desvanece
   document.body.appendChild(ov);
   return ov;
 }
+/* ── Feed no invasivo de últimos pesajes en concentración ──
+   Solo VISUAL (pointer-events:none → no intercepta toques, no interfiere con el
+   pesaje). Cada registro entra tenue, y los 5 se muestran con opacidad decreciente
+   (el más nuevo arriba, más visible; los viejos se desvanecen). No es interactivo. */
+function _pRegFocusFeedPush(rec){
+  try{
+    if(!window._pRegFocusActive)return;   // solo en concentración
+    const feed=document.getElementById('pRegFocusFeed');if(!feed||!rec)return;
+    const kg=(rec.kg!=null?(Math.round(rec.kg*100)/100).toString().replace('.',','):'');
+    const nom=(rec.nombre||'—').split(',')[0];   // apellido corto, sin saturar
+    const el=document.createElement('div');
+    el.className='pff-item pff-enter';
+    el.innerHTML='<span class="pff-kg">'+kg+' kg</span><span class="pff-nom">'+nom.replace(/[<>&]/g,'')+'</span><span class="pff-h">'+(rec.hora||'')+'</span>';
+    feed.insertBefore(el,feed.firstChild);
+    requestAnimationFrame(()=>el.classList.remove('pff-enter'));
+    while(feed.children.length>5)feed.removeChild(feed.lastChild);
+    // Re-escalonar opacidad por antigüedad (0 = más nuevo).
+    [...feed.children].forEach((c,i)=>{c.style.opacity=String(Math.max(0.12,1-i*0.22));});
+  }catch(_){}
+}
+window._pRegFocusFeedPush=_pRegFocusFeedPush;
+function _pRegFocusFeedClear(){try{const f=document.getElementById('pRegFocusFeed');if(f)f.innerHTML='';}catch(_){}}
 function _pregFocusCtxText(){
   const g=id=>{const e=document.getElementById(id);return e?String(e.value||'').trim():'';};
   const ls=document.getElementById('pRegLinea');
@@ -8821,6 +8865,13 @@ function pRegFocusEnter(){
   window._pregFocusClockT=setInterval(_tickClock,15000);
   document.body.classList.add('preg-focus-on');
   window._pRegFocusActive=true;
+  // Sembrar el feed con los últimos pesajes de esta línea (solo visual).
+  try{
+    _pRegFocusFeedClear();
+    const ln=String((document.getElementById('pRegLinea')||{}).value||'').toUpperCase();
+    const prev=(RT.pesajes||[]).filter(r=>String(r.linea||'').toUpperCase()===ln).slice(0,5).reverse();
+    prev.forEach(r=>_pRegFocusFeedPush(r));
+  }catch(_){}
   try{if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();}catch(_){} // kilos editable (teclado del sistema)
   ov.hidden=false;ov.scrollTop=0;
 }
@@ -8837,6 +8888,7 @@ function pRegFocusExit(){
   document.body.classList.remove('preg-focus-on');
   window._pRegFocusActive=false;
   clearInterval(window._pregFocusClockT);window._pregFocusClockT=null;
+  try{_pRegFocusFeedClear();}catch(_){}
   try{if(typeof pRegKgPadApplyMode==='function')pRegKgPadApplyMode();}catch(_){} // restaurar preferencia del teclado
   if(ov)ov.hidden=true;
 }
