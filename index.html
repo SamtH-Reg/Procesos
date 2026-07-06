@@ -13000,6 +13000,17 @@ window._frioOutboxSkipped=()=>{const a=[..._obxSkip];console.log('[Friosur] Fila
    token por su cuenta (sesión guardada o re-login con credenciales) y sube por REST
    directo. Es el que garantiza que, al volver actividad/red, TODO se suba sí o sí. */
 let _tbAutoDrainIn=false,_tbAutoDrainAt=0,_tbAutoTok='',_tbAutoTokAt=0;
+/* fetch con TIMEOUT DURO (señal mala/colgada nunca bloquea el subidor). Resuelve
+   null si tarda más de ms → se trata como fallo y reintenta en el próximo ciclo. */
+function _tbFetchTO(url,opts,ms){
+  return new Promise((resolve)=>{
+    let done=false,ctl=null;
+    try{ctl=new AbortController();}catch(_){}
+    const t=setTimeout(()=>{if(!done){done=true;try{ctl&&ctl.abort();}catch(_){}resolve(null);}},ms||12000);
+    const o=ctl?Object.assign({},opts,{signal:ctl.signal}):opts;
+    fetch(url,o).then(r=>{if(!done){done=true;clearTimeout(t);resolve(r);}},()=>{if(!done){done=true;clearTimeout(t);resolve(null);}});
+  });
+}
 async function _tbAutoGetToken(url,key,force){
   const now=Date.now();
   if(!force){
@@ -13009,8 +13020,8 @@ async function _tbAutoGetToken(url,key,force){
   let cred=null;try{cred=JSON.parse(decodeURIComponent(escape(atob(localStorage.getItem('friosur_tb_cred')||''))));}catch(_){}
   if(!cred||!cred.e||!cred.p)return _tbGetTokSync()||'';
   try{
-    const r=await fetch(url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':key},body:JSON.stringify({email:cred.e,password:cred.p})});
-    if(r.ok){const j=await r.json();if(j&&j.access_token){_tbAutoTok=j.access_token;_tbAutoTokAt=now;return _tbAutoTok;}}
+    const r=await _tbFetchTO(url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':key},body:JSON.stringify({email:cred.e,password:cred.p})},12000);
+    if(r&&r.ok){const j=await r.json();if(j&&j.access_token){_tbAutoTok=j.access_token;_tbAutoTokAt=now;return _tbAutoTok;}}
   }catch(_){}
   return _tbGetTokSync()||'';
 }
@@ -13023,7 +13034,7 @@ async function _tbAutonomousDrain(){
   _tbAutoDrainIn=true;
   try{
     const{url,key}=_tbResolveSupabaseCreds();
-    const post=(t,batch)=>fetch(url+'/rest/v1/pesajes?on_conflict=id',{method:'POST',headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+t,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(batch)});
+    const post=(t,batch)=>_tbFetchTO(url+'/rest/v1/pesajes?on_conflict=id',{method:'POST',headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+t,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(batch)},12000);
     let tok=await _tbAutoGetToken(url,key,false);
     for(let i=0;i<rows.length;i+=100){
       const batch=rows.slice(i,i+100);
