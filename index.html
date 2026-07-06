@@ -12577,7 +12577,7 @@ setInterval(()=>{
    - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
-const TB_BUILD='v7-actividad'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
+const TB_BUILD='v8-autouploader'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 const TB_SB_STORAGE_KEY='friosur_sb';
@@ -12992,6 +12992,59 @@ async function _obxRefreshPendCache(){
 }
 window._obxRefreshPendCache=_obxRefreshPendCache;
 window._frioOutboxSkipped=()=>{const a=[..._obxSkip];console.log('[Friosur] Filas en outbox descartadas por error de datos (no suben por reintento):',a);return a;};
+/* ══ SUBIDOR AUTÓNOMO (independiente de _tbSb/_tbUser/sesión) ══
+   CAUSA RAÍZ del "por subir eterno": cuando la sesión muere, _tbUser suele quedar
+   en null y TODAS las funciones de recuperación (_obxDrain, _tbEnsureSession,
+   _tbForceSessionRefresh, watchdog) hacen return en `!_tbUser` → el re-login queda
+   inalcanzable. Este subidor NO depende de nada de eso: lee el outbox, consigue un
+   token por su cuenta (sesión guardada o re-login con credenciales) y sube por REST
+   directo. Es el que garantiza que, al volver actividad/red, TODO se suba sí o sí. */
+let _tbAutoDrainIn=false,_tbAutoDrainAt=0,_tbAutoTok='',_tbAutoTokAt=0;
+async function _tbAutoGetToken(url,key,force){
+  const now=Date.now();
+  if(!force){
+    const t=_tbGetTokSync();if(t)return t;                       // token vivo de la sesión
+    if(_tbAutoTok&&(now-_tbAutoTokAt)<3000000)return _tbAutoTok; // token propio reciente (<50 min)
+  }
+  let cred=null;try{cred=JSON.parse(decodeURIComponent(escape(atob(localStorage.getItem('friosur_tb_cred')||''))));}catch(_){}
+  if(!cred||!cred.e||!cred.p)return _tbGetTokSync()||'';
+  try{
+    const r=await fetch(url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':key},body:JSON.stringify({email:cred.e,password:cred.p})});
+    if(r.ok){const j=await r.json();if(j&&j.access_token){_tbAutoTok=j.access_token;_tbAutoTokAt=now;return _tbAutoTok;}}
+  }catch(_){}
+  return _tbGetTokSync()||'';
+}
+async function _tbAutonomousDrain(){
+  if(_tbAutoDrainIn)return;
+  if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
+  let rows=[];try{rows=(await Outbox.all()).filter(r=>r&&r.id!=null&&!_obxSkip.has(String(r.id)));}catch(_){return;}
+  if(!rows.length){try{void _obxRefreshPendCache();}catch(_){}return;}
+  const now=Date.now();if(now-_tbAutoDrainAt<3000)return;_tbAutoDrainAt=now;
+  _tbAutoDrainIn=true;
+  try{
+    const{url,key}=_tbResolveSupabaseCreds();
+    const post=(t,batch)=>fetch(url+'/rest/v1/pesajes?on_conflict=id',{method:'POST',headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+t,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(batch)});
+    let tok=await _tbAutoGetToken(url,key,false);
+    for(let i=0;i<rows.length;i+=100){
+      const batch=rows.slice(i,i+100);
+      let res=null;
+      if(tok){try{res=await post(tok,batch);}catch(_){res=null;}}
+      if(!tok||(res&&(res.status===401||res.status===403))){        // token muerto/ausente → re-login forzado
+        tok=await _tbAutoGetToken(url,key,true);
+        if(tok){try{res=await post(tok,batch);}catch(_){res=null;}}
+      }
+      if(res&&res.ok){for(const b of batch){try{await Outbox.del(b.id);}catch(_){}}continue;}
+      if(res&&res.status>=400&&res.status<500&&res.status!==401&&res.status!==403){
+        for(const row of batch){try{const r1=await post(tok,[row]);if(r1&&r1.ok)await Outbox.del(row.id);else if(r1&&r1.status>=400&&r1.status<500)_obxSkip.add(String(row.id));}catch(_){}}
+        continue;
+      }
+      break;  // red/5xx/sin token → corta; reintenta en el próximo disparo
+    }
+    try{await _obxRefreshPendCache();}catch(_){}
+  }catch(_){}
+  finally{_tbAutoDrainIn=false;}
+}
+window._tbAutonomousDrain=_tbAutonomousDrain;
 let _tbReconcileInFlight=false;
 async function _tbReconcileBadgeFromOutbox(){
   if(_tbReconcileInFlight)return;_tbReconcileInFlight=true;
@@ -13122,7 +13175,7 @@ if('serviceWorker' in navigator){
 if(!window._obxHooks){
   window._obxHooks=true;
   let _tbHiddenAt=0;
-  const _tbResume=()=>{ if(typeof _tbResumeSync==='function')void _tbResumeSync(); else{void _obxDrain();void _tbWakeLockSync();} };
+  const _tbResume=()=>{ try{if(typeof _tbAutonomousDrain==='function')void _tbAutonomousDrain();}catch(_){} if(typeof _tbResumeSync==='function')void _tbResumeSync(); else{void _obxDrain();void _tbWakeLockSync();} };
   window.addEventListener('online',_tbResume);       // volvió la señal → sesión+drenar+SW coordinado
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){
@@ -13148,10 +13201,11 @@ if(!window._obxHooks){
     const now=Date.now();if(now-_tbActAt<4000)return;
     if(typeof window._obxPendCached==='number'&&window._obxPendCached<=0)return; // nada pendiente → no molestar
     _tbActAt=now;
+    try{if(typeof _tbAutonomousDrain==='function')void _tbAutonomousDrain();}catch(_){}  // subidor independiente de sesión
     try{if(typeof _tbResumeSync==='function')void _tbResumeSync();}catch(_){}
   };
   ['touchstart','pointerdown','keydown','click'].forEach(ev=>document.addEventListener(ev,_tbActSync,{passive:true,capture:true}));
-  setInterval(()=>{void _obxDrain();void _tbWakeLockSync();_swMirrorMeta();void _tbReconcileBadgeFromOutbox();},10000); // respaldo 10 s: subir + reconciliar badge con el outbox real
+  setInterval(()=>{void _obxDrain();void _tbAutonomousDrain();void _tbWakeLockSync();_swMirrorMeta();void _tbReconcileBadgeFromOutbox();},10000); // respaldo 10 s: subir (2 vías) + reconciliar badge con el outbox real
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
