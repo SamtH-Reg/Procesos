@@ -68,7 +68,7 @@ async function _saveTok(meta){
     const db=await _open(META_DB);
     await new Promise((res)=>{
       let tx;try{tx=db.transaction(META_STORE,'readwrite');}catch(e){return res();}
-      tx.objectStore(META_STORE).put({k:'sb',url:meta.url,key:meta.key,tok:meta.tok,e:meta.e,p:meta.p,at:Date.now()});
+      tx.objectStore(META_STORE).put({k:'sb',url:meta.url,key:meta.key,tok:meta.tok,e:meta.e,p:meta.p,rt:meta.rt,at:Date.now()});
       tx.oncomplete=()=>res();tx.onerror=()=>res();tx.onabort=()=>res();
     });
     try{db.close();}catch(_){}
@@ -79,8 +79,20 @@ async function _saveTok(meta){
    AUNQUE la app esté cerrada/congelada y la sesión de la página haya muerto. */
 let _swReloginAt=0;
 async function _swRelogin(meta){
-  if(!meta||!meta.url||!meta.key||!meta.e||!meta.p)return false;
+  if(!meta||!meta.url||!meta.key)return false;
   const now=Date.now();if(now-_swReloginAt<15000)return false;_swReloginAt=now;
+  // 1º refresh_token (sin clave; menos conflicto entre tablets de la misma cuenta)
+  if(meta.rt){
+    try{
+      const res=await fetch(meta.url+'/auth/v1/token?grant_type=refresh_token',{
+        method:'POST',headers:{'Content-Type':'application/json','apikey':meta.key},
+        body:JSON.stringify({refresh_token:meta.rt})
+      });
+      if(res.ok){const j=await res.json();if(j&&j.access_token){meta.tok=j.access_token;if(j.refresh_token)meta.rt=j.refresh_token;await _saveTok(meta);return true;}}
+    }catch(_){}
+  }
+  // 2º password con credenciales guardadas
+  if(!meta.e||!meta.p)return false;
   try{
     const res=await fetch(meta.url+'/auth/v1/token?grant_type=password',{
       method:'POST',headers:{'Content-Type':'application/json','apikey':meta.key},
@@ -88,7 +100,7 @@ async function _swRelogin(meta){
     });
     if(!res.ok)return false;
     const j=await res.json();
-    if(j&&j.access_token){meta.tok=j.access_token;await _saveTok(meta);return true;}
+    if(j&&j.access_token){meta.tok=j.access_token;if(j.refresh_token)meta.rt=j.refresh_token;await _saveTok(meta);return true;}
   }catch(_){}
   return false;
 }
