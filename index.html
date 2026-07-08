@@ -5455,21 +5455,12 @@ function _fechaArmadoOperativa(turnoCod){
  * Si el turno es «noche» pero no hay definición en Admin, se usa la misma ventana 00:00–07:00 que _fechaArmadoOperativa.
  */
 function _fechaRegistroOperativo(turnoCod, fechaArmadoYmd){
-  const arm=_cycleDateNorm(fechaArmadoYmd)||todayLocalYmd();
-  const cod=String(turnoCod||'dia').trim();
-  const def=_turnoDefFromCodigo(cod);
-  const a=def?_parseHMToMinutes(def.inicio):null;
-  const b=def?_parseHMToMinutes(def.fin):null;
-  if(def&&a!=null&&b!=null&&b<a){
-    const mins=_minutesNowLocal();
-    if(mins>=0&&mins<b)return todayLocalYmd();
-    return arm;
-  }
-  if(_cycleTurnoNorm(cod)==='noche'){
-    const mins=_minutesNowLocal();
-    if(mins>=0&&mins<7*60)return todayLocalYmd();
-  }
-  return arm;
+  // Convención: FECHA CALENDARIO real del pesaje (día del reloj a la hora en que
+  // se registró). Coincide con el Excel del ERP y con lo que ve el operario en
+  // su boleta. Antes agrupábamos por "fecha de inicio del turno" (turno noche
+  // que cruza medianoche mantenía la fecha de la tarde), pero eso descuadraba
+  // con el Excel: madrugada 03-jul contaba como 02-jul en la nube.
+  return todayLocalYmd();
 }
 /** Elige código de turno según hora actual y horarios en Admin → Turnos (soporta cruce de medianoche). */
 function _inferTurnoCodigoPorHorario(){
@@ -12577,7 +12568,7 @@ setInterval(()=>{
    - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
-const TB_BUILD='v10-refresh'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
+const TB_BUILD='v11-fechacal'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 const TB_SB_STORAGE_KEY='friosur_sb';
