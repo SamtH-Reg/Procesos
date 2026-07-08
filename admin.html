@@ -1534,14 +1534,36 @@ function _adminSortHoursChronologicalInTurn(hours,aMin,bMin){
 function _adminResumenHourColsFromFiltro(rows,filtro){
   const obs=new Set();
   (rows||[]).forEach(r2=>{const m=(r2.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
+  const f=String(filtro||'').trim()||'todos';
+  // Si hay filtro por rango de horas (jornada 20:00→06:00), mostrar TODAS las horas
+  // del turno completo (no solo las que tienen pesajes) → línea de tiempo continua
+  // que cruza medianoche como una jornada única.
+  try{
+    const hd=_filters&&_filters.horaDesdeMin, hh=_filters&&_filters.horaHastaMin;
+    if(hd!=null&&hh!=null){
+      const hIni=Math.floor(hd/60), hFin=Math.floor(hh/60);
+      const out=[];
+      if(hd<=hh){for(let h=hIni;h<=hFin;h++)out.push(h);}
+      else{for(let h=hIni;h<24;h++)out.push(h);for(let h=0;h<=hFin;h++)out.push(h);}
+      return out;
+    }
+  }catch(_){}
   const arr=[...obs];
   if(!arr.length)return[];
-  const f=String(filtro||'').trim()||'todos';
   if(f==='todos')return arr.sort((a,b)=>a-b);
   const code=f==='actual'?(_adminInferTurnoCodigoPorHorario()||'dia'):f;
   const tu=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===String(code).toLowerCase());
   const a=tu?_adminParseHMToMinutes(tu.inicio):null,b=tu?_adminParseHMToMinutes(tu.fin):null;
   if(a==null||b==null)return arr.sort((x,y)=>x-y);
+  // Cuando el turno cruza medianoche (b<a) → agregar todas las horas del turno,
+  // aunque no tengan pesajes (línea de tiempo completa).
+  if(b<a){
+    const hIni=Math.floor(a/60), hFin=Math.floor(b/60);
+    const full=new Set();
+    for(let h=hIni;h<24;h++)full.add(h);
+    for(let h=0;h<=hFin;h++)full.add(h);
+    return _adminSortHoursChronologicalInTurn([...full],a,b);
+  }
   return _adminSortHoursChronologicalInTurn(arr,a,b);
 }
 function _adminFmtHoraResumenTh(h){return String(h)+':'+String(0).padStart(2,'0');}
