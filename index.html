@@ -5455,11 +5455,23 @@ function _fechaArmadoOperativa(turnoCod){
  * Si el turno es «noche» pero no hay definición en Admin, se usa la misma ventana 00:00–07:00 que _fechaArmadoOperativa.
  */
 function _fechaRegistroOperativo(turnoCod, fechaArmadoYmd){
-  // Convención: FECHA CALENDARIO real del pesaje (día del reloj a la hora en que
-  // se registró). Coincide con el Excel del ERP y con lo que ve el operario en
-  // su boleta. Antes agrupábamos por "fecha de inicio del turno" (turno noche
-  // que cruza medianoche mantenía la fecha de la tarde), pero eso descuadraba
-  // con el Excel: madrugada 03-jul contaba como 02-jul en la nube.
+  // Convención: fecha del INICIO DEL TURNO (como el Excel del ERP y la boleta).
+  // Turno noche 20:00 → 06:00 del día siguiente: TODOS los pesajes (tarde +
+  // madrugada) llevan la fecha del día en que empezó el turno. Ejemplo: turno
+  // "6-jul noche" arranca 6-jul 20:00 y termina 7-jul 06:00 → los pesajes de
+  // las 02:00 del 7-jul se guardan con fecha=6-jul. Así los operarios ven sus
+  // kilos por jornada trabajada y no fragmentados por medianoche.
+  const cod=String(turnoCod||'dia').trim();
+  const esNoche = (_cycleTurnoNorm?_cycleTurnoNorm(cod):cod).toLowerCase()==='noche';
+  if(esNoche){
+    const mins=_minutesNowLocal();
+    if(mins>=0 && mins<7*60){
+      // Estamos en la madrugada (00:00–06:59) → fecha = día anterior
+      const d=new Date();d.setDate(d.getDate()-1);
+      const pad=n=>String(n).padStart(2,'0');
+      return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    }
+  }
   return todayLocalYmd();
 }
 /** Elige código de turno según hora actual y horarios en Admin → Turnos (soporta cruce de medianoche). */
@@ -12568,7 +12580,7 @@ setInterval(()=>{
    - Realtime: moldes/pesajes (opcional, modo ahorro por defecto) + armado_lineas + app_kv filtrado por claves `friosur_eq_runtime` y `friosur_planilleros_catalog`; catálogo DB (presets, roles, etc.) solo WS si `localStorage friosur_tb_rt_catalog==='1'` (por defecto OFF para no agotar cuota). Trabajadores: nunca WS (pull HTTP). generales solo REST.
    - Misma clave `friosur_sb` para URL/anon key (admin y tablet); sesión GoTrue usa `storageKey` distinto por página (`friosur-sb-auth-tablet-v1` / `friosur-sb-auth-admin-v1`) para no pisarse entre index y admin.
    ══════════════════════════════════════════════════════════════ */
-const TB_BUILD='v11-fechacal'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
+const TB_BUILD='v12-turno'; // marcador de versión: se reporta en el latido para ver qué tablets actualizaron
 const TB_SB_DEFAULT_URL='https://etiltewnmupnifedhyld.supabase.co';
 const TB_SB_DEFAULT_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0aWx0ZXdubXVwbmlmZWRoeWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTU0NzAsImV4cCI6MjA5MjU3MTQ3MH0.Ur2c_S7kJomTKn39cnUcGQ4bu_-I7fq9hgvVTB5dMKQ';
 const TB_SB_STORAGE_KEY='friosur_sb';
