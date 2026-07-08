@@ -489,7 +489,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div class="slicer">
       <label class="form-label">Preset rápido</label>
       <select class="select" id="slFechaPreset" onchange="applyFechaPreset()">
-        <option value="todo">Todo</option><option value="hoy">Hoy</option><option value="ayer">Ayer</option><option value="semana">Últimos 7 días</option><option value="mes">Este mes</option><option value="turno">Turno actual</option>
+        <option value="todo">Todo</option><option value="hoy">Hoy</option><option value="ayer">Ayer</option><option value="semana">Últimos 7 días</option><option value="mes">Este mes</option><option value="turno">Turno actual</option><option value="jornada-noche">🌙 Jornada noche (hoy 20:00 → mañana 06:00)</option><option value="jornada-noche-ayer">🌙 Jornada noche anterior</option>
       </select>
     </div>
     <div class="slicer">
@@ -2737,6 +2737,27 @@ function applyFechaPreset(){
     document.getElementById('slTurno').value=turnoActual;
     dashApplyFechaRangeForTurnoCodigo(turnoActual);
     dashSyncHoraFromTurno(false,true);
+  }
+  else if(v==='jornada-noche'||v==='jornada-noche-ayer'){
+    // Jornada noche = fecha X 20:00 → fecha X+1 06:00 (turno completo, cruza medianoche)
+    // "jornada-noche"       → arranca HOY (o ayer si aún estamos en madrugada)
+    // "jornada-noche-ayer"  → la jornada anterior
+    const base=new Date(today);
+    if(v==='jornada-noche-ayer')base.setDate(base.getDate()-1);
+    else {
+      // Si es madrugada (<07:00) todavía estamos en la jornada de AYER → retrocede 1
+      const now=new Date();
+      if(now.getHours()<7)base.setDate(base.getDate()-1);
+    }
+    // desde=hasta=fecha ancla del turno; el filtro (rango cruzado 20:00→06:00)
+    // toma automáticamente hasta las 06:00 del día siguiente. span=0 = una sola
+    // jornada; si pusiéramos hasta=día+1, sumaría también la jornada siguiente.
+    const desde=_dateObjToLocalYmd(base);
+    d.value=desde; h.value=desde;
+    document.getElementById('slTurno').value='noche';
+    const hd=document.getElementById('slHoraDesde'), hh=document.getElementById('slHoraHasta');
+    if(hd)hd.value='20:00';
+    if(hh)hh.value='06:00';
   }
   applyFilters();
 }
