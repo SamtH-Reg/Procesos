@@ -419,8 +419,20 @@ async function loadUnidData(){
     if(!c.error&&c.data) UNID_CFG_P=Object.assign({rendimiento:0.44,colacion_min:40},c.data);
   }catch(e){ console.warn('unid',e); }
 }
-// Datetime real del pesaje (fecha+hora) para medir minutos cruzando medianoche
-function _pDatetime(r){ const f=(r.fecha||'').slice(0,10), h=(r.hora||'00:00').slice(0,5); if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null; const d=new Date(f+'T'+(/^\d{2}:\d{2}$/.test(h)?h:'00:00')+':00'); return isNaN(d.getTime())?null:d; }
+// Datetime REAL del pesaje para medir minutos cruzando medianoche.
+// OJO: `fecha` guardada = fecha del turno (la madrugada de noche se guarda bajo el
+// día de INICIO). Entonces un pesaje con hora < 07:00 ocurrió en realidad el día
+// SIGUIENTE → hay que sumarle 1 día para reconstruir el instante real, si no la
+// jornada mediría ~21 h en vez de ~9 h y las piezas/min saldrían muy bajas.
+function _pDatetime(r){
+  const f=(r.fecha||'').slice(0,10), h=(r.hora||'00:00').slice(0,5);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null;
+  const d=new Date(f+'T'+(/^\d{2}:\d{2}$/.test(h)?h:'00:00')+':00');
+  if(isNaN(d.getTime()))return null;
+  const hh=parseInt(h.slice(0,2),10);
+  if(!isNaN(hh) && hh<7) d.setDate(d.getDate()+1);   // madrugada → día real siguiente
+  return d;
+}
 // Piezas/min por jornada (ciclo de fecha) del trabajador: unidades=(kg/rend)/peso_guia ; min=último-primer-colación
 function piezasMinDias(rows){
   const cat={}; (GUIAS_CAT||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
