@@ -584,8 +584,12 @@ function dashboardHTML(rows){
   function chartPanels(st,rws,skipDia){
     let ph='';
     if(indOn('ch_dia')&&!skipDia){
-      const inner=st.dias.length? (turnoLegend()+svgStackedTurno(st.dias.map(d=>({label:fmtDiaCorto(d),dia:(st.byDiaTurno[d]||{}).dia||0,noche:(st.byDiaTurno[d]||{}).noche||0})))) : emptyMsg();
-      ph+=panel('📅 Kilos por día y turno', st.dias.length?st.dias.length+' días':'', inner);
+      // 1er gráfico: barras apiladas con los DOS resultados (filete + ovas); el
+      // total de la barra = la suma de ambos gráficos. Usa el dataset completo.
+      const fo=_pDiaFileteOvas(rows);
+      const fds=Object.keys(fo).sort();
+      const inner=fds.length? (fileteOvasLegend()+svgStackedFileteOvas(fds.map(d=>({label:fmtDiaCorto(d),filete:fo[d].filete,ovas:fo[d].ovas})))) : emptyMsg();
+      ph+=panel('📅 Kilos por día · filete + ovas', fds.length?fds.length+' días':'', inner);
     }
     ph+=piezasMinPanelInner(rws); // 🔪 Piezas por minuto — entre "día y turno" y "especie" (solo filete)
     if(indOn('ch_especie')){ const arr=sortArr(st.byEsp); ph+=panel('🐟 Kilos por especie','', arr.length?hbars(arr,st.total):emptyMsg()); }
@@ -682,6 +686,47 @@ function svgStackedTurno(items){
     <defs>
       <linearGradient id="gD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
       <linearGradient id="gN" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
+    </defs>${bars}${labels}</svg>`;
+}
+// Kilos por día uniendo los DOS resultados (filete + ovas) en una sola barra
+// apilada; la altura total = la suma de ambos gráficos. Solo el 1er gráfico.
+function _pDiaFileteOvas(rows){
+  const m={};
+  (rows||[]).forEach(r=>{
+    const cd=cicloFecha(r); if(!cd||cd==='?')return;
+    const t=String(r.tipo||'').trim().toLowerCase();
+    const k=Number(r.kg)||0; if(!(k>0))return;
+    if(!m[cd])m[cd]={filete:0,ovas:0};
+    if(t==='ovas') m[cd].ovas+=k; else m[cd].filete+=k;
+  });
+  return m;
+}
+function fileteOvasLegend(){
+  return `<div style="display:flex;gap:16px;margin-bottom:10px;font-size:11px;color:var(--mut);font-weight:600">
+    <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#3b82f6;vertical-align:-1px"></span> Filete</span>
+    <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f59e0b;vertical-align:-1px"></span> Ovas</span></div>`;
+}
+function svgStackedFileteOvas(items){
+  const max=Math.max(...items.map(i=>i.filete+i.ovas),1);
+  const W=Math.max(items.length*46,260), H=190, pad=26, bw=Math.min(30,(W-pad)/items.length-8);
+  let bars='',labels='';
+  items.forEach((it,i)=>{
+    const x=pad+i*((W-pad)/items.length);
+    const tot=it.filete+it.ovas;
+    const hTot=Math.max(tot>0?3:0,(tot/max)*(H-46));
+    const hF=tot? (it.filete/tot)*hTot : 0;
+    const hO=hTot-hF;
+    const base=H-22;
+    if(it.filete>0) bars+=`<rect x="${x}" y="${base-hF}" width="${bw}" height="${hF}" fill="url(#gFil)"></rect>`;
+    if(it.ovas>0)   bars+=`<rect x="${x}" y="${base-hF-hO}" width="${bw}" height="${hO}" rx="4" fill="url(#gOva)"></rect>`;
+    if(tot>0) bars+=`<text x="${x+bw/2}" y="${base-hTot-4}" text-anchor="middle" font-size="9" font-weight="700" fill="#cdd8ef">${fmt(tot)}</text>`;
+    if(items.length<=16||i%Math.ceil(items.length/16)===0)
+      labels+=`<text x="${x+bw/2}" y="${H-7}" text-anchor="middle" font-size="9" fill="#6b7ca3">${it.label}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <linearGradient id="gFil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
+      <linearGradient id="gOva" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
     </defs>${bars}${labels}</svg>`;
 }
 function hbars(items,total){
