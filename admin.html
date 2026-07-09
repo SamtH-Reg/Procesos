@@ -4067,30 +4067,21 @@ function resumenSyncScopeFromDashboard(){
  * @param {string} tur '' = todos los turnos; 'actual'|codigo = uno
  */
 function _adminRecordInCycleScope(r,mod,d0,h0,tur){
-  const modKey=mod==='pes'?'pesajes':'moldes';
-  const ts=_ieGetRecordTs(r,modKey);
-  const activos=(DB.data.turnos||[]).filter(t=>t.activo!==false);
-  const turnoCodes=activos.map(t=>String(t.codigo||'').trim()).filter(Boolean);
-  const codes=tur
-    ?(tur==='actual'?[_adminInferTurnoCodigoPorHorario()||'dia']:[tur])
-    :(turnoCodes.length?turnoCodes:['dia','noche']);
-  for(const cod of codes){
-    if(!cod)continue;
-    const cLower=String(cod).toLowerCase();
-    if(mod==='pes'){
-      if(tur&&!_adminPesajeMatchesTurnoFilter(r,tur))continue;
-      const rt=String(r.turno||'').toLowerCase();
-      const arm=_adminTurnoArmadoPesajeForLinea(r.linea,r&&r.fecha);
-      if(rt&&rt!==cLower&&(!arm||String(arm).toLowerCase()!==cLower))continue;
-    }else if(_ieMoldeTurnoNorm(r)!==cLower)continue;
-    const wins=_ieCollectTurnoWindows(d0,h0,cod);
-    if(wins&&wins.length&&ts!=null&&wins.some(w=>ts>=w.start&&ts<w.end))return true;
+  // La FECHA guardada del registro YA representa la jornada del turno: la madrugada
+  // (00:00–06:59) del turno noche lleva la fecha de INICIO del turno, igual que el
+  // ERP. Por eso el scope es simple: fecha del registro en [d0,h0] + turno coincide.
+  // Una fecha = una jornada completa (tarde + madrugada juntas). Antes se armaban
+  // ventanas [d 20:00, d+1 06:00] que buscaban la madrugada en el día siguiente,
+  // donde ya no está → quedaba fuera.
+  if(mod==='pes'){
+    if(tur&&tur!=='todos'&&!_adminPesajeMatchesTurnoFilter(r,tur))return false;
+  }else{
+    if(tur&&tur!=='todos'&&tur!=='actual'){
+      if(_ieMoldeTurnoNorm(r)!==String(tur).toLowerCase())return false;
+    }
   }
-  if(ts==null){
-    const ymd=_resumenRecFechaYmd(r);
-    return!!ymd&&ymd>=d0&&ymd<=h0;
-  }
-  return false;
+  const ymd=_resumenRecFechaYmd(r)||_ieCycleDateNorm((r&&r.fecha)||'')||'';
+  return !!ymd && ymd>=d0 && ymd<=h0;
 }
 function _adminResumenRecordInScope(r,mod){
   const fd=String(_resumenScope.fechaDesde||'').trim();
