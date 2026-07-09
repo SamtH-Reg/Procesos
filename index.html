@@ -5600,51 +5600,38 @@ function _registroTsPesaje(r){
   if(hm==null)return _ymdToLocalMs(fe,12,0);
   return _ymdToLocalMs(fe,Math.floor(hm/60),hm%60);
 }
+/* AUDITORÍA turno: la fecha guardada YA es la fecha del turno (la madrugada de
+   noche se guarda con el día de inicio, igual que admin/portal y el Excel del ERP).
+   Por eso la pertenencia a un bloque = fecha igual + turno coincidente. NO se usa
+   ventana de tiempo [20:00→07:00] porque dejaba fuera la madrugada (guardada bajo
+   el día de inicio) y la contaba en el día anterior. */
+function _mismaFechaTurnoScope(r,fFecha){
+  return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
+}
 function _moldeCoincideFechaTurnoFiltro(r,fFecha,fTurno){
   if(!fFecha)return true;
-  if(!fTurno){
-    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
-  }
-  const win=_ventanaTurnoFechaRefMs(fFecha,fTurno);
-  if(!win){
-    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
-  }
-  const t=_registroTsMolde(r);
-  if(t==null)return false;
+  const same=_mismaFechaTurnoScope(r,fFecha);
+  if(!fTurno)return same;
   if(String(_moldeTurnoNorm(r))!==String(fTurno).toLowerCase())return false;
-  return t>=win.start&&t<win.end;
+  return same;
 }
 function _pesajeCoincideFechaTurnoFiltro(r,fFecha,filtro){
   if(!fFecha)return true;
   const match=filtro==='todos'||!filtro?null:(filtro==='actual'?(_inferTurnoCodigoPorHorario()||'dia'):String(filtro));
-  if(!match||match==='todos'){
-    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
-  }
-  const win=_ventanaTurnoFechaRefMs(fFecha,match);
-  if(!win){
-    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
-  }
+  const same=_mismaFechaTurnoScope(r,fFecha);
+  if(!match||match==='todos')return same;
   if(typeof _pesajeMatchesTurnoLineaFiltro==='function'&&!_pesajeMatchesTurnoLineaFiltro(r,filtro))return false;
-  const t=_registroTsPesaje(r);
-  if(t==null)return false;
-  return t>=win.start&&t<win.end;
+  return same;
 }
-/** Misma ventana de turno/fecha que «Ver registros» pesaje — lista de moldes. */
+/** Misma regla que «Ver registros» pesaje — lista de moldes (fecha=turno + turno). */
 function _moldeListaCoincideFechaTurno(r,fFecha,filtro){
   if(!fFecha)return true;
   const match=filtro==='todos'||!filtro?null:(filtro==='actual'?(_inferTurnoCodigoPorHorario()||'dia'):String(filtro));
-  if(!match||match==='todos'){
-    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
-  }
-  const win=_ventanaTurnoFechaRefMs(fFecha,match);
-  if(!win){
-    return String(_cycleDateNorm(r.fecha||''))===String(_cycleDateNorm(fFecha))||(!r.fecha&&_cycleDateNorm(fFecha)===nowDate());
-  }
+  const same=_mismaFechaTurnoScope(r,fFecha);
+  if(!match||match==='todos')return same;
   if(typeof _moldeMatchesTurnoLineaFiltro==='function'&&!_moldeMatchesTurnoLineaFiltro(r,match))return false;
   if(String(_moldeTurnoNorm(r))!==String(match).toLowerCase())return false;
-  const t=_registroTsMolde(r);
-  if(t==null)return false;
-  return t>=win.start&&t<win.end;
+  return same;
 }
 function _mRegEnsureFechaDefault(){
   const fe=document.getElementById('mRegFechaArmado');
@@ -9529,18 +9516,17 @@ function _consolKeepRangeFromDom(prefix,fallbackRange){
   }
   return cur;
 }
+/* La fecha guardada YA es la fecha del ciclo/turno (madrugada noche → día de
+   inicio). No se re-ancla por ventana de tiempo (eso mandaba la madrugada al día
+   anterior y descuadraba, igual que en admin/portal). */
 function _recordCycleForMolde(r){
   const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoMoldesForLinea((r&&r.linea)||'',(r&&r.fecha)||'')||'dia');
-  const ts=_registroTsMolde(r);
-  let fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
-  if(ts!=null){const a=_anchorDateForTsInTurno(ts,turno);if(a)fecha=a;}
+  const fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
   return {fecha,turno,idx:_cycleIndex(fecha,turno)};
 }
 function _recordCycleForPesaje(r){
   const turno=_cycleTurnoNorm((r&&r.turno)||_turnoArmadoPesajeForLinea((r&&r.linea)||'',(r&&r.fecha)||'')||'dia');
-  const ts=_registroTsPesaje(r);
-  let fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
-  if(ts!=null){const a=_anchorDateForTsInTurno(ts,turno);if(a)fecha=a;}
+  const fecha=_cycleDateNorm((r&&r.fecha)||nowDate());
   return {fecha,turno,idx:_cycleIndex(fecha,turno)};
 }
 function _collectCycleDates(rows,mapper){
@@ -9562,19 +9548,8 @@ function _mResumenRowsForScope(fecha,turno,lineaCod,horaRange){
   const matchTurno=turno==='actual'?String(codActual):(turno==='todos'?null:String(turno));
   let mol=_moldeRowsOperativos().filter(r=>{
     if(matchTurno==null||matchTurno==='todos'){
-      const fRef=_cycleDateNorm(fecha);
-      const ts=_registroTsMolde(r);
-      const codes=(DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim()).filter(Boolean);
-      const all=codes.length?codes:['dia','noche'];
-      if(ts!=null){
-        for(const cod of all){
-          if(_moldeTurnoNorm(r)!==String(cod).toLowerCase())continue;
-          const wins=_collectTurnoWindows(fRef,fRef,cod);
-          if(wins&&wins.some(w=>ts>=w.start&&ts<w.end))return true;
-        }
-        return false;
-      }
-      return r.fecha===fecha||(!r.fecha&&fecha===nowDate());
+      // Todos los turnos: basta la fecha del ciclo guardada (= fecha del turno).
+      return _mismaFechaTurnoScope(r,fecha);
     }
     return _moldeCoincideFechaTurnoFiltro(r,fecha,matchTurno);
   });
