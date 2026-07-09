@@ -702,31 +702,49 @@ function _pDiaFileteOvas(rows){
   return m;
 }
 function fileteOvasLegend(){
-  return `<div style="display:flex;gap:16px;margin-bottom:10px;font-size:11px;color:var(--mut);font-weight:600">
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-bottom:10px;font-size:11px;color:var(--mut);font-weight:600">
     <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#3b82f6;vertical-align:-1px"></span> Filete</span>
-    <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f59e0b;vertical-align:-1px"></span> Ovas</span></div>`;
+    <span>Ovas · rendimiento: <span style="color:#16a34a">≥3,5%</span> · <span style="color:#f59e0b">3,0–3,5%</span> · <span style="color:#ef4444">&lt;3,0%</span></span></div>`;
 }
+// Barra apilada: OVAS abajo (color = rendimiento, como el gráfico de ovas) con su
+// % y kg dentro; FILETE azul arriba; total (suma) encima. Respeta los colores de
+// ambos gráficos.
 function svgStackedFileteOvas(items){
   const max=Math.max(...items.map(i=>i.filete+i.ovas),1);
-  const W=Math.max(items.length*46,260), H=190, pad=26, bw=Math.min(30,(W-pad)/items.length-8);
+  const W=Math.max(items.length*54,260), H=210, pad=26, bw=Math.min(40,(W-pad)/items.length-10);
   let bars='',labels='';
   items.forEach((it,i)=>{
     const x=pad+i*((W-pad)/items.length);
     const tot=it.filete+it.ovas;
-    const hTot=Math.max(tot>0?3:0,(tot/max)*(H-46));
-    const hF=tot? (it.filete/tot)*hTot : 0;
-    const hO=hTot-hF;
-    const base=H-22;
-    if(it.filete>0) bars+=`<rect x="${x}" y="${base-hF}" width="${bw}" height="${hF}" fill="url(#gFil)"></rect>`;
-    if(it.ovas>0)   bars+=`<rect x="${x}" y="${base-hF-hO}" width="${bw}" height="${hO}" rx="4" fill="url(#gOva)"></rect>`;
-    if(tot>0) bars+=`<text x="${x+bw/2}" y="${base-hTot-4}" text-anchor="middle" font-size="9" font-weight="700" fill="#cdd8ef">${fmt(tot)}</text>`;
+    const hTot=Math.max(tot>0?3:0,(tot/max)*(H-58));
+    const hO=tot? (it.ovas/tot)*hTot : 0;   // ovas ABAJO
+    const hF=hTot-hO;                         // filete ARRIBA
+    const base=H-26;
+    // rendimiento de ovas (ovas ÷ MMPP, MMPP = filete ÷ base) → mismo color que el gráfico de ovas
+    const mmpp=it.filete>0?it.filete/OVAS_REND_BASE:0;
+    const rend=mmpp>0?(it.ovas/mmpp)*100:0;
+    const oCol=mmpp>0?_rendOvasColor(rend):'#6b7ca3';
+    // FILETE (azul) arriba — esquina superior redondeada
+    if(it.filete>0) bars+=`<rect x="${x}" y="${base-hTot}" width="${bw}" height="${hF}" rx="5" fill="url(#gFil)"></rect>`;
+    // OVAS (color rendimiento) abajo
+    if(it.ovas>0){
+      bars+=`<rect x="${x}" y="${base-hO}" width="${bw}" height="${hO}" fill="${oCol}"></rect>`;
+      const rendTxt=mmpp>0?rend.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'—';
+      if(hO>=28){ // cabe % + kg dentro del bloque
+        bars+=`<text x="${x+bw/2}" y="${base-hO/2-1}" text-anchor="middle" font-size="10" font-weight="800" fill="#0b1220">${rendTxt}</text>
+          <text x="${x+bw/2}" y="${base-hO/2+11}" text-anchor="middle" font-size="8" font-weight="600" fill="#0b1220">${fmt(it.ovas)} kg</text>`;
+      }else{ // bloque fino → % sobre el bloque, en su color
+        bars+=`<text x="${x+bw/2}" y="${base-hO-3}" text-anchor="middle" font-size="10" font-weight="800" fill="${oCol}">${rendTxt}</text>`;
+      }
+    }
+    // total (filete + ovas) encima
+    if(tot>0) bars+=`<text x="${x+bw/2}" y="${base-hTot-7}" text-anchor="middle" font-size="10" font-weight="700" fill="#cdd8ef">${fmt(tot)}</text>`;
     if(items.length<=16||i%Math.ceil(items.length/16)===0)
-      labels+=`<text x="${x+bw/2}" y="${H-7}" text-anchor="middle" font-size="9" fill="#6b7ca3">${it.label}</text>`;
+      labels+=`<text x="${x+bw/2}" y="${H-8}" text-anchor="middle" font-size="9" fill="#6b7ca3">${it.label}</text>`;
   });
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
     <defs>
       <linearGradient id="gFil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
-      <linearGradient id="gOva" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
     </defs>${bars}${labels}</svg>`;
 }
 function hbars(items,total){
