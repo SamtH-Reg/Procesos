@@ -2771,15 +2771,17 @@ function applyFechaPreset(){
       const now=new Date();
       if(now.getHours()<7)base.setDate(base.getDate()-1);
     }
-    // desde=hasta=fecha ancla del turno; el filtro (rango cruzado 20:00→06:00)
-    // toma automáticamente hasta las 06:00 del día siguiente. span=0 = una sola
-    // jornada; si pusiéramos hasta=día+1, sumaría también la jornada siguiente.
+    // La FECHA ya representa el turno completo (los pesajes de madrugada llevan la
+    // fecha de inicio del turno). Por eso basta filtrar por 1 sola fecha + turno
+    // noche, SIN filtro de hora cruzado (ese cruce buscaría la madrugada en el día
+    // siguiente, donde ya no está → columnas vacías). El widget igual muestra la
+    // línea de tiempo completa (20→06) porque el turno noche cruza medianoche.
     const desde=_dateObjToLocalYmd(base);
     d.value=desde; h.value=desde;
     document.getElementById('slTurno').value='noche';
     const hd=document.getElementById('slHoraDesde'), hh=document.getElementById('slHoraHasta');
-    if(hd)hd.value='20:00';
-    if(hh)hh.value='06:00';
+    if(hd)hd.value='';
+    if(hh)hh.value='';
   }
   applyFilters();
 }
