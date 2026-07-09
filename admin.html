@@ -8748,10 +8748,10 @@ function _ieExplorerBucketsMolPes(mod){
   src.forEach(r=>{
     if(!r)return;
     const turnoCod=String(r.turno||'dia').trim()||'dia';
-    const ts=_ieGetRecordTs(r,mod);
-    let anchor;
-    if(ts!=null)anchor=_ieAnchorDateForTsInTurno(ts,turnoCod);
-    else anchor=_ieCycleDateNorm(r.fecha||'');
+    // La fecha guardada YA ES la fecha del turno (la tablet asigna el inicio de
+    // jornada: la madrugada de noche se guarda con la fecha del día anterior).
+    // Por eso anclamos por r.fecha, NO por ventana de tiempo del timestamp.
+    const anchor=_ieCycleDateNorm(r.fecha||'')||(function(){const ts=_ieGetRecordTs(r,mod);return ts!=null?_ieYmdFromMs(ts):'';})();
     if(!anchor||!/^\d{4}-\d{2}-\d{2}$/.test(anchor))return;
     const k=turnoCod.toLowerCase()+'|'+anchor;
     const o=map.get(k)||{turno:turnoCod,anchor,count:0,kg:0};
@@ -8818,10 +8818,8 @@ function _ieRecordInMolPesBucket(r,mod,bucketAnchor,bucketTurno){
   if(!r)return false;
   const turnoCod=String(r.turno||'dia').trim()||'dia';
   if(turnoCod.toLowerCase()!==String(bucketTurno||'dia').trim().toLowerCase())return false;
-  const ts=_ieGetRecordTs(r,mod);
-  let anchor;
-  if(ts!=null)anchor=_ieAnchorDateForTsInTurno(ts,turnoCod);
-  else anchor=_ieCycleDateNorm(r.fecha||'');
+  // Anclar por la fecha guardada (= fecha del turno), igual que _ieExplorerBucketsMolPes.
+  const anchor=_ieCycleDateNorm(r.fecha||'')||(function(){const ts=_ieGetRecordTs(r,mod);return ts!=null?_ieYmdFromMs(ts):'';})();
   if(!anchor||!/^\d{4}-\d{2}-\d{2}$/.test(anchor))return false;
   return anchor===_ieCycleDateNorm(bucketAnchor);
 }
