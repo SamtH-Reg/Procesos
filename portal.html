@@ -433,7 +433,18 @@ function _pDatetime(r){
   if(!isNaN(hh) && hh<7) d.setDate(d.getDate()+1);   // madrugada → día real siguiente
   return d;
 }
-// Piezas/min por jornada (ciclo de fecha) del trabajador: unidades=(kg/rend)/peso_guia ; min=último-primer-colación
+/* Colación a las 01:00 AM (los fileteros salen a colación a la 1 de la madrugada):
+   descuenta colMin SOLO si la jornada primer→último cruza esa hora. */
+function _pColacionMin(first,last,colMin){
+  if(!first||!last||!(colMin>0))return 0;
+  for(let dOff=0;dOff<=1;dOff++){
+    const b=new Date(first); b.setDate(b.getDate()+dOff); b.setHours(1,0,0,0);
+    const bEnd=new Date(b.getTime()+colMin*60000);
+    if(last>b && first<bEnd) return colMin;
+  }
+  return 0;
+}
+// Piezas/min por jornada (ciclo de fecha) del trabajador: unidades=(kg/rend)/peso_guia ; min=último-primer-colación(01:00)
 function piezasMinDias(rows){
   const cat={}; (GUIAS_CAT||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
   const gRend=+UNID_CFG_P.rendimiento||0.44, colMin=+UNID_CFG_P.colacion_min||40;
@@ -454,7 +465,7 @@ function piezasMinDias(rows){
   });
   return Object.keys(days).sort().map(cd=>{
     const d=days[cd]; let upm=0;
-    if(d.min&&d.max){ const mins=(d.max-d.min)/60000-colMin; upm=mins>0?d.units/mins:0; }
+    if(d.min&&d.max){ const mins=(d.max-d.min)/60000-_pColacionMin(d.min,d.max,colMin); upm=mins>0?d.units/mins:0; }
     return {fecha:cd, upm};
   }).filter(x=>x.upm>0);
 }

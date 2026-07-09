@@ -889,7 +889,15 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
     <div><h1 class="page-title">Unidades/min · Pesos por guía</h1><div class="page-sub">Carga el <strong>peso promedio por pieza</strong> de cada guía. Con esto + el rendimiento base se calculan las <strong>unidades por minuto</strong> de cada filetero (vista general y detalle en el portal).</div></div>
   </div>
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-hdr"><div class="card-title">📊 Unidades / min por día (fileteros)</div><div class="card-sub" id="unidMatrixSub">—</div></div>
+    <div class="card-hdr" style="flex-wrap:wrap;gap:8px 12px;align-items:center;">
+      <div class="card-title">📊 Unidades / min por día (fileteros)</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;">
+        <label class="form-label" style="margin:0;">Mes</label>
+        <select class="input" id="unidMonthSel" style="max-width:180px;padding:6px 10px;" onchange="renderUnidMatrix()"></select>
+        <button class="btn sm" type="button" onclick="exportUnidPdf()" title="Exportar a PDF (imprimir / guardar como PDF)">🖨️ Exportar PDF</button>
+        <div class="card-sub" id="unidMatrixSub" style="margin:0;">—</div>
+      </div>
+    </div>
     <div id="unidMatrix"><div style="padding:14px;color:var(--text-3);">Carga guías con su peso promedio para ver la productividad.</div></div>
   </div>
   <div class="card" style="margin-bottom:14px;">
@@ -899,7 +907,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div class="form-field"><label class="form-label">Colación (min)</label><input class="input" id="unidColacion" type="number" step="1" style="max-width:120px;" placeholder="40"></div>
       <button class="btn sm" type="button" onclick="saveUnidCfg()">Guardar parámetros</button>
     </div>
-    <div class="card-sub" style="margin-top:8px;">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio. &nbsp;Minutos = último − primer pesaje − colación.</div>
+    <div class="card-sub" style="margin-top:8px;">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio. &nbsp;Minutos = último − primer pesaje − colación (se descuenta solo si la jornada cruza la <strong>01:00 AM</strong>, hora de colación).</div>
   </div>
   <div class="card" style="margin-bottom:14px;">
     <div class="card-hdr"><div class="card-title">➕ Agregar / actualizar guía</div></div>
@@ -1535,19 +1543,9 @@ function _adminResumenHourColsFromFiltro(rows,filtro){
   const obs=new Set();
   (rows||[]).forEach(r2=>{const m=(r2.hora||'').match(/^(\d{1,2}):/);if(m)obs.add(parseInt(m[1],10));});
   const f=String(filtro||'').trim()||'todos';
-  // Si hay filtro por rango de horas (jornada 20:00→06:00), mostrar TODAS las horas
-  // del turno completo (no solo las que tienen pesajes) → línea de tiempo continua
-  // que cruza medianoche como una jornada única.
-  try{
-    const hd=_filters&&_filters.horaDesdeMin, hh=_filters&&_filters.horaHastaMin;
-    if(hd!=null&&hh!=null){
-      const hIni=Math.floor(hd/60), hFin=Math.floor(hh/60);
-      const out=[];
-      if(hd<=hh){for(let h=hIni;h<=hFin;h++)out.push(h);}
-      else{for(let h=hIni;h<24;h++)out.push(h);for(let h=0;h<=hFin;h++)out.push(h);}
-      return out;
-    }
-  }catch(_){}
+  // Mostrar SOLO las horas que tienen registros (se recortan las horas vacías de
+  // los extremos, p.ej. 19:00 o 06:00 sin pesajes), ordenadas cronológicamente
+  // dentro de la jornada (soporta cruce de medianoche).
   const arr=[...obs];
   if(!arr.length)return[];
   if(f==='todos')return arr.sort((a,b)=>a-b);
@@ -1555,15 +1553,6 @@ function _adminResumenHourColsFromFiltro(rows,filtro){
   const tu=(DB&&DB.data&&DB.data.turnos||[]).find(x=>String(x.codigo||'').toLowerCase()===String(code).toLowerCase());
   const a=tu?_adminParseHMToMinutes(tu.inicio):null,b=tu?_adminParseHMToMinutes(tu.fin):null;
   if(a==null||b==null)return arr.sort((x,y)=>x-y);
-  // Cuando el turno cruza medianoche (b<a) → agregar todas las horas del turno,
-  // aunque no tengan pesajes (línea de tiempo completa).
-  if(b<a){
-    const hIni=Math.floor(a/60), hFin=Math.floor(b/60);
-    const full=new Set();
-    for(let h=hIni;h<24;h++)full.add(h);
-    for(let h=0;h<=hFin;h++)full.add(h);
-    return _adminSortHoursChronologicalInTurn([...full],a,b);
-  }
   return _adminSortHoursChronologicalInTurn(arr,a,b);
 }
 function _adminFmtHoraResumenTh(h){return String(h)+':'+String(0).padStart(2,'0');}
@@ -5953,25 +5942,59 @@ async function renderGuiasPeso(){
 }
 window.renderGuiasPeso=renderGuiasPeso;
 /* ── Matriz trabajador × día de unidades/min (fileteros) ── */
+// La fecha guardada YA es la fecha del ciclo/turno (madrugada noche → día de
+// inicio, tras la reconciliación ERP). NO se resta un día (sería doble
+// desplazamiento y descuadraría, igual que en admin/portal/index).
 function _unidCycleDate(p){
   const f=p.fecha||''; if(!/^\d{4}-\d{2}-\d{2}/.test(f))return '';
-  const h=parseInt(String(p.hora||'').slice(0,2),10);
-  if(!isNaN(h)&&h<7){ const d=new Date(f.slice(0,10)+'T00:00:00'); d.setDate(d.getDate()-1); const p2=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
   return f.slice(0,10);
 }
+// Datetime REAL: la madrugada (hora<07:00) se guarda con la fecha del día de
+// inicio, pero ocurrió el día SIGUIENTE → +1 día para no inflar los minutos.
 function _unidDatetime(p){
   const f=(p.fecha||'').slice(0,10); const h=(p.hora||'00:00').slice(0,5);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return null;
   const d=new Date(f+'T'+(/^\d{2}:\d{2}$/.test(h)?h:'00:00')+':00');
-  return isNaN(d.getTime())?null:d;
+  if(isNaN(d.getTime()))return null;
+  const hh=parseInt(h.slice(0,2),10);
+  if(!isNaN(hh)&&hh<7)d.setDate(d.getDate()+1);
+  return d;
 }
-function renderUnidMatrix(){
-  const host=document.getElementById('unidMatrix'); if(!host)return;
+/* Colación a las 01:00 AM: los fileteros salen a colación a la 1:00 de la
+   madrugada. Se descuenta la colación (colMin) SOLO si la jornada del trabajador
+   (primer→último pesaje) cruza esa hora; si entró después o salió antes, no aplica. */
+function _unidColacionMin(first,last,colMin){
+  if(!first||!last||!(colMin>0))return 0;
+  for(let dOff=0;dOff<=1;dOff++){
+    const b=new Date(first); b.setDate(b.getDate()+dOff); b.setHours(1,0,0,0);
+    const bEnd=new Date(b.getTime()+colMin*60000);
+    if(last>b && first<bEnd) return colMin;   // la jornada abarca la colación
+  }
+  return 0;
+}
+let _unidLastRender=null;   // datos de la última matriz (para Exportar PDF)
+const _unidFmtD=d=>{const[a,m,dd]=String(d).split('-');return dd+'-'+m+'-'+a;};
+const _unidMonthLabel=ym=>{const[y,m]=String(ym).split('-');const N=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return (N[+m]||m)+' '+y;};
+/* Color heatmap por rendimiento relativo al promedio del mes: verde = sobre el
+   promedio, ámbar/rojo = bajo. Ayuda a leer de un vistazo quién rinde más. */
+function _unidCellStyle(v,avg){
+  if(v==null||!(v>0)||!(avg>0))return '';
+  const r=v/avg;
+  let bg,fg='inherit';
+  if(r>=1.15){bg='rgba(22,163,74,.22)';}
+  else if(r>=1.0){bg='rgba(22,163,74,.10)';}
+  else if(r>=0.85){bg='rgba(245,158,11,.12)';}
+  else {bg='rgba(239,68,68,.15)';}
+  return `background:${bg};color:${fg};`;
+}
+/* Construye la matriz (trabajador × día) filtrando por MES. Devuelve estructura
+   reutilizable por el render en pantalla y por la exportación a PDF. */
+function _unidBuildMatrix(monthSel){
   const pes=(RT.data&&RT.data.pesajes)||[];
   const cat={}; (GUIAS_PESO||[]).forEach(g=>{cat[String(g.guia).trim().toLowerCase()]={peso:+g.peso_promedio||0, rend:(g.rendimiento!=null?+g.rendimiento:null)};});
   const gRend=+UNID_CFG.rendimiento||0.44, colMin=+UNID_CFG.colacion_min||40;
-  if(!Object.keys(cat).length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Carga guías con su peso promedio para ver la productividad.</div>'; const s=document.getElementById('unidMatrixSub'); if(s)s.textContent='—'; return; }
-  // Pass 1: kg por (ciclo, guía) → guía DOMINANTE del día (la de más kg que esté en el catálogo)
+  if(!Object.keys(cat).length)return {noCat:true};
+  // Pass 1: guía DOMINANTE del día (más kg, presente en el catálogo)
   const dayGuia={};
   pes.forEach(p=>{
     if(String(p.tipo||'').trim().toLowerCase()!=='filete')return;
@@ -5985,7 +6008,7 @@ function renderUnidMatrix(){
     Object.keys(dayGuia[cd]).forEach(gk=>{ if(cat[gk]&&cat[gk].peso>0&&dayGuia[cd][gk]>bestKg){bestKg=dayGuia[cd][gk];best=cat[gk];} });
     if(best)domByDay[cd]=best;
   });
-  // Pass 2: acumular por trabajador/día (guía del pesaje, o la dominante del día como respaldo)
+  // Pass 2: acumular por trabajador/día
   const acc={}; const faltan={};
   pes.forEach(p=>{
     if(String(p.tipo||'').trim().toLowerCase()!=='filete')return;
@@ -5995,32 +6018,108 @@ function renderUnidMatrix(){
     const w=acc[cod]; if(!w.days[cd])w.days[cd]={units:0,min:null,max:null};
     const day=w.days[cd];
     const gk=String(p.guia||'').trim().toLowerCase(), kg=+p.kg||0;
-    let g=cat[gk]; if(!(g&&g.peso>0))g=domByDay[cd]||null;   // respaldo: guía dominante del día
+    let g=cat[gk]; if(!(g&&g.peso>0))g=domByDay[cd]||null;
     if(g&&g.peso>0){ const rend=g.rend!=null?g.rend:gRend; if(rend>0)day.units+=(kg/rend)/g.peso; }
     else if(gk){ faltan[gk]=(faltan[gk]||0)+kg; }
     const dt=_unidDatetime(p); if(dt){ if(!day.min||dt<day.min)day.min=dt; if(!day.max||dt>day.max)day.max=dt; }
   });
-  const faltanList=Object.keys(faltan).sort((a,b)=>faltan[b]-faltan[a]);
+  const faltanList=Object.keys(faltan).sort((a,b)=>faltan[b]-faltan[a]).map(g=>({guia:g.toUpperCase(),kg:faltan[g]}));
+  // Meses disponibles
   const allDates=new Set(); Object.values(acc).forEach(w=>Object.keys(w.days).forEach(d=>allDates.add(d)));
-  let dates=[...allDates].sort(); if(dates.length>12)dates=dates.slice(-12);
+  const months=[...new Set([...allDates].map(d=>d.slice(0,7)))].sort();
+  const month=months.includes(monthSel)?monthSel:(months.length?months[months.length-1]:'');
+  const dates=[...allDates].filter(d=>d.slice(0,7)===month).sort();
+  // Filas por trabajador con vals del mes + promedio del mes
   const rows=Object.values(acc).map(w=>{
     const vals={}; let sum=0,cnt=0;
     dates.forEach(d=>{
       const day=w.days[d];
-      if(day&&day.min&&day.max){ const mins=(day.max-day.min)/60000-colMin; const upm=mins>0?day.units/mins:0; vals[d]=upm; if(upm>0){sum+=upm;cnt++;} }
+      if(day&&day.min&&day.max){ const mins=(day.max-day.min)/60000-_unidColacionMin(day.min,day.max,colMin); const upm=mins>0?day.units/mins:0; vals[d]=upm; if(upm>0){sum+=upm;cnt++;} }
       else vals[d]=null;
     });
-    return {codigo:w.codigo,nombre:w.nombre,vals,avg:cnt?sum/cnt:0};
+    return {codigo:w.codigo,nombre:w.nombre,vals,avg:cnt?sum/cnt:0,dias:cnt};
   }).filter(r=>r.avg>0).sort((a,b)=>b.avg-a.avg);
-  const fmtD=d=>{const[a,m,dd]=d.split('-');return dd+'-'+m+'-'+a;};
+  // Promedios de planta (por día y global)
+  const colAvg={}; dates.forEach(d=>{let s=0,c=0;rows.forEach(r=>{const v=r.vals[d];if(v>0){s+=v;c++;}});colAvg[d]=c?s/c:null;});
+  const plantAvg=(function(){let s=0,c=0;rows.forEach(r=>{if(r.avg>0){s+=r.avg;c++;}});return c?s/c:0;})();
+  return {rows,dates,months,month,colAvg,plantAvg,faltanList};
+}
+function renderUnidMatrix(){
+  const host=document.getElementById('unidMatrix'); if(!host)return;
+  const sel=document.getElementById('unidMonthSel');
+  const M=_unidBuildMatrix(sel?sel.value:'');
+  const subEl=document.getElementById('unidMatrixSub');
+  if(M.noCat){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Carga guías con su peso promedio para ver la productividad.</div>'; if(subEl)subEl.textContent='—'; if(sel)sel.innerHTML=''; return; }
+  // Poblar selector de mes (preservando selección)
+  if(sel){
+    const cur=M.month;
+    sel.innerHTML=M.months.map(m=>`<option value="${m}"${m===cur?' selected':''}>${esc(_unidMonthLabel(m))}</option>`).join('')||'<option>—</option>';
+  }
+  _unidLastRender=M;
+  if(subEl)subEl.textContent=M.rows.length+' fileteros · '+M.dates.length+' días · '+(M.month?_unidMonthLabel(M.month):'—');
+  if(!M.rows.length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Sin unidades calculables en este mes. Verifica que las guías de los pesajes tengan peso promedio cargado.</div>'; return; }
   const num=v=>(v==null||v<=0)?'<span style="color:var(--text-3);">·</span>':v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
-  const s=document.getElementById('unidMatrixSub'); if(s)s.textContent=rows.length+' fileteros · '+dates.length+' días';
-  if(!rows.length){ host.innerHTML='<div style="padding:14px;color:var(--text-3);">Sin unidades calculables. Verifica que las guías de los pesajes tengan peso promedio cargado.</div>'; return; }
-  host.innerHTML=`<div class="tbl-wrap" style="overflow:auto;"><table class="resumen-pivot-tbl"><thead><tr><th style="text-align:left;">Código</th><th style="text-align:left;">Nombre</th>${dates.map(d=>`<th class="num">${fmtD(d)}</th>`).join('')}</tr></thead><tbody>`+
-    rows.map(r=>`<tr><td><strong>${esc(r.codigo)}</strong></td><td style="white-space:nowrap;">${esc(r.nombre)}</td>${dates.map(d=>`<td class="num">${num(r.vals[d])}</td>`).join('')}</tr>`).join('')+
-    `</tbody></table></div>`+(faltanList.length?`<div style="font-size:12px;color:#d97706;margin-top:8px;font-weight:600;">⚠ Guías en los pesajes que faltan en el catálogo (no suman unidades): ${faltanList.map(g=>esc(g.toUpperCase())+' ('+_fmt(faltan[g])+' kg)').join(' · ')}. Cárgalas en la tabla de abajo.</div>`:'');
+  const head=`<tr><th style="text-align:left;">#</th><th style="text-align:left;">Código</th><th style="text-align:left;">Nombre</th>`+
+    M.dates.map(d=>`<th class="num">${_unidFmtD(d)}</th>`).join('')+`<th class="num" style="border-left:2px solid var(--border);">Prom. mes</th></tr>`;
+  const body=M.rows.map((r,i)=>`<tr><td style="color:var(--text-3);">${i+1}</td><td><strong>${esc(r.codigo)}</strong></td><td style="white-space:nowrap;">${esc(r.nombre)}</td>`+
+    M.dates.map(d=>`<td class="num" style="${_unidCellStyle(r.vals[d],M.plantAvg)}">${num(r.vals[d])}</td>`).join('')+
+    `<td class="num" style="font-weight:800;border-left:2px solid var(--border);${_unidCellStyle(r.avg,M.plantAvg)}">${num(r.avg)}</td></tr>`).join('');
+  const footer=`<tr style="border-top:2px solid var(--border);font-weight:800;background:var(--surface-alt);"><td></td><td colspan="2">PROMEDIO PLANTA</td>`+
+    M.dates.map(d=>`<td class="num">${num(M.colAvg[d])}</td>`).join('')+
+    `<td class="num" style="border-left:2px solid var(--border);">${num(M.plantAvg)}</td></tr>`;
+  host.innerHTML=`<div style="font-size:11px;color:var(--text-3);margin:0 0 8px;padding:0 2px;">Unidades/min por filetero · ordenado por promedio del mes · color = rendimiento vs. promedio de planta (<span style="background:rgba(22,163,74,.22);padding:1px 5px;border-radius:3px;">alto</span> <span style="background:rgba(245,158,11,.12);padding:1px 5px;border-radius:3px;">medio</span> <span style="background:rgba(239,68,68,.15);padding:1px 5px;border-radius:3px;">bajo</span>)</div>`+
+    `<div class="tbl-wrap" style="overflow:auto;"><table class="resumen-pivot-tbl"><thead>${head}</thead><tbody>${body}${footer}</tbody></table></div>`+
+    (M.faltanList.length?`<div style="font-size:12px;color:#d97706;margin-top:8px;font-weight:600;">⚠ Guías en los pesajes que faltan en el catálogo (no suman unidades): ${M.faltanList.map(g=>esc(g.guia)+' ('+_fmt(g.kg)+' kg)').join(' · ')}. Cárgalas en la tabla de abajo.</div>`:'');
 }
 window.renderUnidMatrix=renderUnidMatrix;
+/* Exportar a PDF: abre una ventana con la matriz del mes en formato imprimible y
+   dispara el diálogo de impresión (el usuario elige "Guardar como PDF"). Sin
+   librerías externas (respeta la CSP del sitio). */
+function exportUnidPdf(){
+  const M=_unidLastRender;
+  if(!M||!M.rows||!M.rows.length){toast('No hay datos para exportar en este mes','warn');return;}
+  const colMin=+UNID_CFG.colacion_min||40, rendPct=((+UNID_CFG.rendimiento||0.44)*100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const num=v=>(v==null||v<=0)?'·':v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const cell=(v,avg)=>{
+    let bg='';
+    if(v>0&&avg>0){const r=v/avg; bg=r>=1.15?'#c9edd4':r>=1.0?'#e6f6ec':r>=0.85?'#fdf0d8':'#fbdede';}
+    return `<td class="n"${bg?` style="background:${bg}"`:''}>${num(v)}</td>`;
+  };
+  const head=`<tr><th>#</th><th class="l">Código</th><th class="l">Nombre</th>`+M.dates.map(d=>`<th>${_unidFmtD(d)}</th>`).join('')+`<th class="pm">Prom. mes</th></tr>`;
+  const body=M.rows.map((r,i)=>`<tr><td class="idx">${i+1}</td><td class="l"><b>${esc(r.codigo)}</b></td><td class="l">${esc(r.nombre)}</td>`+M.dates.map(d=>cell(r.vals[d],M.plantAvg)).join('')+`<td class="n pm"><b>${num(r.avg)}</b></td></tr>`).join('');
+  const foot=`<tr class="tot"><td></td><td class="l" colspan="2">PROMEDIO PLANTA</td>`+M.dates.map(d=>`<td class="n">${num(M.colAvg[d])}</td>`).join('')+`<td class="n pm">${num(M.plantAvg)}</td></tr>`;
+  const now=new Date().toLocaleString('es-CL');
+  const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Unidades-min ${esc(_unidMonthLabel(M.month))}</title>
+  <style>
+    @page{size:landscape;margin:12mm;}
+    *{box-sizing:border-box;}
+    body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1e293b;margin:0;padding:16px;}
+    .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #25358c;padding-bottom:8px;margin-bottom:12px;}
+    .hd h1{font-size:18px;margin:0;color:#25358c;} .hd .sub{font-size:11px;color:#64748b;margin-top:3px;}
+    .hd .meta{font-size:11px;color:#64748b;text-align:right;}
+    table{border-collapse:collapse;width:100%;font-size:10px;}
+    th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:center;}
+    th{background:#25358c;color:#fff;font-weight:700;} th.l{text-align:left;}
+    td.l{text-align:left;white-space:nowrap;} td.n{text-align:right;} td.idx{color:#94a3b8;}
+    th.pm,td.pm{border-left:2px solid #25358c;font-weight:700;}
+    tr.tot td{background:#e8ecf6;font-weight:700;border-top:2px solid #25358c;}
+    tr:nth-child(even) td:not([style]){background:#f8fafc;}
+    .ley{font-size:10px;color:#64748b;margin:10px 0 0;}
+    .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin:0 2px 0 8px;}
+  </style></head><body>
+    <div class="hd">
+      <div><h1>Unidades / min por día · Fileteros</h1><div class="sub">FRIOSUR SpA · ${esc(_unidMonthLabel(M.month))} · ${M.rows.length} fileteros · ${M.dates.length} días</div></div>
+      <div class="meta">Rendimiento base: ${rendPct}% · Colación: ${colMin} min (01:00 AM)<br>Generado: ${esc(now)}</div>
+    </div>
+    <table><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
+    <div class="ley">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio de la guía. Minutos = último − primer pesaje − colación (si la jornada cruza la 01:00 AM). Color vs. promedio de planta: <span class="sw" style="background:#c9edd4"></span>alto <span class="sw" style="background:#fdf0d8"></span>medio <span class="sw" style="background:#fbdede"></span>bajo.</div>
+    <script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Permite las ventanas emergentes para exportar el PDF','warn');return;}
+  w.document.open(); w.document.write(html); w.document.close();
+}
+window.exportUnidPdf=exportUnidPdf;
 async function saveUnidCfg(){
   if(!_sb){toast('Sin conexión a Supabase','err');return;}
   const rend=Math.max(0.01,Math.min(1,(parseFloat(document.getElementById('unidRend').value)||44)/100));
