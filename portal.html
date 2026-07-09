@@ -469,13 +469,12 @@ function turnoDe(r){
 }
 // Restar N días a una fecha ISO
 function isoMenosDias(f,d){ const x=new Date(f+'T00:00:00'); x.setDate(x.getDate()-d); return fechaISO(x); }
-// Fecha de CICLO del pesaje: la madrugada (hora < 07:00) pertenece al turno noche que empezó el día anterior.
-// Ej: pesaje del 16 a las 03:00 → ciclo del día 15.
+// Fecha de CICLO del pesaje = la fecha guardada (que YA es la fecha del turno).
+// La tablet asigna el inicio de jornada: la madrugada de noche se guarda con la
+// fecha del día anterior. Por eso NO hay que volver a restar aquí (sería doble
+// desplazamiento y mandaría la madrugada dos días atrás).
 function cicloFecha(r){
-  const f=r.fecha||''; if(!f) return '?';
-  const h=parseInt(String(r.hora||'').slice(0,2),10);
-  if(!isNaN(h) && h<7) return isoMenosDias(f,1);
-  return f;
+  return r.fecha||'?';
 }
 // Fecha del ciclo "hoy" según la hora actual (antes de las 07:00 seguimos en el ciclo de ayer)
 function cicloHoyISO(){ const now=new Date(); return now.getHours()<7 ? isoMenosDias(hoyISO(),1) : hoyISO(); }
@@ -728,12 +727,15 @@ function filtrarRango(rows,desde,hasta){
   return rows.filter(r=>{ const f=r.fecha||''; if(!f) return false; if(desde&&f<desde) return false; if(hasta&&f>hasta) return false; return true; });
 }
 function rangeFromMode(r){
-  const hoy=new Date(); let d=new Date(hoy);
-  if(r==='hoy') d=new Date(hoy);
-  else if(r==='sem'){ d=new Date(hoy); d.setDate(d.getDate()-6); }
-  else if(r==='mes'){ d=new Date(hoy.getFullYear(),hoy.getMonth(),1); }
-  else if(r==='todo'){ d=new Date(2024,0,1); }
-  return {desde:fechaISO(d),hasta:hoyISO()};
+  // Ancla = ciclo de HOY (antes de las 07:00 seguimos en el turno noche de ayer),
+  // así "hoy"/"semana" cuadran con la fecha de turno guardada en los pesajes.
+  const cHoy=cicloHoyISO();
+  let desde=cHoy;
+  if(r==='hoy') desde=cHoy;
+  else if(r==='sem') desde=isoMenosDias(cHoy,6);
+  else if(r==='mes') desde=cHoy.slice(0,8)+'01';
+  else if(r==='todo') desde='2024-01-01';
+  return {desde,hasta:hoyISO()};
 }
 function applyDefaultRange(){
   const rg=PORTAL_CFG.range||{mode:'mes'};
