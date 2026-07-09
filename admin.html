@@ -1970,27 +1970,19 @@ function _adminDashRecordMatchesDateTimeFilters(r){
     }
     return false;
   }
-  if(!hasFecha){
-    const d=new Date(tms);
-    const hm=d.getHours()*60+d.getMinutes();
-    return hm>=a||hm<=b;
+  // Rango de horas que CRUZA medianoche (ej. 19:00→06:59). Como la FECHA ya
+  // representa el turno completo (la madrugada lleva la fecha de inicio del turno,
+  // igual que el ERP), NO se corre de día: la hora "envuelve" medianoche pero el
+  // registro se filtra por su propia fecha. Así la madrugada (fecha=X hora=02:00)
+  // aparece junto a la tarde (fecha=X hora=22:00) del mismo turno.
+  const d=new Date(tms);
+  if(hasFecha){
+    const recDay=new Date(d);recDay.setHours(0,0,0,0);
+    if(_filters.desde){const dd=new Date(_filters.desde);dd.setHours(0,0,0,0);if(recDay.getTime()<dd.getTime())return false;}
+    if(_filters.hasta){const dh=new Date(_filters.hasta);dh.setHours(0,0,0,0);if(recDay.getTime()>dh.getTime())return false;}
   }
-  const d0=_adminDayStartFromDate(_filters.desde);
-  const d1=_adminDayStartFromDate(_filters.hasta||_filters.desde);
-  if(!d0)return true;
-  const span=Math.max(0,Math.round((d1.getTime()-d0.getTime())/MS_DAY));
-  if(span===0){
-    const st=new Date(d0);st.setHours(Math.floor(a/60),a%60,0,0);
-    const en=new Date(d0.getTime()+MS_DAY);en.setHours(Math.floor(b/60),b%60,59,999);
-    return tms>=st.getTime()&&tms<=en.getTime();
-  }
-  for(let k=0;k<span;k++){
-    const anchor=new Date(d0.getTime()+k*MS_DAY);
-    const st=new Date(anchor);st.setHours(Math.floor(a/60),a%60,0,0);
-    const en=new Date(anchor.getTime()+MS_DAY);en.setHours(Math.floor(b/60),b%60,59,999);
-    if(tms>=st.getTime()&&tms<=en.getTime())return true;
-  }
-  return false;
+  const hm=d.getHours()*60+d.getMinutes();
+  return hm>=a||hm<=b;
 }
 function _minutesToHHMM(mins){
   if(mins==null||isNaN(mins))return'';
