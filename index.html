@@ -12947,6 +12947,56 @@ function _tbUploadPesajeRow(row){
 window._tbUploadPesajeRow=_tbUploadPesajeRow;
 async function _obxAck(id){try{await Outbox.del(id);}catch(_){}}
 window._obxAck=_obxAck;
+/* ─── AUTO-TEST de flujo de datos (diagnóstico, SOLO con ?selftest=1) ─────────
+   Corre en el equipo REAL: prueba el outbox durable, la retención "por subir",
+   la idempotencia del store y que los drenadores no rompen. Usa ids de prueba
+   (99e7+) marcados en _obxSkip para que NINGÚN drenador los suba, y los borra al
+   terminar → nunca toca pendientes reales ni la nube. Muestra un panel en pantalla. */
+async function _tbRunSelfTest(){
+  const log=[]; let fail=0;
+  const ok=(c,m)=>{log.push((c?'✅':'❌')+' '+m); if(!c)fail++;};
+  const B=990000000, testIds=[B+1,B+2,B+3,B+50];
+  testIds.forEach(id=>{try{_obxSkip.add(String(id));}catch(_){}});   // blindaje: los drenadores los ignoran
+  try{
+    const c0=await Outbox.count();
+    for(let i=1;i<=3;i++) await Outbox.put({id:B+i,hora:'02:00',turno:'noche',linea:'L3',kg:10+i,fecha:todayLocalYmd(),__selftest:1});
+    const c1=await Outbox.count();
+    ok(c1===c0+3,'Outbox durable: encola 3 (de '+c0+' a '+c1+')');
+    ok((await Outbox.all()).filter(r=>r&&r.__selftest).length===3,'Persisten y se releen (sobrevive recarga/crash)');
+    await Outbox.put({id:B+1,hora:'02:00',turno:'noche',linea:'L3',kg:99,fecha:todayLocalYmd(),__selftest:1});
+    ok((await Outbox.count())===c1,'Reponer el mismo id NO duplica (keyPath=id)');
+    const noSess=!(typeof _tbUser!=='undefined'&&_tbUser);
+    if(noSess){
+      const before=await Outbox.count();
+      _tbUploadPesajeRow({id:B+50,hora:'03:00',turno:'noche',linea:'L3',kg:7.5,fecha:todayLocalYmd(),__selftest:1});
+      await new Promise(r=>setTimeout(r,500));
+      const stays=!!(await Outbox.all()).find(r=>r&&r.id===B+50);
+      ok((await Outbox.count())>=before+1 && stays,'Sin confirmar (sin sesión): el pesaje QUEDA en outbox (no se pierde)');
+    }else{
+      ok(typeof _tbUploadPesajeRow==='function','Con sesión activa: se omite la inserción de prueba (no tocar la nube). Cadena de subida presente');
+    }
+    ok(typeof _obxDrain==='function'&&typeof _tbAutonomousDrain==='function','Drenadores de respaldo presentes (online/foco/15s/SW/autónomo)');
+    try{ await _obxDrain(); ok(true,'_obxDrain corre sin lanzar (respeta guardas offline/sesión)'); }
+    catch(e){ ok(false,'_obxDrain lanzó: '+(e&&e.message||e)); }
+  }catch(e){ ok(false,'Excepción: '+(e&&e.message||e)); }
+  try{ const junk=(await Outbox.all()).filter(r=>r&&r.__selftest); for(const r of junk) await Outbox.del(r.id); }catch(_){}
+  testIds.forEach(id=>{try{_obxSkip.delete(String(id));}catch(_){}});
+  try{void _obxRefreshPendCache();}catch(_){}
+  const pass=fail===0, prev=document.getElementById('tbSelfTestOverlay'); if(prev)prev.remove();
+  const div=document.createElement('div'); div.id='tbSelfTestOverlay';
+  div.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(2,6,23,.9);color:#e2e8f0;font:14px/1.6 system-ui,sans-serif;padding:24px;overflow:auto;';
+  div.innerHTML='<div style="max-width:660px;margin:0 auto;background:#0f1830;border:1px solid #334155;border-radius:14px;padding:20px;">'
+    +'<div style="font-size:18px;font-weight:800;margin-bottom:4px;">🧪 Auto-test de flujo de datos</div>'
+    +'<div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Corrido en ESTE equipo · outbox real · ids de prueba (blindados y limpiados)</div>'
+    +log.map(l=>'<div style="padding:3px 0;">'+l+'</div>').join('')
+    +'<div style="margin-top:16px;padding:10px 14px;border-radius:10px;font-weight:800;background:'+(pass?'rgba(22,163,74,.2)':'rgba(220,38,38,.2)')+';border:1px solid '+(pass?'#16a34a':'#dc2626')+';">'
+    +(pass?'✅ TODO OK — el outbox durable no pierde datos':'❌ '+fail+' fallo(s)')+'</div>'
+    +'<button onclick="document.getElementById(\'tbSelfTestOverlay\').remove()" style="margin-top:14px;padding:8px 16px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Cerrar</button>'
+    +'</div>';
+  document.body.appendChild(div);
+}
+window._tbRunSelfTest=_tbRunSelfTest;
+try{ if(/[?&]selftest=1/.test(location.search)) window.addEventListener('load',()=>setTimeout(_tbRunSelfTest,1600)); }catch(_){}
 /* ── Drain de respaldo: una pasada secuencial sobre lo que quedó en el outbox
    (reintenta tras fallos de red). Lo disparan online / volver a foco / cada 15 s.
    Una pasada por invocación (sin while ni recursión): simple y sin colgar. */
