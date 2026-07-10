@@ -4570,25 +4570,17 @@ function _admResHourCols(rows,filtro){
 function _admResRowsForFiltro(src,fecha,filtro,lineaVal){
   const codActual=_adminInferTurnoCodigoPorHorario();
   const matchTurno=filtro==='todos'||!filtro?null:(filtro==='actual'?String(codActual):String(filtro));
+  // La fecha guardada YA es la fecha del turno (madrugada noche → día de inicio),
+  // igual que admin/portal/index y el Excel del ERP. Pertenencia = fecha igual +
+  // turno coincidente; sin ventana de tiempo (que dejaba fuera la madrugada
+  // guardada bajo el día de inicio y descuadraba el resumen y su exportación).
+  const F=String(fecha||'');
   return(src||[]).filter(r=>{
     if(lineaVal&&String((r.linea||'')).trim().toUpperCase()!==String(lineaVal).toUpperCase())return false;
-    if(matchTurno==null){
-      // todos: incluir si la fecha del registro coincide con la fecha base, o si cae en alguna ventana de turno
-      const activos=(DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim().toLowerCase()).filter(Boolean);
-      const ts=_admResRecordTs(r);
-      if(ts==null)return String(r.fecha||'')===String(fecha);
-      for(const cod of(activos.length?activos:['dia','noche'])){
-        if(_admResTurnoNorm(r)!==cod)continue;
-        const w=_admResVentanaTurno(fecha,cod);
-        if(w&&ts>=w.start&&ts<w.end)return true;
-      }
-      return false;
-    }
-    if(_admResTurnoNorm(r)!==matchTurno)return false;
-    const w=_admResVentanaTurno(fecha,matchTurno);
-    if(!w)return String(r.fecha||'')===String(fecha);
-    const ts=_admResRecordTs(r);
-    return ts!=null&&ts>=w.start&&ts<w.end;
+    const same=String(r.fecha||'')===F||(!r.fecha&&F===_adminTodayLocalYmd());
+    if(!same)return false;
+    if(matchTurno==null)return true;   // todos los turnos de esa fecha
+    return _admResTurnoNorm(r)===String(matchTurno).toLowerCase();
   });
 }
 function _readAdmMResumenState(){
@@ -8927,14 +8919,12 @@ function ieExSetDateRangeForAnchor(turnoCod,anchorYmd){
   const dEl=document.getElementById('ieDesde'),hEl=document.getElementById('ieHasta');
   if(!dEl||!hEl)return;
   const A=_ieCycleDateNorm(anchorYmd);
-  const code=String(turnoCod||'').trim();
-  if(code&&_dashTurnoCrossesMidnight(code)){
-    dEl.value=A;
-    hEl.value=_adminAddDaysLocalYmd(A,1);
-  }else{
-    dEl.value=A;
-    hEl.value=A;
-  }
+  // La jornada completa (tarde + madrugada) YA está guardada bajo la fecha de
+  // inicio A, así que el rango del bloque es [A, A] aunque el turno cruce
+  // medianoche. (Antes ponía hasta=A+1, lo que arrastraba el turno del día
+  // siguiente ahora que la madrugada no se guarda en A+1.)
+  dEl.value=A;
+  hEl.value=A;
 }
 /** Misma regla que `_ieExplorerBucketsMolPes`: registro pertenece al bloque (turno + fecha ancla). */
 function _ieRecordInMolPesBucket(r,mod,bucketAnchor,bucketTurno){
@@ -9381,40 +9371,19 @@ function _ieFilterMolPes(mod,recs){
   const h0=_ieCycleDateNorm(hasta||d0);
   return recs.filter(r=>{
     if(linea&&String(r.linea||'').trim().toUpperCase()!==linea)return false;
-    const ts=_ieGetRecordTs(r,mod);
+    // La fecha guardada YA es la fecha del turno (madrugada noche → día de inicio),
+    // igual que admin/portal/index y el Excel del ERP. Se filtra por fecha en el
+    // rango [d0,h0] + turno coincidente; SIN ventana de tiempo (que excluía la
+    // madrugada guardada bajo el día de inicio y colaba el turno del día siguiente).
+    const ymd=_ieCycleDateNorm(r.fecha||'');
+    if(!ymd||ymd<d0||ymd>h0)return false;
     if(turno){
       const cod=String(turno).toLowerCase().trim();
-      if(mod==='moldes'&&_ieMoldeTurnoNorm(r)!==cod)return false;
-      if(mod==='pesajes'){
+      if(mod==='moldes'){ if(_ieMoldeTurnoNorm(r)!==cod)return false; }
+      else if(mod==='pesajes'){
         const rt=String(r.turno||'').toLowerCase().trim();
-        // Si r.turno existe, debe coincidir; si no, se infiere desde hora más abajo en wins
-        if(rt&&rt!==cod)return false;
-        if(!rt){
-          const inferred=_ieTurnoFromHoraStr(r.hora);
-          if(inferred&&inferred!==cod)return false;
-        }
-      }
-      const wins=_ieCollectTurnoWindows(d0,h0,cod);
-      if(!wins||!wins.length){
-        const d=_recDate(r);
-        if(d&&desde&&d.getTime()<_ymdToLocalStart(desde).getTime())return false;
-        if(d&&hasta&&d.getTime()>_ymdToLocalEnd(hasta).getTime())return false;
-        if(String(r.turno||'').toLowerCase()!==cod)return false;
-      }else if(ts==null||!wins.some(w=>ts>=w.start&&ts<w.end))return false;
-    }else{
-      const allCodes=(DB.data.turnos||[]).filter(t=>t.activo!==false).map(t=>String(t.codigo||'').trim()).filter(Boolean);
-      const codes=allCodes.length?allCodes:['dia','noche'];
-      if(ts!=null){
-        let inWin=false;
-        for(const cod of codes){
-          const wins=_ieCollectTurnoWindows(d0,h0,cod);
-          if(wins&&wins.some(w=>ts>=w.start&&ts<w.end)){inWin=true;break;}
-        }
-        if(!inWin)return false;
-      }else{
-        const d=_recDate(r);
-        if(d&&desde&&d.getTime()<_ymdToLocalStart(desde).getTime())return false;
-        if(d&&hasta&&d.getTime()>_ymdToLocalEnd(hasta).getTime())return false;
+        if(rt){ if(rt!==cod)return false; }
+        else { const inferred=_ieTurnoFromHoraStr(r.hora); if(inferred&&inferred!==cod)return false; }
       }
     }
     if(iniM!=null&&finM!=null&&!_ieHourFilterOk(String(r.hora||''),iniM,finM))return false;
