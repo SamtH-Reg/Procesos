@@ -7862,8 +7862,10 @@ async function adminRefreshTabletHealth(manual){
       const ts=tsRaw?Date.parse(tsRaw):NaN;
       return{dev:v.dev||String(r.key||'').replace('tb_hb:',''),nombre:v.nombre||'',rol:v.rol||'',email:v.email||'',lineas:Array.isArray(v.lineas)?v.lineas:[],pend:+v.pend||0,net:v.net||null,ver:v.v||'',pwa:v.pwa,ua:v.ua||'',uso:v.uso||null,online:v.online,lastOk:v.lastOkAt||null,ts:ts};
     })
-    // Ocultar tablets retiradas (sin latido hace >12 h): no son la operación actual.
-    .filter(r=>isFinite(r.ts)&&(Date.now()-r.ts)<12*3600000);
+    // Ocultar tablets retiradas (sin latido hace >12 h): no son la operación actual…
+    // …PERO nunca ocultar una que quedó con registros SIN SUBIR (pend>0), aunque
+    // esté offline hace días: es justo el caso a vigilar (datos atrapados en el equipo).
+    .filter(r=>isFinite(r.ts)&&((Date.now()-r.ts)<12*3600000 || r.pend>0));
     rows.sort((a,b)=>(b.ts||0)-(a.ts||0));
     _adminRenderTabletHealth(rows);
     if(manual&&typeof toast==='function')toast('Estado de tablets actualizado ('+rows.length+')','success');
