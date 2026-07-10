@@ -907,7 +907,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
       <div class="form-field"><label class="form-label">Colación (min)</label><input class="input" id="unidColacion" type="number" step="1" style="max-width:120px;" placeholder="40"></div>
       <button class="btn sm" type="button" onclick="saveUnidCfg()">Guardar parámetros</button>
     </div>
-    <div class="card-sub" style="margin-top:8px;">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio. &nbsp;Minutos = último − primer pesaje − colación (se descuenta solo si la jornada cruza la <strong>01:00 AM</strong>, hora de colación).</div>
+    <div class="card-sub" style="margin-top:8px;">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio. &nbsp;Minutos = último − primer pesaje − colación.</div>
   </div>
   <div class="card" style="margin-bottom:14px;">
     <div class="card-hdr"><div class="card-title">➕ Agregar / actualizar guía</div></div>
@@ -5952,18 +5952,6 @@ function _unidDatetime(p){
   if(!isNaN(hh)&&hh<7)d.setDate(d.getDate()+1);
   return d;
 }
-/* Colación a las 01:00 AM: los fileteros salen a colación a la 1:00 de la
-   madrugada. Se descuenta la colación (colMin) SOLO si la jornada del trabajador
-   (primer→último pesaje) cruza esa hora; si entró después o salió antes, no aplica. */
-function _unidColacionMin(first,last,colMin){
-  if(!first||!last||!(colMin>0))return 0;
-  for(let dOff=0;dOff<=1;dOff++){
-    const b=new Date(first); b.setDate(b.getDate()+dOff); b.setHours(1,0,0,0);
-    const bEnd=new Date(b.getTime()+colMin*60000);
-    if(last>b && first<bEnd) return colMin;   // la jornada abarca la colación
-  }
-  return 0;
-}
 let _unidLastRender=null;   // datos de la última matriz (para Exportar PDF)
 const _unidFmtD=d=>{const[a,m,dd]=String(d).split('-');return dd+'-'+m+'-'+a;};
 const _unidMonthLabel=ym=>{const[y,m]=String(ym).split('-');const N=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return (N[+m]||m)+' '+y;};
@@ -6026,7 +6014,7 @@ function _unidBuildMatrix(monthSel){
     const vals={}; let sum=0,cnt=0;
     dates.forEach(d=>{
       const day=w.days[d];
-      if(day&&day.min&&day.max){ const mins=(day.max-day.min)/60000-_unidColacionMin(day.min,day.max,colMin); const upm=mins>0?day.units/mins:0; vals[d]=upm; if(upm>0){sum+=upm;cnt++;} }
+      if(day&&day.min&&day.max){ const mins=(day.max-day.min)/60000-colMin; const upm=mins>0?day.units/mins:0; vals[d]=upm; if(upm>0){sum+=upm;cnt++;} }
       else vals[d]=null;
     });
     return {codigo:w.codigo,nombre:w.nombre,vals,avg:cnt?sum/cnt:0,dias:cnt};
@@ -6101,10 +6089,10 @@ function exportUnidPdf(){
   </style></head><body>
     <div class="hd">
       <div><h1>Unidades / min por día · Fileteros</h1><div class="sub">FRIOSUR SpA · ${esc(_unidMonthLabel(M.month))} · ${M.rows.length} fileteros · ${M.dates.length} días</div></div>
-      <div class="meta">Rendimiento base: ${rendPct}% · Colación: ${colMin} min (01:00 AM)<br>Generado: ${esc(now)}</div>
+      <div class="meta">Rendimiento base: ${rendPct}% · Colación: ${colMin} min<br>Generado: ${esc(now)}</div>
     </div>
     <table><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
-    <div class="ley">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio de la guía. Minutos = último − primer pesaje − colación (si la jornada cruza la 01:00 AM). Color vs. promedio de planta: <span class="sw" style="background:#c9edd4"></span>alto <span class="sw" style="background:#fdf0d8"></span>medio <span class="sw" style="background:#fbdede"></span>bajo.</div>
+    <div class="ley">Unidades = (kg filete ÷ rendimiento) ÷ peso promedio de la guía. Minutos = último − primer pesaje − colación. Color vs. promedio de planta: <span class="sw" style="background:#c9edd4"></span>alto <span class="sw" style="background:#fdf0d8"></span>medio <span class="sw" style="background:#fbdede"></span>bajo.</div>
     <script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>
   </body></html>`;
   const w=window.open('','_blank');
