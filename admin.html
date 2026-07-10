@@ -8961,6 +8961,106 @@ async function ieExDeleteMolPesBucket(mod,anchorYmd,turnoCod){
   toast(toRemove.length+' registro(s) eliminado(s) de Supabase','success');
 }
 /* ─────────────────────────────────────────────────────────────────────────
+   ➕ AGREGAR KILOS a un turno: producción real que el sistema no registró.
+   Crea un registro de AJUSTE por operario (tipo/hora elegidos, con su guía/ficha/
+   trab_id). Marcados con id en el rango 8.1e15 → trazables y reversibles. Sube a
+   Supabase (can_write) y actualiza la vista.
+   ───────────────────────────────────────────────────────────────────────── */
+function _ieAddKgBucketPeople(anchorYmd,turnoCod){
+  const recs=(RT.data.pesajes||[]).filter(r=>_ieRecordInMolPesBucket(r,'pesajes',anchorYmd,turnoCod));
+  const by={};
+  recs.forEach(r=>{
+    const cod=String(r.codigo||r.trab_id||r.trabId||'').trim(); if(!cod)return;
+    if(!by[cod])by[cod]={codigo:cod,nombre:r.nombre||'',ficha:r.ficha||'',trab_id:(r.trab_id!=null?r.trab_id:r.trabId)||null,linea:r.linea||'',kg:0,guias:{},especies:{}};
+    const o=by[cod]; o.kg+=(+r.kg||0);
+    if(!o.nombre&&r.nombre)o.nombre=r.nombre; if(!o.ficha&&r.ficha)o.ficha=r.ficha;
+    if(o.trab_id==null&&r.trab_id!=null)o.trab_id=r.trab_id;
+    if(r.guia)o.guias[r.guia]=(o.guias[r.guia]||0)+(+r.kg||0);
+    if(r.especie)o.especies[r.especie]=(o.especies[r.especie]||0)+(+r.kg||0);
+  });
+  const dom=m=>{let best=null,bk=-1;Object.keys(m||{}).forEach(k=>{if(m[k]>bk){bk=m[k];best=k;}});return best;};
+  return Object.values(by).map(o=>({...o,guiaDom:dom(o.guias),espDom:dom(o.especies)||'MERLUZA DE COLA'})).sort((a,b)=>b.kg-a.kg);
+}
+function ieOpenAddKgModal(anchorYmd,turnoCod){
+  const people=_ieAddKgBucketPeople(anchorYmd,turnoCod);
+  if(!people.length){toast('Ese turno no tiene operarios con registros para agregarles kilos.','warn');return;}
+  const turnoLab=_ieTurnoNombre(turnoCod), fechaLab=_ieFmtDdMmYyyyPlain(anchorYmd);
+  const rowsHtml=people.map((p,i)=>`<tr>
+    <td style="padding:5px 8px;font-size:12px;"><strong>${esc(p.codigo)}</strong></td>
+    <td style="padding:5px 8px;font-size:12px;white-space:nowrap;">${esc(p.nombre||'—')}</td>
+    <td class="num" style="padding:5px 8px;font-size:12px;color:var(--text-3);">${_fmt(p.kg)}</td>
+    <td style="padding:5px 8px;"><input type="number" step="0.01" min="0" class="ie-addkg-inp" data-i="${i}" style="width:110px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:6px;" placeholder="0"></td>
+  </tr>`).join('');
+  const ov=document.createElement('div');
+  ov.id='ieAddKgOverlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(2,6,23,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:14px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-size:16px;font-weight:800;">➕ Agregar kilos — ${esc(turnoLab)} · ${esc(fechaLab)}</div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:4px;">Producción real que el sistema no registró. Se crea un registro de ajuste por operario con los kilos indicados (trazable y reversible).</div>
+    </div>
+    <div style="padding:12px 18px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;border-bottom:1px solid var(--border);">
+      <div><div class="form-label" style="font-size:11px;">Tipo</div><select class="input" id="ieAddKgTipo" style="padding:5px 10px;"><option value="Filete">Filete</option><option value="Ovas">Ovas</option></select></div>
+      <div><div class="form-label" style="font-size:11px;">Hora del ajuste</div><input class="input" id="ieAddKgHora" value="01:00" style="width:90px;padding:5px 10px;" title="Hora en que se registran (por defecto la colación 01:00)"></div>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-3);">Total a agregar: <strong id="ieAddKgTotal" style="color:var(--acc,#2563eb);">0 kg</strong></div>
+    </div>
+    <div style="overflow:auto;flex:1;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="position:sticky;top:0;background:var(--surface-alt,#f8fafc);z-index:1;">
+          <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--text-3);">Código</th>
+          <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--text-3);">Nombre</th>
+          <th style="text-align:right;padding:6px 8px;font-size:11px;color:var(--text-3);">Kg actual</th>
+          <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--text-3);">Kg a agregar</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div style="padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn ghost sm" id="ieAddKgCancel">Cancelar</button>
+      <button type="button" class="btn sm" id="ieAddKgSave">Guardar ajuste</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  ov.querySelector('#ieAddKgCancel').addEventListener('click',close);
+  const recalc=()=>{let t=0;ov.querySelectorAll('.ie-addkg-inp').forEach(inp=>{const v=parseFloat(inp.value);if(v>0)t+=v;});ov.querySelector('#ieAddKgTotal').textContent=_fmt(t)+' kg';};
+  ov.querySelectorAll('.ie-addkg-inp').forEach(inp=>inp.addEventListener('input',recalc));
+  ov.querySelector('#ieAddKgSave').addEventListener('click',()=>{
+    const tipo=ov.querySelector('#ieAddKgTipo').value||'Filete';
+    const hora=(ov.querySelector('#ieAddKgHora').value||'01:00').trim();
+    const items=[];
+    ov.querySelectorAll('.ie-addkg-inp').forEach(inp=>{const v=parseFloat(inp.value);if(v>0)items.push({p:people[+inp.dataset.i],kg:Math.round(v*100)/100});});
+    if(!items.length){toast('Ingresa kilos en al menos un operario.','warn');return;}
+    _ieAddKgCommit(anchorYmd,turnoCod,tipo,hora,items,close);
+  });
+}
+async function _ieAddKgCommit(anchorYmd,turnoCod,tipo,hora,items,close){
+  if(!_sb){toast('Sin conexión a Supabase','err');return;}
+  const total=items.reduce((s,x)=>s+x.kg,0);
+  if(!confirm('¿Agregar '+_fmt(total)+' kg a '+items.length+' operario(s) del turno '+_ieTurnoNombre(turnoCod)+' · '+_ieFmtDdMmYyyyPlain(anchorYmd)+'?\n\nSe crean registros de ajuste (tipo '+tipo+', hora '+hora+').'))return;
+  const fecha=_ieCycleDateNorm(anchorYmd);
+  const turno=String(turnoCod||'noche').toLowerCase();
+  const base=8100000000000000+(Date.now()%100000000000)*100;
+  const rows=items.map((x,i)=>({
+    id:base+i, hora:hora, turno:turno, linea:x.p.linea||'L3', trab_id:x.p.trab_id!=null?x.p.trab_id:null,
+    codigo:x.p.codigo, nombre:x.p.nombre||'', ficha:x.p.ficha||'', especie:x.p.espDom||'MERLUZA DE COLA',
+    tipo:tipo, kg:x.kg, guia:x.p.guiaDom||null, fecha:fecha
+  }));
+  toast('Agregando '+rows.length+' registro(s)…','info');
+  try{
+    const {error}=await _sb.from('pesajes').insert(rows);
+    if(error)throw error;
+  }catch(e){console.error(e);toast('No se pudo agregar en Supabase: '+(e&&e.message||e),'err');return;}
+  if(!Array.isArray(RT.data.pesajes))RT.data.pesajes=[];
+  rows.forEach(r=>RT.data.pesajes.push(Object.assign({trabId:r.trab_id},r)));
+  RT._ensureShape();RT.save();
+  if(typeof _doRender==='function')_doRender(new Set(['pesajes']));
+  previewFiltered();ieRenderExplorer();
+  if(close)close();
+  toast(_fmt(total)+' kg agregados a '+rows.length+' operario(s) ✓','success');
+}
+/* ─────────────────────────────────────────────────────────────────────────
    Ver / editar / eliminar REGISTROS INDIVIDUALES de un bloque (turno+fecha).
    Edita y borra también en Supabase (_sb, supervisor autenticado con can_write).
    ───────────────────────────────────────────────────────────────────────── */
@@ -9189,6 +9289,7 @@ function ieExplorerClickDelegate(ev){
   if(!b)return;
   const act=b.getAttribute('data-ie-act');
   if(act==='export-molpes'){ieExApplyMolPes(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'',true);return;}
+  if(act==='addkg-molpes'){ieOpenAddKgModal(b.dataset.anchor,b.dataset.turno||'');return;}
   if(act==='delete-molpes'){ieExDeleteMolPesBucket(b.dataset.mod,b.dataset.anchor,b.dataset.turno||'');return;}
   if(act==='show-records'){_ieToggleRecords(b.dataset.tgt);return;}
   if(act==='edit-rec'){_ieEditRecordForm(b.dataset.mod,b.dataset.id,b.dataset.tgt);return;}
@@ -9237,6 +9338,7 @@ function ieRenderExplorer(){
         const recId='ierecs_'+esc(mod)+'_'+String(o.turno).replace(/[^a-z0-9]/gi,'')+'_'+String(o.anchor).replace(/[^0-9]/g,'');
         html+=`<div class="ie-ex-row"><div class="ie-ex-meta"><strong>${tn}</strong><br>${refLine} · ${o.count} reg.${kg}${ventana?'<br>'+ventana:''}</div><div class="ie-ex-actions">`+
           `<button type="button" class="btn ghost sm" data-ie-act="show-records" data-tgt="${recId}" title="Ver, editar o eliminar registros individuales">📋 Ver registros</button>`+
+          (mod==='pesajes'?`<button type="button" class="btn ghost sm" data-ie-act="addkg-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" title="Agregar kilos a los operarios de este turno (producción no registrada por el sistema)">➕ Agregar kilos</button>`:'')+
           `<button type="button" class="btn sm" data-ie-act="export-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}">Exportar Excel</button>`+
           `<button type="button" class="btn ghost sm danger" data-ie-act="delete-molpes" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" title="Quita del sistema los registros de este turno y fecha">Eliminar…</button></div></div>`+
           `<div class="ie-recs" id="${recId}" data-mod="${esc(mod)}" data-anchor="${esc(o.anchor)}" data-turno="${esc(o.turno)}" hidden></div>`;
