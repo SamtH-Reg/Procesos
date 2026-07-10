@@ -4788,6 +4788,7 @@ function _idxPermOfflineModule(key){
   return ['moldes','tuneles','pesaje','general'].includes(key);
 }
 async function tbFlushPendingCloudSync(opts){
+  if(window._tbRetired)return{ok:false,reason:'retired'};   // equipo retirado: no sube nada
   opts=opts||{};
   const silent=!!opts.silent;
   const force=!!opts.force; // si true, intenta alinear firmas con local aunque push falle
@@ -12736,6 +12737,7 @@ let _tbForceSyncSeen=(()=>{try{return +localStorage.getItem('tb_force_sync_seen'
 let _tbForceSyncInFlight=false;
 async function _tbHandleForceSync(value){
   try{
+    if(window._tbRetired){try{void _tbPurgeOutbox();}catch(_){}return;} // equipo retirado: ignora la orden de subir
     const at=value&&typeof value==='object'?(+value.at||0):0;
     if(!at||at<=_tbForceSyncSeen||_tbForceSyncInFlight)return; // ya atendida / sin timestamp / en curso
     _tbForceSyncInFlight=true;
@@ -12774,15 +12776,40 @@ window._tbHandleTrabPing=_tbHandleTrabPing;
 async function _tbCheckForceSync(){
   if(!_tbSb||!_tbUser||(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline()))return;
   try{
-    // Un solo request lee ambas órdenes: subida forzada + ping de trabajadores.
-    const{data,error}=await _tbSb.from('app_kv').select('key,value').in('key',[TB_FORCE_SYNC_KEY,TB_TRAB_PING_KEY]);
+    // Un solo request lee las órdenes: subida forzada + ping de trabajadores + blocklist.
+    const{data,error}=await _tbSb.from('app_kv').select('key,value').in('key',[TB_FORCE_SYNC_KEY,TB_TRAB_PING_KEY,TB_BLOCKLIST_KEY]);
     if(!error&&Array.isArray(data))for(const r of data){
       if(r.key===TB_FORCE_SYNC_KEY&&r.value)await _tbHandleForceSync(r.value);
       else if(r.key===TB_TRAB_PING_KEY&&r.value)await _tbHandleTrabPing(r.value);
+      else if(r.key===TB_BLOCKLIST_KEY&&r.value)await _tbApplyBlocklist(r.value);
     }
   }catch(_){}
 }
 window._tbCheckForceSync=_tbCheckForceSync;
+/* ── RETIRO DE EQUIPO (blocklist) ─────────────────────────────────────────────
+   El admin puede "descartar" una tablet retirada (app_kv[friosur_tb_blocklist]=
+   {devs:[...]}) . Si esta tablet está en la lista: NO sube NADA y DESCARTA su
+   outbox viejo. Evita que un equipo del mes pasado reviva datos ya reemplazados
+   por la reconciliación del ERP (subirían con ids viejos → duplicados). */
+const TB_BLOCKLIST_KEY='friosur_tb_blocklist';
+window._tbRetired=(()=>{try{return localStorage.getItem('friosur_tb_retired')==='1';}catch(_){return false;}})();
+async function _tbPurgeOutbox(){
+  try{const all=await Outbox.all();for(const r of all){if(r&&r.id!=null)await Outbox.del(r.id);}}catch(_){}
+  try{void _obxRefreshPendCache();}catch(_){}
+}
+async function _tbApplyBlocklist(value){
+  try{
+    const devs=value&&Array.isArray(value.devs)?value.devs.map(String):(Array.isArray(value)?value.map(String):[]);
+    if(!devs.includes(_tbDeviceId()))return;
+    if(!window._tbRetired){try{localStorage.setItem('friosur_tb_retired','1');}catch(_){}}
+    window._tbRetired=true;
+    await _tbPurgeOutbox();               // descarta los pendientes viejos
+    try{if(typeof _tbWriteHeartbeat==='function')await _tbWriteHeartbeat();}catch(_){}  // reporta pend:0 al panel
+    if(typeof showToast==='function')showToast('Equipo retirado por el panel: sus datos antiguos no se subirán.','info');
+  }catch(_){}
+}
+// Si ya venía retirada de una sesión anterior, purga el outbox al arrancar.
+try{if(window._tbRetired)setTimeout(()=>{try{_tbPurgeOutbox();}catch(_){}},4000);}catch(_){}
 
 /* ══════════════════════════════════════════════════════════════════════════
    OUTBOX DURABLE DE PESAJES (IndexedDB)  ·  red de seguridad anti-pérdida
@@ -12925,6 +12952,7 @@ window._obxAck=_obxAck;
    Una pasada por invocación (sin while ni recursión): simple y sin colgar. */
 let _obxDraining=false;
 async function _obxDrain(){
+  if(window._tbRetired){try{void _tbPurgeOutbox();}catch(_){}return;}   // equipo retirado: no sube, descarta
   if(_obxDraining||window._tbDrainLock)return;   // candado compartido: un solo subidor a la vez (evita POSTs dobles)
   if(!_tbSb||!_tbUser)return;
   if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
@@ -13015,6 +13043,7 @@ async function _tbAutoGetToken(url,key,force){
   return _tbGetTokSync()||'';
 }
 async function _tbAutonomousDrain(){
+  if(window._tbRetired){try{void _tbPurgeOutbox();}catch(_){}return;}   // equipo retirado: no sube, descarta
   if(_tbAutoDrainIn||window._tbDrainLock)return;   // candado compartido con _obxDrain (evita POSTs dobles)
   if(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline())return;
   let rows=[];try{rows=(await Outbox.all()).filter(r=>r&&r.id!=null&&!_obxSkip.has(String(r.id)));}catch(_){return;}

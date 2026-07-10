@@ -7930,6 +7930,7 @@ function _adminRenderTabletHealth(rows){
         +'<b>Modo:</b> '+(t.pwa===true?'📱 app instalada (ventana propia, sin pestañas)':(t.pwa===false?'🌐 navegador Chrome (con pestañas — conviene instalar la app)':'—'))
         +' &nbsp;·&nbsp; <b>Versión:</b> '+esc(t.ver||'antigua')+' &nbsp;·&nbsp; <b>Equipo:</b> '+esc(_adminPlatFromUa(t.ua))+'<br>'
         +'<b>Navegador (UA completo):</b> <span style="font-size:10px;color:var(--text-3);">'+esc(t.ua||'—')+'</span>'
+        +'<div style="margin-top:10px;"><button class="btn sm" style="background:#dc2626;border-color:#dc2626;color:#fff;" onclick="event.stopPropagation();adminRetireTablet('+JSON.stringify(t.dev)+')" title="Quita el equipo del panel y, si se reenciende, DESCARTA sus registros viejos en vez de subirlos (evita duplicados de datos ya reconciliados).">🗑 Descartar equipo — no subir sus datos viejos</button></div>'
       +'</td></tr>';
   }).join('');
   if(alertBox){
@@ -7967,6 +7968,27 @@ function adminTbHbToggle(i){
   const d=document.getElementById('admHbDet'+i);
   if(d)d.hidden=!d.hidden;
 }
+/** Descarta un equipo retirado: lo agrega a la blocklist (para que, si se reenciende,
+ *  NO suba sus datos viejos y descarte su outbox) y borra su latido del panel. */
+async function adminRetireTablet(dev){
+  if(!_sb){toast('Conecta a Supabase primero','warn');return;}
+  dev=String(dev||'').trim(); if(!dev)return;
+  if(!confirm('¿Descartar la tablet "'+dev+'"?\n\n• Se quita del panel.\n• Si esa tablet se reenciende, DESCARTA sus registros viejos en vez de subirlos (evita duplicar datos del mes pasado ya reconciliados).\n\nUsa esto solo para equipos retirados o con datos antiguos ya cargados.'))return;
+  try{
+    // 1) agregar el dev a la blocklist (merge con la existente)
+    let cur=[];
+    try{const{data}=await _sb.from('app_kv').select('value').eq('key','friosur_tb_blocklist').maybeSingle();
+        if(data&&data.value&&Array.isArray(data.value.devs))cur=data.value.devs.map(String);}catch(_){}
+    if(!cur.includes(dev))cur.push(dev);
+    const{error:e1}=await _sb.from('app_kv').upsert({key:'friosur_tb_blocklist',value:{devs:cur,at:Date.now()},updated_at:new Date().toISOString()},{onConflict:'key'});
+    if(e1)throw e1;
+    // 2) borrar su latido → sale del panel
+    await _sb.from('app_kv').delete().eq('key','tb_hb:'+dev);
+    toast('Equipo descartado. Si se reenciende, no subirá sus datos viejos.','success');
+    adminRefreshTabletHealth(true);
+  }catch(e){toast('No se pudo descartar: '+(e&&e.message||e),'err');}
+}
+window.adminRetireTablet=adminRetireTablet;
 function adminStartTabletHealthWatch(){
   if(_adminTabletHealthTimer)clearInterval(_adminTabletHealthTimer);
   adminRefreshTabletHealth(false);
