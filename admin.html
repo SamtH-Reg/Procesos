@@ -9655,26 +9655,63 @@ function _adminExportRealDateTime(r){
   const ddmmyyyy=p(d.getDate())+'-'+p(d.getMonth()+1)+'-'+d.getFullYear();
   return{ymd:d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()),ddmmyyyy,fechaHora:ddmmyyyy+(hora?(' '+hora):'')};
 }
+/* Serial de fecha Excel (sistema 1900, base 1899-12-30) desde 'YYYY-MM-DD' + minutos
+   del día. Se calcula en UTC para evitar el corrimiento de 1 día por zona horaria. */
+function _adminXlDateSerial(ymd,hm){
+  const m=String(ymd||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return '';
+  const base=Date.UTC(1899,11,30);
+  const t=Date.UTC(+m[1],+m[2]-1,+m[3])+(hm!=null?hm*60000:0);
+  return (t-base)/86400000;
+}
+/* Devuelve número si el texto es numérico puro (para Guía/Ficha), si no el texto. */
+function _adminNumOrText(v){
+  const s=String(v==null?'':v).trim();
+  if(s==='')return '';
+  return /^\d+(?:\.\d+)?$/.test(s)?Number(s):s;
+}
+/* Aplica formatos (.z) a columnas por su encabezado, para que Excel las trate como
+   fecha/número reales. Recorre la fila 0 (encabezados) para ubicar cada columna. */
+function _adminApplyColFormats(ws,fmtMap){
+  if(!ws||!ws['!ref'])return;
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  const colOf={};
+  for(let c=range.s.c;c<=range.e.c;c++){
+    const cell=ws[XLSX.utils.encode_cell({r:0,c})];
+    if(cell&&cell.v!=null)colOf[String(cell.v)]=c;
+  }
+  Object.keys(fmtMap).forEach(h=>{
+    const c=colOf[h]; if(c==null)return;
+    for(let rr=range.s.r+1;rr<=range.e.r;rr++){
+      const cell=ws[XLSX.utils.encode_cell({r:rr,c})];
+      if(cell&&cell.t==='n')cell.z=fmtMap[h];
+    }
+  });
+}
+/* Formatos por columna para las hojas de pesajes/moldes. */
+const _ADMIN_EXPORT_FMT={'Fecha real':'dd-mm-yyyy','Fecha Turno':'dd-mm-yyyy','real Fecha y Hora':'dd-mm-yyyy hh:mm','Kilos':'0.00','Guía':'0','Ficha':'0','Cant':'0','Pendiente':'0'};
 function _adminPesajesSheetRowsForExport(rows){
   return(Array.isArray(rows)?rows:[]).map(r=>{
     const kg=r.kg!=null&&r.kg!==''?Number(r.kg):'';
     const real=_adminExportRealDateTime(r);
+    const turnoYmd=String(r.fecha||'').slice(0,10);
+    const hm=_adminParseHMToMinutes(r.hora);
     return{
       'Turno':_adminTurnoLabelPesajeExport(r.turno),
       'Planillero':_adminPlanilleroForPesajeRow(r),
-      'Fecha':_adminFechaDdMmYyyyExport(r.fecha),
-      'Hora':String(r.hora||'').trim().slice(0,8),
+      'Fecha real':real.ymd?_adminXlDateSerial(real.ymd,null):'',
+      'Hora':String(r.hora||'').trim().slice(0,5),
       'Hora Entera':_adminHoraEnteraFromHm(r.hora),
-      'Fecha real':real.ddmmyyyy,
-      'Fecha y hora real':real.fechaHora,
-      'Guía':String(r.guia!=null?r.guia:''),
+      'Guía':_adminNumOrText(r.guia),
       'Especie':String(r.especie!=null?r.especie:''),
       'Tipo Corte':String(r.tipo!=null?r.tipo:''),
       'Codigo':String(r.codigo!=null?r.codigo:''),
       'Nombre':String(r.nombre!=null?r.nombre:''),
-      'Ficha':String(r.ficha!=null?r.ficha:''),
+      'Ficha':_adminNumOrText(r.ficha),
       'Linea':String(r.linea!=null?r.linea:''),
-      'Kilos':kg
+      'Kilos':kg,
+      'Fecha Turno':turnoYmd?_adminXlDateSerial(turnoYmd,null):'',
+      'real Fecha y Hora':real.ymd?_adminXlDateSerial(real.ymd,hm!=null?hm:0):''
     };
   });
 }
@@ -9686,25 +9723,27 @@ function _adminMoldesSheetRowsForExport(rows){
   return(Array.isArray(rows)?rows:[]).map(r=>{
     const kg=r.kg!=null&&r.kg!==''?Number(r.kg):'';
     const real=_adminExportRealDateTime(r);
+    const turnoYmd=String(r.fecha||'').slice(0,10);
+    const hm=_adminParseHMToMinutes(r.hora);
     return{
       'Turno':_adminTurnoLabelPesajeExport(r.turno),
-      'Fecha':_adminFechaDdMmYyyyExport(r.fecha),
-      'Hora':String(r.hora||'').trim().slice(0,8),
+      'Fecha real':real.ymd?_adminXlDateSerial(real.ymd,null):'',
+      'Hora':String(r.hora||'').trim().slice(0,5),
       'Hora Entera':_adminHoraEnteraFromHm(r.hora),
-      'Fecha real':real.ddmmyyyy,
-      'Fecha y hora real':real.fechaHora,
-      'Guía':String(r.guia!=null?r.guia:''),
+      'Guía':_adminNumOrText(r.guia),
       'Especie':String(r.especie!=null?r.especie:''),
       'Producto':String(r.producto!=null?r.producto:''),
       'Destino':String(r.destino!=null?r.destino:''),
       'Calibre':String(r.calibre!=null?r.calibre:''),
       'Codigo':String(r.codigo!=null?r.codigo:''),
       'Nombre':String(r.nombre!=null?r.nombre:''),
-      'Ficha':String(r.ficha!=null?r.ficha:''),
+      'Ficha':_adminNumOrText(r.ficha),
       'Linea':String(r.linea!=null?r.linea:''),
       'Cant':r.cant!=null&&r.cant!==''?Number(r.cant):'',
       'Pendiente':r.pendiente!=null&&r.pendiente!==''?Number(r.pendiente):'',
-      'Kilos':kg
+      'Kilos':kg,
+      'Fecha Turno':turnoYmd?_adminXlDateSerial(turnoYmd,null):'',
+      'real Fecha y Hora':real.ymd?_adminXlDateSerial(real.ymd,hm!=null?hm:0):''
     };
   });
 }
@@ -9728,11 +9767,13 @@ function exportFiltered(){
   if(!f.length){toast('Sin registros para exportar','warn');return;}
   const wb=XLSX.utils.book_new();
   if(mod==='pesajes'){
-    const sheet=_adminPesajesSheetRowsForExport(f);
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheet),mod);
+    const ws=XLSX.utils.json_to_sheet(_adminPesajesSheetRowsForExport(f));
+    _adminApplyColFormats(ws,_ADMIN_EXPORT_FMT);
+    XLSX.utils.book_append_sheet(wb,ws,mod);
   }else if(mod==='moldes'){
-    const sheet=_adminMoldesSheetRowsForExport(f);
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheet),mod);
+    const ws=XLSX.utils.json_to_sheet(_adminMoldesSheetRowsForExport(f));
+    _adminApplyColFormats(ws,_ADMIN_EXPORT_FMT);
+    XLSX.utils.book_append_sheet(wb,ws,mod);
   }else{
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
   }
