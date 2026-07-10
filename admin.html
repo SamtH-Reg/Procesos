@@ -9653,15 +9653,32 @@ function _adminPlanilleroForPesajeRow(r){
     return _adminPlanilleroNombre(best&&best.planillero);
   }catch(e){return'';}
 }
+/* Fecha REAL de calendario del registro: la madrugada de noche (hora < 07:00) se
+   guarda con la fecha del día de INICIO del turno, pero ocurrió el día siguiente.
+   Devuelve {ymd, ddmmyyyy, fechaHora} con el instante real reconstruido. */
+function _adminExportRealDateTime(r){
+  const m=String(r&&r.fecha||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const hora=String(r&&r.hora||'').trim().slice(0,5);
+  if(!m)return{ymd:'',ddmmyyyy:'',fechaHora:hora};
+  const hm=_adminParseHMToMinutes(r.hora);
+  const d=new Date(+m[1],+m[2]-1,+m[3]);
+  if(hm!=null&&hm<7*60)d.setDate(d.getDate()+1);   // madrugada → día real siguiente
+  const p=n=>String(n).padStart(2,'0');
+  const ddmmyyyy=p(d.getDate())+'-'+p(d.getMonth()+1)+'-'+d.getFullYear();
+  return{ymd:d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()),ddmmyyyy,fechaHora:ddmmyyyy+(hora?(' '+hora):'')};
+}
 function _adminPesajesSheetRowsForExport(rows){
   return(Array.isArray(rows)?rows:[]).map(r=>{
     const kg=r.kg!=null&&r.kg!==''?Number(r.kg):'';
+    const real=_adminExportRealDateTime(r);
     return{
       'Turno':_adminTurnoLabelPesajeExport(r.turno),
       'Planillero':_adminPlanilleroForPesajeRow(r),
       'Fecha':_adminFechaDdMmYyyyExport(r.fecha),
       'Hora':String(r.hora||'').trim().slice(0,8),
       'Hora Entera':_adminHoraEnteraFromHm(r.hora),
+      'Fecha real':real.ddmmyyyy,
+      'Fecha y hora real':real.fechaHora,
       'Guía':String(r.guia!=null?r.guia:''),
       'Especie':String(r.especie!=null?r.especie:''),
       'Tipo Corte':String(r.tipo!=null?r.tipo:''),
@@ -9680,11 +9697,14 @@ function _adminPesajesSheetRowsForExport(rows){
 function _adminMoldesSheetRowsForExport(rows){
   return(Array.isArray(rows)?rows:[]).map(r=>{
     const kg=r.kg!=null&&r.kg!==''?Number(r.kg):'';
+    const real=_adminExportRealDateTime(r);
     return{
       'Turno':_adminTurnoLabelPesajeExport(r.turno),
       'Fecha':_adminFechaDdMmYyyyExport(r.fecha),
       'Hora':String(r.hora||'').trim().slice(0,8),
       'Hora Entera':_adminHoraEnteraFromHm(r.hora),
+      'Fecha real':real.ddmmyyyy,
+      'Fecha y hora real':real.fechaHora,
       'Guía':String(r.guia!=null?r.guia:''),
       'Especie':String(r.especie!=null?r.especie:''),
       'Producto':String(r.producto!=null?r.producto:''),
