@@ -12785,11 +12785,12 @@ async function _tbCheckForceSync(){
   if(!_tbSb||!_tbUser||(typeof tbNavigatorOnline==='function'&&!tbNavigatorOnline()))return;
   try{
     // Un solo request lee las órdenes: subida forzada + ping de trabajadores + blocklist.
-    const{data,error}=await _tbSb.from('app_kv').select('key,value').in('key',[TB_FORCE_SYNC_KEY,TB_TRAB_PING_KEY,TB_BLOCKLIST_KEY]);
+    const{data,error}=await _tbSb.from('app_kv').select('key,value').in('key',[TB_FORCE_SYNC_KEY,TB_TRAB_PING_KEY,TB_BLOCKLIST_KEY,TB_RECOVER_KEY]);
     if(!error&&Array.isArray(data))for(const r of data){
       if(r.key===TB_FORCE_SYNC_KEY&&r.value)await _tbHandleForceSync(r.value);
       else if(r.key===TB_TRAB_PING_KEY&&r.value)await _tbHandleTrabPing(r.value);
       else if(r.key===TB_BLOCKLIST_KEY&&r.value)await _tbApplyBlocklist(r.value);
+      else if(r.key===TB_RECOVER_KEY&&r.value)await _tbHandleRecover(r.value);
     }
   }catch(_){}
 }
@@ -12955,6 +12956,74 @@ function _tbUploadPesajeRow(row){
 window._tbUploadPesajeRow=_tbUploadPesajeRow;
 async function _obxAck(id){try{await Outbox.del(id);}catch(_){}}
 window._obxAck=_obxAck;
+/* ─── RECUPERACIÓN de pesajes perdidos por colisión de id ─────────────────────
+   Tras el fix de nextId, cada tablet re-sube los pesajes que FueRON SOBRESCRITOS
+   por otra tablet (colisión de id): compara sus registros LOCALES vs la nube por
+   id; los que en la nube no coinciden (otra tablet los pisó, o nunca llegaron) se
+   re-suben con un id NUEVO único. No duplica los que sí sobrevivieron. Corre una
+   vez por comando remoto (friosur_recover) o abriendo con ?recover=1.
+   IMPORTANTE: solo corre si la tablet YA tiene el nextId nuevo (probe). */
+async function _tbRecoverLostTurno(fechaOpt){
+  const log=[]; let recuperados=0, revisados=0;
+  try{
+    // Probe: ¿ya está el fix? El nextId nuevo ignora max(arr) y da < 8e15.
+    const probe=nextId([{id:9000000000000000}]);
+    if(probe>=8000000000000000){ log.push('⚠️ Esta tablet AÚN tiene la versión vieja. Recargala/reabrila y reintentá.'); return _tbShowRecoverPanel(log,0,0); }
+    if(!_tbSb||!_tbUser){ log.push('⚠️ Sin sesión Supabase. Iniciá sesión y reintentá.'); return _tbShowRecoverPanel(log,0,0); }
+    const fturno=fechaOpt||((typeof _fechaRegistroOperativo==='function')?_fechaRegistroOperativo('noche',''):todayLocalYmd());
+    const locales=(RT.pesajes||[]).filter(r=>r&&String(r.fecha||'').slice(0,10)===String(fturno)&&String(r.turno||'').toLowerCase()==='noche');
+    revisados=locales.length;
+    log.push('Turno: '+fturno+' · pesajes locales: '+locales.length);
+    if(!locales.length){ log.push('Este equipo no tiene pesajes locales de ese turno.'); return _tbShowRecoverPanel(log,0,0); }
+    const {data,error}=await _tbSb.from('pesajes').select('id,codigo,kg').eq('fecha',fturno).eq('turno','noche');
+    if(error){ log.push('⚠️ No se pudo leer la nube: '+error.message); return _tbShowRecoverPanel(log,0,revisados); }
+    const cloud=new Map(); (data||[]).forEach(c=>cloud.set(String(c.id),c));
+    const perdidos=locales.filter(r=>{
+      const c=cloud.get(String(r.id));
+      const survived=c && String(c.codigo||'')===String(r.codigo||'') && Math.abs((+c.kg||0)-(+r.kg||0))<0.005;
+      return !survived;   // sobrescrito por otra tablet o ausente
+    });
+    log.push('Perdidos detectados (sobrescritos): '+perdidos.length);
+    perdidos.forEach(r=>{ r.id=nextId(RT.pesajes); });   // id nuevo ÚNICO (sin colisión)
+    try{rtSave({skipCloudSchedule:true});}catch(_){}
+    for(const r of perdidos){ try{ await Outbox.put(_tbMapPesajeRowForCloud(r)); }catch(_){} }
+    try{ if(typeof _obxDrain==='function') await _obxDrain(); }catch(_){}
+    recuperados=perdidos.length;
+    log.push('✅ Re-encolados y subidos con id nuevo: '+recuperados);
+  }catch(e){ log.push('⚠️ Error: '+(e&&e.message||e)); }
+  _tbShowRecoverPanel(log,recuperados,revisados);
+  return {recuperados,revisados};
+}
+window._tbRecoverLostTurno=_tbRecoverLostTurno;
+function _tbShowRecoverPanel(log,recuperados,revisados){
+  try{
+    const prev=document.getElementById('tbRecoverOverlay'); if(prev)prev.remove();
+    const div=document.createElement('div'); div.id='tbRecoverOverlay';
+    div.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(2,6,23,.92);color:#e2e8f0;font:14px/1.6 system-ui,sans-serif;padding:24px;overflow:auto;';
+    div.innerHTML='<div style="max-width:560px;margin:0 auto;background:#0f1830;border:1px solid #334155;border-radius:14px;padding:20px;">'
+      +'<div style="font-size:18px;font-weight:800;margin-bottom:10px;">♻️ Recuperación de pesajes del turno</div>'
+      +log.map(l=>'<div style="padding:3px 0;">'+l+'</div>').join('')
+      +'<div style="margin-top:14px;padding:10px 14px;border-radius:10px;font-weight:800;background:'+(recuperados>0?'rgba(22,163,74,.2)':'rgba(148,163,184,.15)')+';border:1px solid '+(recuperados>0?'#16a34a':'#64748b')+';">'
+      +(recuperados>0?('✅ '+recuperados+' pesaje(s) recuperados y re-subidos'):'Nada por recuperar en este equipo')+'</div>'
+      +'<button onclick="document.getElementById(\'tbRecoverOverlay\').remove()" style="margin-top:14px;padding:8px 16px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;">Cerrar</button>'
+      +'</div>';
+    document.body.appendChild(div);
+  }catch(_){}
+}
+try{ if(/[?&]recover=1/.test(location.search)) window.addEventListener('load',()=>setTimeout(()=>_tbRecoverLostTurno(),2500)); }catch(_){}
+/* Comando remoto de recuperación: el admin/DB escribe app_kv[friosur_recover]={at,fecha}
+   y cada tablet ya actualizada corre la recuperación UNA vez (dedup por 'at'). */
+const TB_RECOVER_KEY='friosur_recover';
+let _tbRecoverSeen=(()=>{try{return +localStorage.getItem('tb_recover_seen')||0;}catch(_){return 0;}})();
+async function _tbHandleRecover(value){
+  try{
+    const at=value&&typeof value==='object'?(+value.at||0):0;
+    if(!at||at<=_tbRecoverSeen)return;
+    _tbRecoverSeen=at; try{localStorage.setItem('tb_recover_seen',String(at));}catch(_){}
+    await _tbRecoverLostTurno(value&&value.fecha?String(value.fecha):null);
+  }catch(_){}
+}
+window._tbHandleRecover=_tbHandleRecover;
 /* ─── AUTO-TEST de flujo de datos (diagnóstico, SOLO con ?selftest=1) ─────────
    Corre en el equipo REAL: prueba el outbox durable, la retención "por subir",
    la idempotencia del store y que los drenadores no rompen. Usa ids de prueba
