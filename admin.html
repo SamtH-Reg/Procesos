@@ -453,6 +453,7 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   <div class="nav-item" data-page="equipos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Equipos</div>
 
   <div class="nav-sec">Sistema</div>
+  <div class="nav-item" data-page="auditoria"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>Auditoría</div>
   <div class="nav-item" data-page="roles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Permisos y roles</div>
   <div class="nav-item" data-page="import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Importar / Exportar</div>
   <div class="nav-item" data-page="supabase"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>Supabase</div>
@@ -1093,6 +1094,32 @@ body.admin-auth-lock #authOverlay{pointer-events:auto;}
   </table></div>
 </div>
 
+<!-- ═══ AUDITORÍA ═══ -->
+<div class="page" id="page-auditoria">
+  <div class="page-hdr">
+    <div><h1 class="page-title">Auditoría de pesajes</h1><div class="page-sub">Registro de cambios en la base: ediciones, eliminaciones, ajustes manuales y <strong>colisiones de id</strong> (un registro pisando a otro). Detecta al instante si algo mueve datos.</div></div>
+    <button type="button" class="btn ghost sm" onclick="renderAuditoria()">↻ Actualizar</button>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr" style="flex-wrap:wrap;gap:8px 12px;align-items:center;">
+      <div class="card-title">📜 Movimientos recientes</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;">
+        <select class="input" id="audFiltroOp" style="max-width:180px;padding:6px 10px;" onchange="renderAuditoria()">
+          <option value="">Todos los tipos</option>
+          <option value="COLISION">⚠ Colisiones</option>
+          <option value="DELETE">Eliminaciones</option>
+          <option value="UPDATE">Ediciones</option>
+          <option value="AJUSTE">Ajustes manuales</option>
+        </select>
+        <input class="input" id="audFiltroFecha" type="date" style="max-width:160px;padding:6px 10px;" onchange="renderAuditoria()" title="Filtrar por fecha del registro afectado">
+        <div class="card-sub" id="audSub" style="margin:0;">—</div>
+      </div>
+    </div>
+    <div id="audAlert"></div>
+    <div id="audList"><div style="padding:14px;color:var(--text-3);">Cargando…</div></div>
+  </div>
+</div>
+
 <!-- ═══ ROLES ═══ -->
 <div class="page" id="page-roles">
   <div class="page-hdr">
@@ -1585,6 +1612,7 @@ document.querySelectorAll('.nav-item').forEach(n=>{
     if(id==='turnos')renderTurnos();
     if(id==='turnos-asistencia'&&typeof renderTurnosAsistencia==='function')renderTurnosAsistencia();
     if(id==='equipos')renderEquipos();
+    if(id==='auditoria'&&typeof renderAuditoria==='function')renderAuditoria();
     if(id==='roles'){renderRoles();void resyncAuthThenRefreshRoles();}
     if(id==='supabase'){
       if(typeof renderMigracionesSQL==='function')renderMigracionesSQL();
@@ -7969,6 +7997,54 @@ async function adminRetireTablet(dev){
   }catch(e){toast('No se pudo descartar: '+(e&&e.message||e),'err');}
 }
 window.adminRetireTablet=adminRetireTablet;
+/* ─── AUDITORÍA: lee audit_pesajes (trigger en la base) y muestra los movimientos.
+   Detecta colisiones de id, ediciones, borrados y ajustes manuales. ─── */
+async function renderAuditoria(){
+  const list=document.getElementById('audList'), sub=document.getElementById('audSub'), alertBox=document.getElementById('audAlert');
+  if(!list)return;
+  if(!_sb){list.innerHTML='<div style="padding:14px;color:var(--text-3);">Conecta a Supabase para ver la auditoría.</div>';return;}
+  const op=(document.getElementById('audFiltroOp')||{}).value||'';
+  const fe=(document.getElementById('audFiltroFecha')||{}).value||'';
+  list.innerHTML='<div style="padding:14px;color:var(--text-3);">Cargando…</div>';
+  try{
+    let q=_sb.from('audit_pesajes').select('*').order('ts',{ascending:false}).limit(500);
+    if(op)q=q.eq('op',op);
+    if(fe)q=q.eq('fecha',fe);
+    const {data,error}=await q;
+    if(error)throw error;
+    const rows=Array.isArray(data)?data:[];
+    // Alerta de colisiones (lo crítico)
+    let colis=0; try{const c=await _sb.from('audit_pesajes').select('id',{count:'exact',head:true}).eq('op','COLISION');colis=c.count||0;}catch(_){}
+    if(alertBox){
+      alertBox.innerHTML = colis>0
+        ? '<div style="background:rgba(220,38,38,.12);border:1px solid #dc2626;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;">⚠ <strong>'+colis+' colisión(es) de id detectada(s)</strong> — un registro pisó a otro. Revisá el detalle abajo (filtro "Colisiones").</div>'
+        : '<div style="background:rgba(22,163,74,.10);border:1px solid #16a34a;border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13px;">✓ Sin colisiones de id registradas. Los pesajes no se están pisando.</div>';
+    }
+    if(sub)sub.textContent=rows.length+' movimiento(s)'+(op?' · '+op:'')+(fe?' · '+fe:'');
+    if(!rows.length){list.innerHTML='<div style="padding:14px;color:var(--text-3);">Sin movimientos registrados'+(op||fe?' con esos filtros':' todavía')+'. La auditoría registra desde ahora en adelante.</div>';return;}
+    const badge=o=>{const m={COLISION:['⚠ Colisión','#dc2626'],DELETE:['🗑 Eliminación','#dc2626'],UPDATE:['✏ Edición','#d97706'],AJUSTE:['➕ Ajuste','#2563eb']}[o]||[o,'#64748b'];
+      return '<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:'+m[1]+';">'+esc(m[0])+'</span>';};
+    const fmtKg=v=>v==null?'<span style="color:var(--text-3);">—</span>':_fmt(v);
+    const fmtTs=t=>{try{return new Date(t).toLocaleString('es-CL');}catch(_){return esc(String(t||''));}};
+    list.innerHTML='<div class="tbl-wrap" style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr>'
+      +['Cuándo','Tipo','Usuario','Registro','Persona','Fecha turno','Kg antes','Kg después','Detalle'].map(h=>'<th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;color:var(--text-3);border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      +'</tr></thead><tbody>'+rows.map(r=>{
+        const chgKg = r.kg_old!=null&&r.kg_new!=null&&(+r.kg_old)!==(+r.kg_new);
+        return '<tr style="border-bottom:1px solid var(--border);'+(r.op==='COLISION'?'background:rgba(220,38,38,.06);':'')+'">'
+          +'<td style="padding:7px 10px;white-space:nowrap;color:var(--text-3);">'+fmtTs(r.ts)+'</td>'
+          +'<td style="padding:7px 10px;">'+badge(r.op)+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:var(--text-2);">'+esc(r.actor||'—')+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:var(--text-3);">'+esc(String(r.rec_id||''))+'</td>'
+          +'<td style="padding:7px 10px;white-space:nowrap;">'+esc(r.codigo||'—')+(r.nombre?' · <span style="color:var(--text-3);">'+esc(r.nombre)+'</span>':'')+'</td>'
+          +'<td style="padding:7px 10px;white-space:nowrap;">'+esc(r.fecha||'—')+(r.turno?' '+esc(r.turno):'')+'</td>'
+          +'<td class="num" style="padding:7px 10px;">'+fmtKg(r.kg_old)+'</td>'
+          +'<td class="num" style="padding:7px 10px;'+(chgKg?'font-weight:700;':'')+'">'+fmtKg(r.kg_new)+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:var(--text-3);">'+esc(r.detail||'')+'</td>'
+          +'</tr>';
+      }).join('')+'</tbody></table></div>';
+  }catch(e){ list.innerHTML='<div style="padding:14px;color:#dc2626;">No se pudo leer la auditoría: '+esc(e&&e.message||String(e))+'</div>'; }
+}
+window.renderAuditoria=renderAuditoria;
 function adminStartTabletHealthWatch(){
   if(_adminTabletHealthTimer)clearInterval(_adminTabletHealthTimer);
   adminRefreshTabletHealth(false);
