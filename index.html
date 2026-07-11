@@ -5030,12 +5030,20 @@ const nowDate=()=>todayLocalYmd();
  * Math.max es 2^53-1 ≈ 9e15 → caben hasta el año 2255. JS y Postgres BIGINT lo aceptan.
  * Si por error el array trae un id mayor (legacy/local), se respeta y se incrementa.
  */
+let _tbIdCounter=Math.floor(Math.random()*16);   // contador por-ms para ids únicos
 const nextId=arr=>{
-  const tsId=Date.now()*1000+Math.floor(Math.random()*1000);
-  if(!Array.isArray(arr)||!arr.length)return tsId;
-  const maxLegacy=arr.reduce((m,x)=>Math.max(m,+x.id||0),0);
-  // Si el max local ya supera tsId (reloj atrasado / IDs preexistentes muy altos), usa max+1.
-  return maxLegacy>=tsId?maxLegacy+1:tsId;
+  // ID GLOBALMENTE ÚNICO POR DISPOSITIVO (< 2^53 para exactitud JS/bigint).
+  // CRÍTICO: ya NO usa max(arr)+1. Ese fallback generaba ids SECUENCIALES que
+  // colisionan entre tablets de la misma cuenta cuando hay ids altos preexistentes
+  // (p.ej. de una reconciliación en el rango 9e15): dos tablets partían del mismo
+  // máximo y creaban los mismos ids → al subir (on_conflict=id) una pisaba a la otra
+  // = PÉRDIDA DE DATOS. Ahora cada tablet tiene su franja (devSlot) y nunca choca.
+  // Estructura: Date.now()*4096 + devSlot(0-63)*64 + azar(0-63)  ≈ 7.3e15 hoy (< 9.007e15).
+  let dev=0;
+  try{ const d=String((typeof _tbDeviceId==='function'&&_tbDeviceId())||''); for(let i=0;i<d.length;i++) dev=((dev*31+d.charCodeAt(i))>>>0); }catch(_){}
+  const slot=dev%256;                       // 8 bits: franja EXCLUSIVA del dispositivo
+  _tbIdCounter=(_tbIdCounter+1)&15;          // 4 bits: contador monótono por-ms (16/ms, sin choque mismo-equipo)
+  return Date.now()*4096 + slot*16 + _tbIdCounter;
 };
 /** Supabase → filas RT.moldes (camelCase).
  * IMPORTANTE: pendiente NO se rellena con cant si rec.pendiente es null/undefined.
