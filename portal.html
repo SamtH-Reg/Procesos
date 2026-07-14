@@ -94,6 +94,11 @@ input,select{font-family:inherit}
 .panel h3 .t{flex:1}
 .panel h3 .hint{font-size:11px;color:var(--mut2);font-weight:600}
 .empty{color:var(--mut2);font-size:13px;text-align:center;padding:24px 0}
+/* Ojo "Ver todo": alterna entre el rango configurado en admin y todo el histórico */
+.p-eye{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:3px 10px;border-radius:999px;border:1px solid #2a3a5c;background:transparent;color:var(--mut2);font-size:11px;font-weight:800;cursor:pointer;line-height:1;transition:all .15s;flex:0 0 auto}
+.p-eye svg{width:14px;height:14px;flex:0 0 auto}
+.p-eye:hover{color:var(--txt,#eaf1ff);border-color:#3a4d72;background:rgba(255,255,255,.04)}
+.p-eye.on{color:#fff;border-color:#3b82f6;background:rgba(59,130,246,.22)}
 
 .chart{width:100%;display:block}
 /* Ventana de ~6 días: el resto del mes queda accesible con scroll horizontal,
@@ -535,10 +540,19 @@ function kpiCard(lead,ico,lab,val,unit,sub){
   return `<div class="kpi ${lead?'lead':''}"><div class="ico">${ico}</div><div class="lab">${lab}</div>
     <div class="val">${val}${unit?` <small>${unit}</small>`:''}</div><div class="sub">${sub||''}</div></div>`;
 }
-function panel(title,hint,inner,span2){
-  return `<div class="panel ${span2?'span2':''}"><h3><span class="t">${title}</span>${hint?`<span class="hint">${hint}</span>`:''}</h3>${inner}</div>`;
+function panel(title,hint,inner,span2,hdrExtra){
+  return `<div class="panel ${span2?'span2':''}"><h3><span class="t">${title}</span>${hint?`<span class="hint">${hint}</span>`:''}${hdrExtra||''}</h3>${inner}</div>`;
 }
 function emptyMsg(){ return '<div class="empty">Sin datos en este período.</div>'; }
+/* Ojo "Ver todo": alterna entre el rango de fechas configurado por el admin (default)
+   y TODO el histórico del trabajador. Se muestra en el 1er gráfico. */
+let _pShowAll=false;
+function _pEyeBtn(){
+  const eye='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  return `<button type="button" class="p-eye${_pShowAll?' on':''}" onclick="_pToggleShowAll()" title="${_pShowAll?'Mostrando TODO el histórico — clic para volver al rango configurado':'Mostrar todo el histórico (ignora el rango de fechas)'}">${eye}<span>${_pShowAll?'Todo':'Ver todo'}</span></button>`;
+}
+function _pToggleShowAll(){ _pShowAll=!_pShowAll; try{ if(typeof loadDash==='function') loadDash(); }catch(e){} }
+window._pToggleShowAll=_pToggleShowAll; window._pEyeBtn=_pEyeBtn;
 
 /* Rendimiento de ovas: la materia prima (MMPP) se INFIERE del filete con un
    rendimiento base estándar y NO se muestra. Solo se muestran los datos reales
@@ -604,7 +618,7 @@ function dashboardHTML(rows){
       const fo=_pDiaFileteOvas(rows);
       const fds=Object.keys(fo).sort();
       const inner=fds.length? (fileteOvasLegend()+svgStackedFileteOvas(fds.map(d=>({label:fmtDiaCorto(d),filete:fo[d].filete,ovas:fo[d].ovas})))) : emptyMsg();
-      ph+=panel('📅 Kilos por día · filete + ovas', fds.length?fds.length+' días':'', inner);
+      ph+=panel('📅 Kilos por día · filete + ovas', fds.length?fds.length+' días':'', inner, false, _pEyeBtn());
     }
     ph+=piezasMinPanelInner(rws); // 🔪 Piezas por minuto — entre "día y turno" y "especie" (solo filete)
     if(indOn('ch_especie')){ const arr=sortArr(st.byEsp); ph+=panel('🐟 Kilos por especie','', arr.length?hbars(arr,st.total):emptyMsg()); }
@@ -874,14 +888,14 @@ function _pScrollNewest(wrapId){
 async function loadDash(force){
   const desde=$('dDesde').value||null, hasta=$('dHasta').value||null;
   // Si ya está en caché y no se fuerza, solo re-filtramos y renderizamos sin pedir red.
-  if(WK_ALL&&!force){ $('dashWrap').innerHTML=dashboardHTML(filtrarRango(WK_ALL,desde,hasta)); _pScrollNewest('dashWrap'); return; }
+  if(WK_ALL&&!force){ $('dashWrap').innerHTML=dashboardHTML(_pShowAll?WK_ALL:filtrarRango(WK_ALL,desde,hasta)); _pScrollNewest('dashWrap'); return; }
   $('dashWrap').style.display='none'; $('dashLoading').classList.remove('hide');
   try{
     const {data,error}=await sb.rpc('portal_pesajes',{p_codigo:WK.codigo,p_pin:WK.pin,p_desde:null,p_hasta:null});
     if(error) throw error;
     WK_ALL=data||[];
-    $('dashWrap').innerHTML=dashboardHTML(filtrarRango(WK_ALL,desde,hasta));
-  }catch(e){ console.error(e); toast('No se pudieron cargar los datos','err'); $('dashWrap').innerHTML=dashboardHTML(WK_ALL?filtrarRango(WK_ALL,desde,hasta):[]); }
+    $('dashWrap').innerHTML=dashboardHTML(_pShowAll?WK_ALL:filtrarRango(WK_ALL,desde,hasta));
+  }catch(e){ console.error(e); toast('No se pudieron cargar los datos','err'); $('dashWrap').innerHTML=dashboardHTML(WK_ALL?(_pShowAll?WK_ALL:filtrarRango(WK_ALL,desde,hasta)):[]); }
   finally{ $('dashLoading').classList.add('hide'); $('dashWrap').style.display=''; _pScrollNewest('dashWrap'); }
 }
 
