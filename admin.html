@@ -9881,11 +9881,23 @@ function _ieFilter(recs){
   if(mod==='moldes'||mod==='pesajes')return _ieFilterMolPes(mod,recs);
   return recs;
 }
+/* Clave de orden por TIEMPO REAL: la madrugada de noche (hora<07:00) se guarda con
+   la fecha de inicio del turno pero ocurrió el día SIGUIENTE → +1 día. Así el export
+   queda en orden cronológico real (como el Excel de referencia). */
+function _ieRealSortKey(r){
+  const m=String(r&&r.fecha||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const hora=String(r&&r.hora||'').trim().slice(0,5);
+  const h=/^\d{2}:\d{2}$/.test(hora)?hora:'00:00';
+  if(!m)return '0000-00-00 '+h;
+  const hm=_adminParseHMToMinutes(r.hora);
+  const d=new Date(+m[1],+m[2]-1,+m[3]);
+  if(hm!=null&&hm<7*60)d.setDate(d.getDate()+1);
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+h;
+}
 function _ieSortMolPes(mod,a,b){
-  const fa=_ieCycleDateNorm(a.fecha),fb=_ieCycleDateNorm(b.fecha);
-  if(fa!==fb)return fb.localeCompare(fa);
-  const ha=String(a.hora||''),hb=String(b.hora||'');
-  if(ha!==hb)return hb.localeCompare(ha);
+  const ka=_ieRealSortKey(a),kb=_ieRealSortKey(b);
+  if(ka!==kb)return kb<ka?-1:1;                 // tiempo real DESCENDENTE (más reciente primero)
   return String(b.id||0).localeCompare(String(a.id||0));
 }
 function _ieSrc(mod){
