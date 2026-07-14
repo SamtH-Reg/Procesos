@@ -10247,7 +10247,7 @@ function exportFiltered(){
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(hf.length?hf:[{equipo_codigo:'—'}]),'tuneles');
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(o.estado.length?o.estado:[{equipo_codigo:'—'}]),'estado_actual');
-    XLSX.writeFile(wb,'tuneles_filtrado_'+new Date().toISOString().slice(0,10)+'.xlsx');
+    XLSX.writeFile(wb,_ieExportFilename('tuneles',false));
     toast(hf.length+' ciclos + estado de '+o.estado.length+' equipos','success');
     return;
   }
@@ -10268,9 +10268,21 @@ function exportFiltered(){
   }else{
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(f),mod);
   }
-  const tag=catalog?'':'_filtrado';
-  XLSX.writeFile(wb,mod+tag+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  XLSX.writeFile(wb,_ieExportFilename(mod,catalog));
   toast(f.length+' registros exportados','success');
+}
+/* Nombre del archivo exportado = módulo + turno + fecha DEL TURNO (según los filtros
+   activos), p.ej. "pesajes_noche_2026-07-13.xlsx". Para un rango: "..._2026-07-13_a_2026-07-15".
+   Catálogos (sin fecha/turno) usan la fecha de exportación. */
+function _ieExportFilename(mod,catalog){
+  const today=new Date().toISOString().slice(0,10);
+  if(catalog)return mod+'_'+today+'.xlsx';
+  const desde=(document.getElementById('ieDesde')||{}).value||'';
+  const hasta=(document.getElementById('ieHasta')||{}).value||'';
+  const turnoRaw=(document.getElementById('ieTurno')||{}).value||'';
+  const turno=turnoRaw?String(turnoRaw).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,''):'todos';
+  const fechaPart=(desde&&hasta&&desde!==hasta)?(desde+'_a_'+hasta):(desde||hasta||today);
+  return mod+'_'+turno+'_'+fechaPart+'.xlsx';
 }
 function importFiltered(ev){
   const f=ev.target.files[0];if(!f)return;
