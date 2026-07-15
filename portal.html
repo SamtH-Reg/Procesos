@@ -183,6 +183,7 @@ input,select{font-family:inherit}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.ok{border-color:#1f7a45;background:#0e2a1b}
 .toast.err{border-color:#7a2020;background:#2a0e0e}
+.toast.info{border-color:#2c4a7a;background:#0e1c2e}
 .fadein{animation:fi .4s ease}
 @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
@@ -895,7 +896,18 @@ async function loadDash(force){
     if(error) throw error;
     WK_ALL=data||[];
     $('dashWrap').innerHTML=dashboardHTML(_pShowAll?WK_ALL:filtrarRango(WK_ALL,desde,hasta));
-  }catch(e){ console.error(e); toast('No se pudieron cargar los datos','err'); $('dashWrap').innerHTML=dashboardHTML(WK_ALL?(_pShowAll?WK_ALL:filtrarRango(WK_ALL,desde,hasta)):[]); }
+  }catch(e){
+    console.error(e);
+    const sinNet = !navigator.onLine || /fetch|network|failed to fetch|timeout|networkerror/i.test(String((e&&e.message)||e));
+    if(WK_ALL){
+      // Ya teníamos datos: no borramos nada, solo avisamos que no se pudo refrescar
+      toast(sinNet?'Sin conexión: mostrando tus últimos kilos guardados':'No se pudo actualizar: mostrando tus últimos kilos','info');
+      $('dashWrap').innerHTML=dashboardHTML(_pShowAll?WK_ALL:filtrarRango(WK_ALL,desde,hasta));
+    }else{
+      toast(sinNet?'Sin conexión a internet. Revisa tu red e intenta otra vez.':'No se pudieron cargar tus kilos. Intenta de nuevo en unos segundos.','err');
+      $('dashWrap').innerHTML=dashboardHTML([]);
+    }
+  }
   finally{ $('dashLoading').classList.add('hide'); $('dashWrap').style.display=''; _pScrollNewest('dashWrap'); }
 }
 
