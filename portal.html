@@ -154,6 +154,16 @@ input,select{font-family:inherit}
 .perfil-row .nm{flex:1;min-width:130px}
 .perfil-row .nm b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .perfil-row .nm span{font-size:11px;color:var(--mut2)}
+.perfil-row .nm span{display:block}
+.perfil-row .nm .conn{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;font-weight:700}
+.perfil-row .nm .conn .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.perfil-row .nm .conn.on{color:#34d399}
+.perfil-row .nm .conn.on .dot{background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:connPulse 1.8s infinite}
+.perfil-row .nm .conn.off{color:var(--mut2)}
+.perfil-row .nm .conn.off .dot{background:#64748b}
+.perfil-row .nm .conn.never{color:#7a8699}
+.perfil-row .nm .conn.never .dot{background:#3a4657}
+@keyframes connPulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
 .keytag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;font-weight:800;color:#fde68a;
   background:#1c1303;border:1px solid #3a2a06;padding:4px 10px;border-radius:9px;letter-spacing:1px}
 .mini{padding:7px 10px;border-radius:10px;font-size:12px;font-weight:700;border:1px solid var(--line);
@@ -860,7 +870,14 @@ function enterDash(){
   $('dAvatar').textContent=initials(WK.nombre);
   applyDefaultRange();
   loadDash();
+  _wkStartPing();
 }
+// Latido: mientras el trabajador tiene el panel abierto, avisa cada 60s que sigue en línea.
+let _wkPingTimer=null;
+function _wkBeat(){ if(!WK) return; try{ sb.rpc('portal_ping',{p_codigo:WK.codigo,p_pin:WK.pin}); }catch(_){} }
+function _wkStartPing(){ _wkStopPing(); _wkBeat(); _wkPingTimer=setInterval(_wkBeat,60000); }
+function _wkStopPing(){ if(_wkPingTimer){ clearInterval(_wkPingTimer); _wkPingTimer=null; } }
+document.addEventListener('visibilitychange',function(){ if(!document.hidden&&WK) _wkBeat(); });
 // Arranca cada gráfico/lista en el día MÁS RECIENTE (últimos ~6 visibles; el resto por scroll).
 function _pScrollNewest(wrapId){
   try{
@@ -913,6 +930,7 @@ async function enterAdmin(user){
   show('admin'); $('aWho').textContent=(user&&user.email)||'sesión activa'; $('portalLink').value=PORTAL_URL;
   await loadConfig(); CFG_EDIT=JSON.parse(JSON.stringify(PORTAL_CFG)); renderCfgEditor();
   await loadPerfiles(); switchTab('trab');
+  _adStartPerfilRefresh();
 }
 function switchTab(t){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));
@@ -927,17 +945,38 @@ async function loadPerfiles(){
     if(error) throw error; AD_PERFILES=data||[]; renderPerfiles(); }
   catch(e){ console.error(e); toast('No se pudieron cargar las claves','err'); }
 }
+const _hm=d=>d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',hour12:false});
+// Estado de conexión a partir de la última conexión registrada. En línea = latido en los últimos ~2,5 min.
+function _connInfo(ts){
+  if(!ts) return {online:false, txt:'Sin conexiones aún', never:true};
+  const d=new Date(ts), diff=(Date.now()-d.getTime())/1000;
+  if(diff<150) return {online:true, txt:'En línea'};
+  let txt;
+  if(diff<3600) txt='hace '+Math.max(1,Math.round(diff/60))+' min';
+  else if(diff<86400) txt='hace '+Math.round(diff/3600)+' h';
+  else if(diff<172800) txt='ayer '+_hm(d);
+  else txt=d.toLocaleDateString('es-CL',{day:'2-digit',month:'short'})+' '+_hm(d);
+  return {online:false, txt};
+}
 function renderPerfiles(){
   $('aCount').textContent=AD_PERFILES.length?AD_PERFILES.length+' activas':'';
   if(!AD_PERFILES.length){ $('aPerfiles').innerHTML='<div class="empty">Aún no has creado claves.</div>'; return; }
-  $('aPerfiles').innerHTML=AD_PERFILES.map(p=>`
-    <div class="perfil-row">
-      <div class="nm"><b title="${p.nombre}">${nombreBonito(p.nombre)}</b><span>Código ${p.codigo||'—'} · Ficha ${p.ficha||'—'}${p.activo?'':' · INACTIVA'}</span></div>
+  const enLinea=AD_PERFILES.filter(p=>_connInfo(p.ultima_conexion).online).length;
+  $('aCount').textContent=(AD_PERFILES.length+' activas')+(enLinea?' · '+enLinea+' en línea':'');
+  $('aPerfiles').innerHTML=AD_PERFILES.map(p=>{
+    const c=_connInfo(p.ultima_conexion);
+    const conn=`<span class="conn ${c.online?'on':(c.never?'never':'off')}"><span class="dot"></span>${c.online?'En línea':(c.never?'Sin conexiones aún':'Últ. conexión '+c.txt)}</span>`;
+    return `<div class="perfil-row">
+      <div class="nm"><b title="${p.nombre}">${nombreBonito(p.nombre)}</b><span>Código ${p.codigo||'—'} · Ficha ${p.ficha||'—'}${p.activo?'':' · INACTIVA'}</span>${conn}</div>
       <span class="keytag">${p.pin}</span>
       <button class="mini" data-act="toggle" data-id="${p.id}">${p.activo?'Pausar':'Activar'}</button>
       <button class="mini danger" data-act="del" data-id="${p.id}">✕</button>
-    </div>`).join('');
+    </div>`;}).join('');
 }
+// Auto-refresco: mantiene el estado "en línea" al día mientras el admin está abierto.
+let _adPerfilTimer=null;
+function _adStartPerfilRefresh(){ _adStopPerfilRefresh(); _adPerfilTimer=setInterval(()=>{ if(!views.admin.classList.contains('hide')) loadPerfiles(); },30000); }
+function _adStopPerfilRefresh(){ if(_adPerfilTimer){ clearInterval(_adPerfilTimer); _adPerfilTimer=null; } }
 let _buscarT=null;
 async function buscarTrabajadores(){
   const q=$('aBuscar').value.trim(), box=$('aWlist');
@@ -1049,16 +1088,16 @@ $('btnLogin').onclick=doWorkerLogin;
 $('inPin').addEventListener('keydown',e=>{ if(e.key==='Enter') doWorkerLogin(); });
 $('inCodigo').addEventListener('keydown',e=>{ if(e.key==='Enter') $('inPin').focus(); });
 $('btnForgot').onclick=()=>toast('Pídele tu clave al supervisor 🙂');
-$('btnLogout').onclick=()=>{ WK=null; WK_ALL=null; try{sessionStorage.removeItem('wk');}catch(_){} $('inCodigo').value='';$('inPin').value='';$('loginMsg').textContent=''; show('login'); };
+$('btnLogout').onclick=()=>{ _wkStopPing(); WK=null; WK_ALL=null; try{sessionStorage.removeItem('wk');}catch(_){} $('inCodigo').value='';$('inPin').value='';$('loginMsg').textContent=''; show('login'); };
 
 document.querySelectorAll('#dRangebar .chip[data-r]').forEach(c=>{ c.onclick=()=>{ markChips('dRangebar',c.dataset.r); WK_RANGO=c.dataset.r; const r=rangeFromMode(WK_RANGO); $('dDesde').value=r.desde; $('dHasta').value=r.hasta; loadDash(); }; });
 $('btnAplicar').onclick=()=>{ markChips('dRangebar',''); loadDash(); };
 
 $('adminTag').onclick=async ()=>{ if(await checkAdminSession()){ const {data}=await sb.auth.getUser(); enterAdmin(data.user); } else show('adminLogin'); };
-$('btnAdminBack').onclick=()=>show('login');
+$('btnAdminBack').onclick=()=>{ _adStopPerfilRefresh(); show('login'); };
 $('btnAdminLogin').onclick=doAdminLogin;
 $('aPass').addEventListener('keydown',e=>{ if(e.key==='Enter') doAdminLogin(); });
-$('btnAdminLogout').onclick=async ()=>{ try{await sb.auth.signOut();}catch(_){}; show('login'); };
+$('btnAdminLogout').onclick=async ()=>{ _adStopPerfilRefresh(); try{await sb.auth.signOut();}catch(_){}; show('login'); };
 $('btnCopyLink').onclick=()=>{ const i=$('portalLink'); i.select(); try{navigator.clipboard.writeText(i.value);}catch(_){document.execCommand('copy');} toast('Enlace copiado ✓','ok'); };
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>switchTab(t.dataset.tab));
 
